@@ -14,6 +14,7 @@ import {
   analyzeLastMatchdayScenarios,
   analyzeThirdPlaceRoute,
   computeQualificationStatuses,
+  type GroupThreatVerdict,
   type OurResultScenario,
   type ScenarioVerdict,
 } from '../../engine/qualificationStatus'
@@ -37,6 +38,21 @@ const VERDICT_CONFIG: Record<ScenarioVerdict, { label: string; icon: string; cla
   advance: { label: '32강 진출 확정', icon: '✅', className: 'text-emerald-300' },
   eliminated: { label: '32강 진출 실패', icon: '❌', className: 'text-red-300' },
   tiebreak: { label: '타이브레이커로 결정', icon: '⚠️', className: 'text-amber-300' },
+}
+
+const GROUP_THREAT_CONFIG: Record<GroupThreatVerdict, { label: string; icon: string; className: string }> = {
+  ahead: { label: '위협', icon: '🔺', className: 'bg-red-500/15 text-red-300' },
+  pending: { label: '미정', icon: '⏳', className: 'bg-amber-500/15 text-amber-300' },
+  behind: { label: '안전', icon: '✅', className: 'bg-emerald-500/15 text-emerald-300' },
+}
+
+function GroupThreatBadge({ verdict }: { verdict: GroupThreatVerdict }) {
+  const config = GROUP_THREAT_CONFIG[verdict]
+  return (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${config.className}`}>
+      {config.icon} {config.label}
+    </span>
+  )
 }
 
 function VerdictLine({ verdict, text, note }: { verdict: ScenarioVerdict; text?: string; note?: string }) {
@@ -400,11 +416,24 @@ export function TeamDetailPage() {
             나은 3위팀이 나와야 32강 진출이 확정됩니다. {thirdPlaceRoute.maxPendingAllowed + 1}개 조 이상에서 우리보다
             나은 3위팀이 나오면 탈락합니다.
           </p>
-          {thirdPlaceRoute.pendingGroupLetters.length > 0 && (
-            <p className="mt-2 text-xs text-gray-500">
-              진행 중인 조: {thirdPlaceRoute.pendingGroupLetters.map((g) => `조 ${g}`).join(', ')}
-            </p>
-          )}
+          <div className="mt-4 space-y-1.5 border-t border-white/10 pt-3">
+            <p className="mb-1 text-xs font-bold text-gray-400">조별 상세 비교 (다른 11개 조)</p>
+            {thirdPlaceRoute.groupDetails.map((d) => (
+              <div key={d.group} className="rounded-lg bg-white/5 px-3 py-2 text-xs">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="w-8 shrink-0 font-bold text-gray-300">조{d.group}</span>
+                    <TeamLink teamId={d.candidateTeamId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
+                    <span className="shrink-0 text-gray-400">
+                      {d.points}점 ({d.goalDiff > 0 ? `+${d.goalDiff}` : d.goalDiff})
+                    </span>
+                  </div>
+                  <GroupThreatBadge verdict={d.verdict} />
+                </div>
+                {d.note && <p className="mt-1 text-[10px] text-gray-500">{d.note}</p>}
+              </div>
+            ))}
+          </div>
         </GlassCard>
       )}
 
@@ -460,7 +489,7 @@ export function TeamDetailPage() {
                     </span>
                   </div>
                   {rs.uniform ? (
-                    <VerdictLine verdict={rs.uniform} text="동시경기 결과와 무관하게" />
+                    <VerdictLine verdict={rs.uniform} text="동시경기 결과와 무관하게" note={rs.uniformNote} />
                   ) : (
                     <ul className="space-y-1.5">
                       {rs.outcomes.map((o) => (
