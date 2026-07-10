@@ -59,7 +59,7 @@ function thirdPointsFloor(teamIds: string[], standings: Record<string, GroupStan
   return pts[2] ?? 0
 }
 
-type GroupThreatVerdict = 'ahead' | 'behind' | 'pending'
+export type GroupThreatVerdict = 'ahead' | 'behind' | 'pending'
 
 function classifyGroupThreat(
   other: { standings: Record<string, GroupStanding>; finished: boolean; thirdTeamId: string },
@@ -281,6 +281,19 @@ export function computeExactRankLocks(teamIds: string[], matches: GroupMatch[]):
   })
 }
 
+export interface ThirdPlaceGroupDetail {
+  group: GroupLetter
+  verdict: GroupThreatVerdict
+  /** 그 조의 현재 3위 후보(조가 끝났으면 확정된 3위팀) */
+  candidateTeamId: string
+  points: number
+  goalDiff: number
+  goalsFor: number
+  finished: boolean
+  /** 미정 판정일 때, 왜 아직 확정할 수 없는지 보충 설명 */
+  note?: string
+}
+
 export interface ThirdPlaceRouteInfo {
   group: GroupLetter
   ourPoints: number
@@ -295,6 +308,8 @@ export interface ThirdPlaceRouteInfo {
   pendingGroupLetters: GroupLetter[]
   /** 미확정 조 중 이 개수 이하에서만 우리보다 나은 3위팀이 나와야 진출 확정(초과하면 탈락) */
   maxPendingAllowed: number
+  /** 다른 11개 조 각각의 상세 판정 — 위협조 → 미정조 → 안전조 순으로 정렬됨 */
+  groupDetails: ThirdPlaceGroupDetail[]
 }
 
 /**
@@ -326,6 +341,7 @@ export function analyzeThirdPlaceRoute(
   let aheadFinished = 0
   let pendingGroups = 0
   const pendingGroupLetters: GroupLetter[] = []
+  const groupDetails: ThirdPlaceGroupDetail[] = []
 
   for (const group of GROUP_LETTERS) {
     if (group === myGroup) continue
@@ -335,14 +351,41 @@ export function analyzeThirdPlaceRoute(
     const standings = computeStandings(teamIds, groupMatches)
     const finished = groupMatches.length >= 6
     const order = rankGroupTeams(teamIds, groupMatches)
-    const verdict = classifyGroupThreat({ standings, finished, thirdTeamId: order[2] }, teamIds, myStanding)
+    const candidateId = order[2]
+    const candidate = standings[candidateId]
+    const verdict = classifyGroupThreat({ standings, finished, thirdTeamId: candidateId }, teamIds, myStanding)
+
     if (verdict === 'pending') {
       pendingGroups += 1
       pendingGroupLetters.push(group)
     } else if (verdict === 'ahead') {
       aheadFinished += 1
     }
+
+    const note = finished
+      ? verdict === 'ahead'
+        ? `조별리그 종료 — 확정 3위(승점 ${candidate.points}점)가 우리보다 앞섭니다.`
+        : '조별리그 종료 — 확정 3위가 우리보다 승점·골득실이 낮아 안전합니다.'
+      : verdict === 'ahead'
+        ? `이미 승점 ${candidate.points}점을 확보해 남은 경기 결과와 무관하게 우리보다 앞섭니다.`
+        : verdict === 'behind'
+          ? '남은 경기를 모두 이겨도 우리보다 승점이 낮을 팀들이라 안전합니다.'
+          : `현재 3위 후보 승점 ${candidate.points}점 — 남은 경기 결과에 따라 우리를 앞지를 수도 있습니다.`
+
+    groupDetails.push({
+      group,
+      verdict,
+      candidateTeamId: candidateId,
+      points: candidate.points,
+      goalDiff: candidate.goalsFor - candidate.goalsAgainst,
+      goalsFor: candidate.goalsFor,
+      finished,
+      note,
+    })
   }
+
+  const verdictOrder: Record<GroupThreatVerdict, number> = { ahead: 0, pending: 1, behind: 2 }
+  groupDetails.sort((a, b) => verdictOrder[a.verdict] - verdictOrder[b.verdict] || a.group.localeCompare(b.group))
 
   return {
     group: myGroup,
@@ -354,5 +397,6 @@ export function analyzeThirdPlaceRoute(
     pendingGroups,
     pendingGroupLetters,
     maxPendingAllowed: Math.max(0, THIRD_PLACE_SLOTS - 1 - aheadFinished),
+    groupDetails,
   }
 }
