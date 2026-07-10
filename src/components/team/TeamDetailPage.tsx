@@ -489,7 +489,7 @@ export function TeamDetailPage() {
                     </span>
                   </div>
                   {rs.uniform ? (
-                    <VerdictLine verdict={rs.uniform} text="동시경기 결과와 무관하게" />
+                    <VerdictLine verdict={rs.uniform} text="동시경기 결과와 무관하게" note={rs.uniformNote} />
                   ) : (
                     <ul className="space-y-1.5">
                       {rs.outcomes.map((o) => (

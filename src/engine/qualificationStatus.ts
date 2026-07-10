@@ -182,8 +182,15 @@ export interface OurResultScenario {
   resultLabel: string
   ourFinalPoints: number
   outcomes: OtherMatchOutcome[]
-  /** 3가지 동시경기 결과 모두 같은 판정으로 귀결되면 그 판정, 아니면 null(경우에 따라 갈림) */
+  /**
+   * 3가지 동시경기 결과 모두 판정과 보충 설명(note)이 완전히 같을 때만 채워진다(경우에 따라
+   * 갈리면 null). note까지 함께 비교하는 이유: 판정이 똑같이 'eliminated'라도 한쪽은 정확히
+   * 3위라 3위 와일드카드 경로가 남아있고 다른 쪽은 4위 확정이라 아예 가능성이 없는 경우처럼,
+   * 겉보기 판정은 같아도 실제 의미가 다를 수 있기 때문이다 — 이 경우는 하나로 뭉뚱그리지 않고
+   * 항상 개별 결과를 그대로 보여준다.
+   */
   uniform: ScenarioVerdict | null
+  uniformNote?: string
 }
 
 /**
@@ -259,9 +266,13 @@ export function analyzeLastMatchdayScenarios(
       return { key: o.key, label: o.label, verdict, note }
     })
 
-    const uniform = outcomes.every((o) => o.verdict === outcomes[0].verdict) ? outcomes[0].verdict : null
+    const isUniform = outcomes.every(
+      (o) => o.verdict === outcomes[0].verdict && o.note === outcomes[0].note,
+    )
+    const uniform = isUniform ? outcomes[0].verdict : null
+    const uniformNote = isUniform ? outcomes[0].note : undefined
 
-    return { result: r.key, resultLabel: r.label, ourFinalPoints, outcomes, uniform }
+    return { result: r.key, resultLabel: r.label, ourFinalPoints, outcomes, uniform, uniformNote }
   })
 }
 
