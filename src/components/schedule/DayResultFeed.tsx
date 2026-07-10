@@ -66,19 +66,24 @@ export function DayResultFeed() {
             return (
               <div
                 key={`group-${i}`}
-                className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm ${
+                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
                   upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
-                <span className="w-10 text-xs text-gray-500">조{m.group}</span>
+                <div className="flex items-center justify-between sm:w-10 sm:shrink-0">
+                  <span className="text-xs text-gray-500">조{m.group}</span>
+                  <span className="sm:hidden">
+                    <UpsetBadge upset={upset} surpriseDraw={surpriseDraw} />
+                  </span>
+                </div>
                 <span className="flex flex-1 items-center justify-center gap-2">
-                  <TeamLink teamId={m.homeTeamId} />
-                  <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
+                  <TeamLink teamId={m.homeTeamId} wrap className="min-w-0" />
+                  <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 font-bold text-white">
                     {m.homeGoals} - {m.awayGoals}
                   </span>
-                  <TeamLink teamId={m.awayTeamId} reverse />
+                  <TeamLink teamId={m.awayTeamId} reverse wrap className="min-w-0" />
                 </span>
-                <span className="w-16 shrink-0 text-right">
+                <span className="hidden w-16 shrink-0 text-right sm:block">
                   <UpsetBadge upset={upset} surpriseDraw={surpriseDraw} />
                 </span>
               </div>
@@ -90,20 +95,26 @@ export function DayResultFeed() {
             return (
               <div
                 key={`ko-${i}`}
-                className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm ${
+                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
                   isUpsetResult ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
-                <span className="w-14 text-xs text-gray-500">{ROUND_LABEL_KO[m.round]}</span>
+                <div className="flex items-center justify-between sm:w-14 sm:shrink-0">
+                  <span className="text-xs text-gray-500">{ROUND_LABEL_KO[m.round]}</span>
+                  <span className="flex items-center gap-1.5 sm:hidden">
+                    <UpsetBadge upset={isUpsetResult} />
+                    <span className="text-xs font-bold text-emerald-300">{TEAMS_BY_ID[m.winnerTeamId].nameKo} 승</span>
+                  </span>
+                </div>
                 <span className="flex flex-1 items-center justify-center gap-2">
-                  <TeamLink teamId={m.homeTeamId} />
-                  <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
+                  <TeamLink teamId={m.homeTeamId} wrap className="min-w-0" />
+                  <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 font-bold text-white">
                     {m.homeGoals} - {m.awayGoals}
                   </span>
-                  <TeamLink teamId={m.awayTeamId} reverse />
+                  <TeamLink teamId={m.awayTeamId} reverse wrap className="min-w-0" />
                   {m.wentToPenalties && <span className="text-[10px] text-gray-500">(승부차기)</span>}
                 </span>
-                <span className="flex w-24 shrink-0 items-center justify-end gap-1.5">
+                <span className="hidden w-24 shrink-0 items-center justify-end gap-1.5 sm:flex">
                   <UpsetBadge upset={isUpsetResult} />
                   <span className="text-xs font-bold text-emerald-300">{TEAMS_BY_ID[m.winnerTeamId].nameKo} 승</span>
                 </span>
