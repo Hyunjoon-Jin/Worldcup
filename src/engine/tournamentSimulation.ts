@@ -82,15 +82,6 @@ export function buildR32Matchups(
   })
 }
 
-/** 이전 라운드 슬롯(승자 배열, 순서 유지)을 인접 2개씩 묶어 다음 라운드 대진을 만든다. */
-export function pairNextRound(prevWinners: string[], nextSlotIds: string[]): BracketMatchup[] {
-  return nextSlotIds.map((slotId, i) => ({
-    slotId,
-    team1Id: prevWinners[i * 2],
-    team2Id: prevWinners[i * 2 + 1],
-  }))
-}
-
 export interface KnockoutSlotState {
   slotId: string
   round: KnockoutRound
@@ -99,38 +90,43 @@ export interface KnockoutSlotState {
   result: KnockoutMatch | null
 }
 
-const ROUND_PROGRESSION: { from: KnockoutRound; fromIds: string[]; to: KnockoutRound; toIds: string[] }[] = [
-  { from: 'R32', fromIds: R32_SLOTS.map((s) => s.id), to: 'R16', toIds: R16_SLOT_IDS },
-  { from: 'R16', fromIds: R16_SLOT_IDS, to: 'QF', toIds: QF_SLOT_IDS },
-  { from: 'QF', fromIds: QF_SLOT_IDS, to: 'SF', toIds: SF_SLOT_IDS },
-]
-
 function loserOf(match: KnockoutMatch): string {
   return match.winnerTeamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId
 }
 
-/** 라운드가 모두 끝났으면 다음 라운드(및 결승/3·4위전) 대진을 채운다. */
+interface RoundLink {
+  fromIds: string[]
+  toIds: string[]
+  extract: (match: KnockoutMatch) => string
+}
+
+// 각 링크는 "이전 라운드 슬롯 2개 → 다음 라운드(또는 3·4위전) 슬롯 1개"의 인접 페어링이다.
+// 두 소스 슬롯이 동시에 끝나야만 다음 슬롯을 채우는 것이 아니라, 한쪽 경기가 끝나는 즉시
+// 그 팀만 먼저 올려보내고(팀1/팀2를 독립적으로 채움) 나머지는 TBD로 남겨, "경기 직후 바로
+// 다음 라운드 대진에 반영"되도록 한다.
+const ROUND_LINKS: RoundLink[] = [
+  { fromIds: R32_SLOTS.map((s) => s.id), toIds: R16_SLOT_IDS, extract: (m) => m.winnerTeamId },
+  { fromIds: R16_SLOT_IDS, toIds: QF_SLOT_IDS, extract: (m) => m.winnerTeamId },
+  { fromIds: QF_SLOT_IDS, toIds: SF_SLOT_IDS, extract: (m) => m.winnerTeamId },
+  { fromIds: SF_SLOT_IDS, toIds: [FINAL_SLOT_ID], extract: (m) => m.winnerTeamId },
+  { fromIds: SF_SLOT_IDS, toIds: [THIRD_SLOT_ID], extract: loserOf },
+]
+
+/** 이전 라운드 경기가 끝나는 즉시(둘 다 끝날 때까지 기다리지 않고) 다음 라운드 슬롯에 팀을 채운다. */
 export function progressBracket(slots: Record<string, KnockoutSlotState>): Record<string, KnockoutSlotState> {
   const next = { ...slots }
 
-  for (const { fromIds, toIds } of ROUND_PROGRESSION) {
-    const targetsAlreadySet = toIds.every((id) => next[id]?.team1Id)
-    if (targetsAlreadySet) continue
-    const allDone = fromIds.every((id) => next[id]?.result)
-    if (!allDone) continue
-    const winners = fromIds.map((id) => next[id].result!.winnerTeamId)
-    const pairs = pairNextRound(winners, toIds)
-    for (const pair of pairs) {
-      next[pair.slotId] = { ...next[pair.slotId], team1Id: pair.team1Id, team2Id: pair.team2Id }
+  for (const link of ROUND_LINKS) {
+    const pairSize = link.fromIds.length / link.toIds.length
+    for (let i = 0; i < link.toIds.length; i++) {
+      const targetId = link.toIds[i]
+      const source0 = next[link.fromIds[i * pairSize]]
+      const source1 = next[link.fromIds[i * pairSize + 1]]
+      let target = next[targetId]
+      if (!target.team1Id && source0?.result) target = { ...target, team1Id: link.extract(source0.result) }
+      if (!target.team2Id && source1?.result) target = { ...target, team2Id: link.extract(source1.result) }
+      if (target !== next[targetId]) next[targetId] = target
     }
-  }
-
-  const sfDone = SF_SLOT_IDS.every((id) => next[id]?.result)
-  if (sfDone && !next[FINAL_SLOT_ID]?.team1Id) {
-    const winners = SF_SLOT_IDS.map((id) => next[id].result!.winnerTeamId)
-    next[FINAL_SLOT_ID] = { ...next[FINAL_SLOT_ID], team1Id: winners[0], team2Id: winners[1] }
-    const losers = SF_SLOT_IDS.map((id) => loserOf(next[id].result!))
-    next[THIRD_SLOT_ID] = { ...next[THIRD_SLOT_ID], team1Id: losers[0], team2Id: losers[1] }
   }
 
   return next
