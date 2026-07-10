@@ -1,21 +1,36 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
+import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { CalendarTimeline } from './CalendarTimeline'
 import { DayResultFeed } from './DayResultFeed'
-import { useProgressStore } from '../../store/useProgressStore'
+import { nextPendingGroupSlot, nextPendingKnockoutSlot, useProgressStore } from '../../store/useProgressStore'
 import type { KnockoutRound } from '../../types/match'
 
 const ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL']
 
 export function ScheduleStage() {
-  const { schedule, phase, currentDay, knockoutSlots, initSchedule, advanceDay, champion } = useProgressStore()
+  const { schedule, phase, currentDay, groupMatches, knockoutSlots, initSchedule, advanceDay, advanceTimeSlot, champion } =
+    useProgressStore()
 
   useEffect(() => {
     initSchedule()
   }, [initSchedule])
+
+  const nextSlotPreview = useMemo(() => {
+    if (!schedule) return null
+    if (phase === 'group' || phase === 'idle') {
+      const pending = nextPendingGroupSlot(schedule, groupMatches, currentDay)
+      return pending ? { date: pending.fixtures[0]?.date, timeSlot: pending.timeSlot, count: pending.fixtures.length } : null
+    }
+    if (phase === 'knockout') {
+      const pending = nextPendingKnockoutSlot(schedule, knockoutSlots)
+      return pending ? { date: pending.date, timeSlot: pending.timeSlot, count: pending.fixtures.length } : null
+    }
+    return null
+  }, [schedule, phase, groupMatches, currentDay, knockoutSlots])
 
   if (!schedule) return null
 
@@ -43,9 +58,24 @@ export function ScheduleStage() {
           totalGroupStageDays={schedule.totalGroupStageDays}
           currentKnockoutRound={currentKnockoutRound}
         />
-        <div className="mt-4">
+        <div className="mt-4 flex flex-col items-center gap-2">
           {phase !== 'complete' ? (
-            <GlassButton onClick={advanceDay}>▶ 다음 날 진행</GlassButton>
+            <>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <GlassButton onClick={advanceTimeSlot} disabled={!nextSlotPreview}>
+                  ⏱ 다음 시간대 진행{nextSlotPreview && ` (${nextSlotPreview.timeSlot})`}
+                </GlassButton>
+                <GlassButton variant="ghost" onClick={advanceDay}>
+                  ▶ 다음 날 전체 진행
+                </GlassButton>
+              </div>
+              {nextSlotPreview?.date && (
+                <p className="text-[11px] text-gray-500">
+                  다음 경기: {formatKoreanDate(nextSlotPreview.date)} {nextSlotPreview.timeSlot} 현지시간 ·{' '}
+                  {nextSlotPreview.count}경기
+                </p>
+              )}
+            </>
           ) : (
             <p className="text-lg font-bold text-amber-300">🎉 우승팀이 결정되었습니다!</p>
           )}

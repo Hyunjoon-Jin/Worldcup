@@ -13,6 +13,7 @@ import { useDrawStore } from './store/useDrawStore'
 import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
+import { useSimulationStore } from './store/useSimulationStore'
 
 type TabId = 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
@@ -35,6 +36,27 @@ function App() {
   useEffect(() => {
     if (isDrawComplete) initSchedule()
   }, [isDrawComplete, initSchedule])
+
+  // 경기가 진행되거나(그룹/토너먼트 결과 갱신) 샌드박스 능력치가 바뀔 때마다
+  // 확률 대시보드를 새로고침 없이 자동으로 재계산한다(연타 시 과도한 재계산을 막기 위해 디바운스).
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRun = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => useSimulationStore.getState().run(), 400)
+    }
+    const unsubProgress = useProgressStore.subscribe((state, prev) => {
+      if (state.groupMatches !== prev.groupMatches || state.knockoutSlots !== prev.knockoutSlots) scheduleRun()
+    })
+    const unsubSandbox = useSandboxStore.subscribe((state, prev) => {
+      if (state.overrides !== prev.overrides) scheduleRun()
+    })
+    return () => {
+      unsubProgress()
+      unsubSandbox()
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
 
   return (
     <AppShell>

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
 import { GROUP_LETTERS } from '../../data/hostSlots'
+import { formatKoreanDate } from '../../data/calendar'
 import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { UpsetBadge } from '../common/UpsetBadge'
@@ -22,7 +23,8 @@ const ROUND_LABEL_KO: Record<string, string> = {
 
 export function DayResultFeed() {
   const drawGroups = useDrawStore((s) => s.state.groups)
-  const { lastDayGroupResults, lastDeltaByGroup, groupMatches, lastKnockoutResults, phase } = useProgressStore()
+  const { lastDayGroupResults, lastDeltaByGroup, groupMatches, lastKnockoutResults, lastBatchDate, lastBatchTimeSlot, phase } =
+    useProgressStore()
 
   const groupTeams = useMemo(
     () =>
@@ -40,16 +42,23 @@ export function DayResultFeed() {
   const hasKnockoutResults = lastKnockoutResults.length > 0
 
   if (!hasGroupResults && !hasKnockoutResults) {
-    return <GlassCard className="p-4 text-center text-sm text-gray-400">아직 진행된 경기가 없습니다. "다음 날 진행"을 눌러 시작하세요.</GlassCard>
+    return (
+      <GlassCard className="p-4 text-center text-sm text-gray-400">
+        아직 진행된 경기가 없습니다. "다음 시간대 진행" 또는 "다음 날 전체 진행"을 눌러 시작하세요.
+      </GlassCard>
+    )
   }
 
   const touchedGroups = Array.from(new Set(lastDayGroupResults.map((m) => m.group))) as GroupLetter[]
+  const batchLabel = lastBatchDate
+    ? `${formatKoreanDate(lastBatchDate)}${lastBatchTimeSlot ? ` ${lastBatchTimeSlot}` : ''} 결과`
+    : '오늘의 결과'
 
   return (
     <div className="flex flex-col gap-4">
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-emerald-300">
-          {phase === 'complete' ? '🏆 대회 종료 — 오늘의 결과' : '오늘의 결과'}
+          {phase === 'complete' ? `🏆 대회 종료 — ${batchLabel}` : batchLabel}
         </h3>
         <div className={hasGroupResults && touchedGroups.length > 0 ? 'mb-4 space-y-1.5' : 'space-y-1.5'}>
           {lastDayGroupResults.map((m, i) => {
