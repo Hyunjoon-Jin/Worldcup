@@ -1,9 +1,13 @@
-import { TEAMS_BY_ID } from '../../data/teams'
+import { useMemo } from 'react'
 import { formatKoreanDate } from '../../data/calendar'
-import { FlagIcon } from '../common/FlagIcon'
+import { GROUP_LETTERS } from '../../data/hostSlots'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
+import { TeamLink } from '../common/TeamLink'
+import { UpsetBadge } from '../common/UpsetBadge'
 import { GroupTable } from './GroupTable'
+import { classifyMatchUpset } from '../../engine/matchEngine'
+import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import type { GroupLetter } from '../../types/group'
@@ -21,17 +25,29 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
   const fixtures = (schedule?.groupMatches ?? []).filter((m) => m.group === group)
   const played = groupMatches.filter((m) => m.group === group)
 
+  const groupTeams = useMemo(
+    () =>
+      Object.fromEntries(
+        GROUP_LETTERS.map((g) => [g, (drawGroups[g] as (string | null)[]).filter(Boolean) as string[]]),
+      ) as Record<GroupLetter, string[]>,
+    [drawGroups],
+  )
+  const statusByTeam = useMemo(
+    () => computeQualificationStatuses(groupTeams, groupMatches),
+    [groupTeams, groupMatches],
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <GlassButton variant="ghost" onClick={onBack}>
           ← 전체 조 보기
         </GlassButton>
-        <h2 className="text-lg font-bold text-white">GROUP {group}</h2>
+        <h2 className="font-display text-xl font-semibold tracking-wide text-white">GROUP {group}</h2>
       </div>
 
       <GlassCard className="p-4">
-        <GroupTable teamIds={teamIds} matches={played} />
+        <GroupTable teamIds={teamIds} matches={played} statusByTeam={statusByTeam} />
       </GlassCard>
 
       <GlassCard className="p-4">
@@ -44,18 +60,21 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
             const result = played.find(
               (m) => m.matchday === fx.matchday && m.homeTeamId === homeId && m.awayTeamId === awayId,
             )
-            const home = TEAMS_BY_ID[homeId]
-            const away = TEAMS_BY_ID[awayId]
+            const upsetInfo = result
+              ? classifyMatchUpset(homeId, awayId, result.homeGoals, result.awayGoals)
+              : null
             return (
-              <div key={fx.id} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-sm">
+              <div
+                key={fx.id}
+                className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                  upsetInfo?.upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
+                }`}
+              >
                 <span className="w-16 shrink-0 text-xs text-gray-400">
                   MD{fx.matchday} · {formatKoreanDate(fx.date)}
                 </span>
                 <div className="flex flex-1 items-center justify-center gap-3">
-                  <span className="flex items-center gap-1.5">
-                    <FlagIcon iso2={home.iso2} className="h-3 w-4" />
-                    {home.nameKo}
-                  </span>
+                  <TeamLink teamId={homeId} />
                   {result ? (
                     <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
                       {result.homeGoals} - {result.awayGoals}
@@ -63,12 +82,12 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
                   ) : (
                     <span className="text-gray-500">vs</span>
                   )}
-                  <span className="flex items-center gap-1.5">
-                    {away.nameKo}
-                    <FlagIcon iso2={away.iso2} className="h-3 w-4" />
-                  </span>
+                  <TeamLink teamId={awayId} reverse />
                 </div>
-                <span className="w-14 shrink-0 text-right text-xs text-gray-500">{result ? '종료' : '예정'}</span>
+                <span className="flex w-24 shrink-0 items-center justify-end gap-1.5">
+                  {upsetInfo && <UpsetBadge upset={upsetInfo.upset} surpriseDraw={upsetInfo.surpriseDraw} />}
+                  <span className="text-xs text-gray-500">{result ? '종료' : '예정'}</span>
+                </span>
               </div>
             )
           })}

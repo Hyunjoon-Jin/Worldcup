@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { Header } from './components/layout/Header'
 import { TabNav } from './components/layout/TabNav'
@@ -8,8 +8,11 @@ import { GroupStageView } from './components/groups/GroupStageView'
 import { BracketView } from './components/knockout/BracketView'
 import { ProbabilityDashboard } from './components/probability/ProbabilityDashboard'
 import { SandboxPanel } from './components/sandbox/SandboxPanel'
+import { TeamDetailPage } from './components/team/TeamDetailPage'
 import { useDrawStore } from './store/useDrawStore'
+import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
+import { useSelectionStore } from './store/useSelectionStore'
 
 type TabId = 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
@@ -25,6 +28,13 @@ function App() {
   const [tab, setTab] = useState<TabId>('draw')
   const isDrawComplete = useDrawStore((s) => s.isComplete)
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
+  const selectedTeamId = useSelectionStore((s) => s.selectedTeamId)
+  const clearTeam = useSelectionStore((s) => s.clearTeam)
+  const initSchedule = useProgressStore((s) => s.initSchedule)
+
+  useEffect(() => {
+    if (isDrawComplete) initSchedule()
+  }, [isDrawComplete, initSchedule])
 
   return (
     <AppShell>
@@ -34,15 +44,24 @@ function App() {
         <TabNav
           tabs={TABS.map((t) => ({ ...t, disabled: t.id !== 'draw' && !isDrawComplete }))}
           active={tab}
-          onChange={(id) => setTab(id as TabId)}
+          onChange={(id) => {
+            clearTeam()
+            setTab(id as TabId)
+          }}
         />
       </div>
 
-      {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
-      {tab === 'schedule' && <ScheduleStage />}
-      {tab === 'groups' && <GroupStageView />}
-      {tab === 'knockout' && <BracketView />}
-      {tab === 'probability' && <ProbabilityDashboard />}
+      {selectedTeamId ? (
+        <TeamDetailPage />
+      ) : (
+        <>
+          {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
+          {tab === 'schedule' && <ScheduleStage />}
+          {tab === 'groups' && <GroupStageView />}
+          {tab === 'knockout' && <BracketView />}
+          {tab === 'probability' && <ProbabilityDashboard />}
+        </>
+      )}
     </AppShell>
   )
 }

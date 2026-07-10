@@ -56,7 +56,7 @@ export function ScheduleStage() {
       {champion && (
         <GlassCard strong className="p-6 text-center">
           <p className="text-sm text-gray-300">2026 북중미 월드컵 우승</p>
-          <p className="mt-1 flex items-center justify-center gap-3 text-2xl font-extrabold text-amber-300">
+          <p className="font-display mt-1 flex items-center justify-center gap-3 text-3xl font-semibold tracking-wide text-amber-300">
             🏆 <FlagIcon iso2={TEAMS_BY_ID[champion].iso2} className="h-6 w-9" /> {TEAMS_BY_ID[champion].nameKo}
           </p>
         </GlassCard>

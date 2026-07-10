@@ -17,7 +17,7 @@ export function GroupBoard({ groups, highlightGroup }: GroupBoardProps) {
           key={letter}
           className={`p-3 transition-all ${highlightGroup === letter ? 'ring-2 ring-emerald-300/70' : ''}`}
         >
-          <div className="mb-2 text-xs font-bold tracking-wide text-emerald-300/90">GROUP {letter}</div>
+          <div className="font-display mb-2 text-sm font-semibold tracking-wide text-emerald-300/90">GROUP {letter}</div>
           <ul className="space-y-1.5">
             {groups[letter].map((teamId, idx) => {
               const team = teamId ? TEAMS_BY_ID[teamId] : null

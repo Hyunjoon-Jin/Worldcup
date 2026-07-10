@@ -60,7 +60,33 @@ interface OneRunOutcome {
   champion: string | null
 }
 
-function simulateOneRun(): OneRunOutcome {
+export interface ForcedOutcome {
+  teamId: string
+  result: 'win' | 'draw' | 'loss'
+}
+
+/** forced 팀의 관점에서 원하는 결과(승/무/패)가 나올 때까지 다시 뽑는다(대부분 몇 번 안에 수렴). */
+function simulateMatchWithForcedOutcome(
+  homeTeamId: string,
+  awayTeamId: string,
+  forced: ForcedOutcome,
+): { homeGoals: number; awayGoals: number } {
+  const perspective = forced.teamId === homeTeamId ? 'home' : 'away'
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const { homeGoals, awayGoals } = simulateMatch(homeTeamId, awayTeamId)
+    const outcome =
+      homeGoals === awayGoals ? 'draw' : (perspective === 'home') === homeGoals > awayGoals ? 'win' : 'loss'
+    if (outcome === forced.result) return { homeGoals, awayGoals }
+  }
+  return simulateMatch(homeTeamId, awayTeamId)
+}
+
+interface FullTournamentRun {
+  throughGroup: Set<string>
+  slots: Record<string, KnockoutSlotState>
+}
+
+function simulateFullTournament(forced?: ForcedOutcome): FullTournamentRun {
   const drawGroups = useDrawStore.getState().state.groups
   const progress = useProgressStore.getState()
   const schedule = progress.schedule
@@ -81,7 +107,10 @@ function simulateOneRun(): OneRunOutcome {
       if (!homeTeamId || !awayTeamId) continue
       const key = `${fx.group}-${fx.matchday}-${homeTeamId}-${awayTeamId}`
       if (playedKeys.has(key)) continue
-      const { homeGoals, awayGoals } = simulateMatch(homeTeamId, awayTeamId)
+      const isForcedFixture = forced && (homeTeamId === forced.teamId || awayTeamId === forced.teamId)
+      const { homeGoals, awayGoals } = isForcedFixture
+        ? simulateMatchWithForcedOutcome(homeTeamId, awayTeamId, forced)
+        : simulateMatch(homeTeamId, awayTeamId)
       fullGroupMatches.push({ group: fx.group, matchday: fx.matchday, homeTeamId, awayTeamId, homeGoals, awayGoals })
     }
   }
@@ -121,6 +150,12 @@ function simulateOneRun(): OneRunOutcome {
       slot.result = locked ?? simulateSlotMatch(slot.round, id, slot.team1Id, slot.team2Id)
     }
   }
+
+  return { throughGroup, slots }
+}
+
+function simulateOneRun(forced?: ForcedOutcome): OneRunOutcome {
+  const { throughGroup, slots } = simulateFullTournament(forced)
 
   const r16 = new Set<string>()
   const qf = new Set<string>()
@@ -164,4 +199,80 @@ export function runMonteCarloSimulation(iterations: number): SimulationResult {
   }
 
   return { iterations, computedAt: Date.now(), probabilities: counts }
+}
+
+export interface TeamScenarioResult {
+  win: number
+  draw: number
+  loss: number
+}
+
+/** 해당 팀의 마지막 조별리그 경기 결과(승/무/패)를 가정했을 때 32강 진출 확률을 각각 산출한다. */
+export function runTeamScenarioSimulation(teamId: string, iterations = 500): TeamScenarioResult {
+  const outcomes: Array<'win' | 'draw' | 'loss'> = ['win', 'draw', 'loss']
+  const result = {} as TeamScenarioResult
+  for (const outcome of outcomes) {
+    let advanced = 0
+    for (let i = 0; i < iterations; i++) {
+      const run = simulateOneRun({ teamId, result: outcome })
+      if (run.throughGroup.has(teamId)) advanced += 1
+    }
+    result[outcome] = (advanced / iterations) * 100
+  }
+  return result
+}
+
+const OPPONENT_FORECAST_ROUNDS: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'FINAL']
+
+export interface RoundOpponentForecast {
+  round: KnockoutRound
+  /** 해당 라운드에 도달할 확률(%) */
+  reachPct: number
+  /** 도달했다는 조건 하에서의 상대별 확률(%), 내림차순 */
+  opponents: { teamId: string; pct: number }[]
+}
+
+function findTeamMatchInRound(
+  teamId: string,
+  round: KnockoutRound,
+  slots: Record<string, KnockoutSlotState>,
+): { opponentId: string } | null {
+  for (const id of ROUND_SLOT_IDS[round]) {
+    const slot = slots[id]
+    if (slot.team1Id === teamId && slot.team2Id) return { opponentId: slot.team2Id }
+    if (slot.team2Id === teamId && slot.team1Id) return { opponentId: slot.team1Id }
+  }
+  return null
+}
+
+/** 라운드별로 이 팀이 만날 가능성이 높은 상대를 반복 시뮬레이션으로 예측한다(도달 조건부 확률). */
+export function runOpponentForecast(teamId: string, iterations = 500): RoundOpponentForecast[] {
+  const reachCounts: Record<KnockoutRound, number> = { R32: 0, R16: 0, QF: 0, SF: 0, THIRD: 0, FINAL: 0 }
+  const opponentCounts: Record<KnockoutRound, Record<string, number>> = {
+    R32: {},
+    R16: {},
+    QF: {},
+    SF: {},
+    THIRD: {},
+    FINAL: {},
+  }
+
+  for (let i = 0; i < iterations; i++) {
+    const { slots } = simulateFullTournament()
+    for (const round of OPPONENT_FORECAST_ROUNDS) {
+      const match = findTeamMatchInRound(teamId, round, slots)
+      if (!match) continue
+      reachCounts[round] += 1
+      opponentCounts[round][match.opponentId] = (opponentCounts[round][match.opponentId] ?? 0) + 1
+    }
+  }
+
+  return OPPONENT_FORECAST_ROUNDS.map((round) => {
+    const reached = reachCounts[round]
+    const opponents = Object.entries(opponentCounts[round])
+      .map(([teamId, count]) => ({ teamId, pct: reached > 0 ? (count / reached) * 100 : 0 }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5)
+    return { round, reachPct: (reached / iterations) * 100, opponents }
+  })
 }

@@ -1,9 +1,15 @@
+import { useMemo } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
-import { FlagIcon } from '../common/FlagIcon'
+import { GROUP_LETTERS } from '../../data/hostSlots'
 import { GlassCard } from '../common/GlassCard'
+import { TeamLink } from '../common/TeamLink'
+import { UpsetBadge } from '../common/UpsetBadge'
 import { GroupTable } from '../groups/GroupTable'
+import { classifyMatchUpset, isUpset } from '../../engine/matchEngine'
+import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
+import type { GroupLetter } from '../../types/group'
 
 const ROUND_LABEL_KO: Record<string, string> = {
   R32: '32강',
@@ -18,6 +24,18 @@ export function DayResultFeed() {
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { lastDayGroupResults, lastDeltaByGroup, groupMatches, lastKnockoutResults, phase } = useProgressStore()
 
+  const groupTeams = useMemo(
+    () =>
+      Object.fromEntries(
+        GROUP_LETTERS.map((g) => [g, (drawGroups[g] as (string | null)[]).filter(Boolean) as string[]]),
+      ) as Record<GroupLetter, string[]>,
+    [drawGroups],
+  )
+  const statusByTeam = useMemo(
+    () => computeQualificationStatuses(groupTeams, groupMatches),
+    [groupTeams, groupMatches],
+  )
+
   const hasGroupResults = lastDayGroupResults.length > 0
   const hasKnockoutResults = lastKnockoutResults.length > 0
 
@@ -25,78 +43,86 @@ export function DayResultFeed() {
     return <GlassCard className="p-4 text-center text-sm text-gray-400">아직 진행된 경기가 없습니다. "다음 날 진행"을 눌러 시작하세요.</GlassCard>
   }
 
-  const touchedGroups = Array.from(new Set(lastDayGroupResults.map((m) => m.group)))
+  const touchedGroups = Array.from(new Set(lastDayGroupResults.map((m) => m.group))) as GroupLetter[]
 
   return (
     <div className="flex flex-col gap-4">
-      {hasGroupResults && (
-        <GlassCard className="p-4">
-          <h3 className="mb-3 text-sm font-bold text-emerald-300">오늘의 경기 결과</h3>
-          <div className="mb-4 space-y-1.5">
-            {lastDayGroupResults.map((m, i) => {
-              const home = TEAMS_BY_ID[m.homeTeamId]
-              const away = TEAMS_BY_ID[m.awayTeamId]
-              return (
-                <div key={i} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-1.5 text-sm">
-                  <span className="w-10 text-xs text-gray-500">조{m.group}</span>
-                  <span className="flex flex-1 items-center justify-center gap-2">
-                    <FlagIcon iso2={home.iso2} className="h-3 w-4" /> {home.nameKo}
-                    <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
-                      {m.homeGoals} - {m.awayGoals}
-                    </span>
-                    {away.nameKo} <FlagIcon iso2={away.iso2} className="h-3 w-4" />
+      <GlassCard className="p-4">
+        <h3 className="mb-3 text-sm font-bold text-emerald-300">
+          {phase === 'complete' ? '🏆 대회 종료 — 오늘의 결과' : '오늘의 결과'}
+        </h3>
+        <div className={hasGroupResults && touchedGroups.length > 0 ? 'mb-4 space-y-1.5' : 'space-y-1.5'}>
+          {lastDayGroupResults.map((m, i) => {
+            const { upset, surpriseDraw } = classifyMatchUpset(m.homeTeamId, m.awayTeamId, m.homeGoals, m.awayGoals)
+            return (
+              <div
+                key={`group-${i}`}
+                className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm ${
+                  upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
+                }`}
+              >
+                <span className="w-10 text-xs text-gray-500">조{m.group}</span>
+                <span className="flex flex-1 items-center justify-center gap-2">
+                  <TeamLink teamId={m.homeTeamId} />
+                  <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
+                    {m.homeGoals} - {m.awayGoals}
                   </span>
-                </div>
-              )
-            })}
-          </div>
-
-          <h4 className="mb-2 text-xs font-bold text-gray-400">순위 변동 (해당 조)</h4>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {touchedGroups.map((group) => (
-              <div key={group} className="rounded-lg bg-white/[0.03] p-2">
-                <div className="mb-1 text-xs font-bold text-sky-300">GROUP {group}</div>
-                <GroupTable
-                  teamIds={(drawGroups[group] as (string | null)[]).filter(Boolean) as string[]}
-                  matches={groupMatches.filter((m) => m.group === group)}
-                  delta={lastDeltaByGroup[group]}
-                  compact
-                />
+                  <TeamLink teamId={m.awayTeamId} reverse />
+                </span>
+                <span className="w-16 shrink-0 text-right">
+                  <UpsetBadge upset={upset} surpriseDraw={surpriseDraw} />
+                </span>
               </div>
-            ))}
-          </div>
-        </GlassCard>
-      )}
+            )
+          })}
+          {lastKnockoutResults.map((m, i) => {
+            const loserTeamId = m.winnerTeamId === m.homeTeamId ? m.awayTeamId : m.homeTeamId
+            const isUpsetResult = isUpset(m.winnerTeamId, loserTeamId)
+            return (
+              <div
+                key={`ko-${i}`}
+                className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm ${
+                  isUpsetResult ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
+                }`}
+              >
+                <span className="w-14 text-xs text-gray-500">{ROUND_LABEL_KO[m.round]}</span>
+                <span className="flex flex-1 items-center justify-center gap-2">
+                  <TeamLink teamId={m.homeTeamId} />
+                  <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
+                    {m.homeGoals} - {m.awayGoals}
+                  </span>
+                  <TeamLink teamId={m.awayTeamId} reverse />
+                  {m.wentToPenalties && <span className="text-[10px] text-gray-500">(승부차기)</span>}
+                </span>
+                <span className="flex w-24 shrink-0 items-center justify-end gap-1.5">
+                  <UpsetBadge upset={isUpsetResult} />
+                  <span className="text-xs font-bold text-emerald-300">{TEAMS_BY_ID[m.winnerTeamId].nameKo} 승</span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
 
-      {hasKnockoutResults && (
-        <GlassCard className="p-4">
-          <h3 className="mb-3 text-sm font-bold text-amber-300">
-            {phase === 'complete' ? '🏆 대회 종료' : '오늘의 토너먼트 결과'}
-          </h3>
-          <div className="space-y-1.5">
-            {lastKnockoutResults.map((m, i) => {
-              const home = TEAMS_BY_ID[m.homeTeamId]
-              const away = TEAMS_BY_ID[m.awayTeamId]
-              return (
-                <div key={i} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-1.5 text-sm">
-                  <span className="w-14 text-xs text-gray-500">{ROUND_LABEL_KO[m.round]}</span>
-                  <span className="flex flex-1 items-center justify-center gap-2">
-                    <FlagIcon iso2={home.iso2} className="h-3 w-4" /> {home.nameKo}
-                    <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
-                      {m.homeGoals} - {m.awayGoals}
-                    </span>
-                    {away.nameKo} <FlagIcon iso2={away.iso2} className="h-3 w-4" />
-                    {m.wentToPenalties && <span className="text-[10px] text-gray-500">(승부차기)</span>}
-                  </span>
-                  <span className="w-16 text-right text-xs font-bold text-emerald-300">
-                    {TEAMS_BY_ID[m.winnerTeamId].nameKo} 승
-                  </span>
+        {hasGroupResults && touchedGroups.length > 0 && (
+          <>
+            <h4 className="mb-2 text-xs font-bold text-gray-400">순위 변동 (해당 조)</h4>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {touchedGroups.map((group) => (
+                <div key={group} className="rounded-lg bg-white/[0.03] p-2">
+                  <div className="font-display mb-1 text-sm font-semibold tracking-wide text-sky-300">GROUP {group}</div>
+                  <GroupTable
+                    teamIds={groupTeams[group]}
+                    matches={groupMatches.filter((m) => m.group === group)}
+                    delta={lastDeltaByGroup[group]}
+                    statusByTeam={statusByTeam}
+                    compact
+                  />
                 </div>
-              )
-            })}
-          </div>
-        </GlassCard>
-      )}
+              ))}
+            </div>
+          </>
+        )}
+      </GlassCard>
     </div>
   )
 }

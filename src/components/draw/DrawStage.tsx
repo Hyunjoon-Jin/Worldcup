@@ -38,7 +38,7 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
               >
                 <FlagIcon iso2={lastTeam.iso2} className="h-8 w-12" />
                 <div className="text-left">
-                  <div className="text-lg font-bold text-white">{lastTeam.nameKo}</div>
+                  <div className="font-display text-xl font-semibold tracking-wide text-white">{lastTeam.nameKo}</div>
                   <div className="text-xs text-gray-400">
                     {CONFEDERATION_LABEL_KO[lastTeam.confederation]} · 조 {lastEntry.group} · 포트 {lastEntry.pot}
                   </div>
