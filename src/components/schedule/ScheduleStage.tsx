@@ -4,20 +4,38 @@ import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
+import { TeamLink } from '../common/TeamLink'
 import { CalendarTimeline } from './CalendarTimeline'
 import { DayResultFeed } from './DayResultFeed'
 import { nextPendingGroupSlot, nextPendingKnockoutSlot, useProgressStore } from '../../store/useProgressStore'
+import { useSimulationStore } from '../../store/useSimulationStore'
 import type { KnockoutRound } from '../../types/match'
 
 const ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL']
+const MEDALS = ['🥇', '🥈', '🥉']
 
 export function ScheduleStage() {
   const { schedule, phase, currentDay, groupMatches, knockoutSlots, initSchedule, advanceDay, advanceTimeSlot, champion } =
     useProgressStore()
+  const simResult = useSimulationStore((s) => s.result)
+  const runSimulation = useSimulationStore((s) => s.run)
 
   useEffect(() => {
     initSchedule()
   }, [initSchedule])
+
+  useEffect(() => {
+    if (!simResult) runSimulation()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const top3Champion = useMemo(() => {
+    if (!simResult) return []
+    return Object.values(simResult.probabilities)
+      .slice()
+      .sort((a, b) => b.championPct - a.championPct)
+      .slice(0, 3)
+  }, [simResult])
 
   const nextSlotPreview = useMemo(() => {
     if (!schedule) return null
@@ -81,6 +99,23 @@ export function ScheduleStage() {
           )}
         </div>
       </GlassCard>
+
+      {phase !== 'complete' && top3Champion.length > 0 && (
+        <GlassCard className="p-4">
+          <h3 className="mb-3 text-sm font-bold text-amber-300">🏆 실시간 우승 확률 TOP 3</h3>
+          <div className="space-y-2">
+            {top3Champion.map((row, idx) => (
+              <div key={row.teamId} className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
+                <span className="w-6 shrink-0 text-center text-lg">{MEDALS[idx]}</span>
+                <TeamLink teamId={row.teamId} className="min-w-0 flex-1 font-medium text-gray-100" />
+                <span className="shrink-0 text-sm font-bold tabular-nums text-amber-300">
+                  {row.championPct.toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       <DayResultFeed />
       {champion && (
