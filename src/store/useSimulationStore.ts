@@ -8,6 +8,7 @@ interface SimulationStore {
   isComputing: boolean
   setIterations: (n: number) => void
   run: () => void
+  reset: () => void
 }
 
 export const useSimulationStore = create<SimulationStore>()((set, get) => ({
@@ -23,4 +24,5 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
       set({ result, isComputing: false })
     }, 10)
   },
+  reset: () => set({ result: null, isComputing: false }),
 }))

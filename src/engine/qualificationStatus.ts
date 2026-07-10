@@ -44,6 +44,40 @@ function isRealThreat(
 }
 
 /**
+ * 아직 안 끝난 다른 조가 이 팀(승점 ourPoints)의 3위 경쟁에 "이미 확정적으로 앞서는지/뒤처지는지"를
+ * 승점만으로 안전하게 판정한다. 승점은 남은 경기로 줄지 않으므로:
+ * - 그 조의 현재 승점을 내림차순 정렬했을 때 3번째로 높은 값(= 그 조에서 최종 3위를 차지할 팀의
+ *   승점 하한선)이 이미 ourPoints보다 크면, 그 조는 몇 경기가 남았든 상관없이 100% 위협이다
+ *   (상위 3개 팀의 승점은 각자 현재값에서 줄어들 수 없으므로, 그중 가장 낮은 값도 결국
+ *   ourPoints를 넘는다).
+ * - 반대로 그 조에서 "이론상 최대 승점(maxPossiblePoints)이 ourPoints 미만인 팀"이 2팀 이상이면,
+ *   최종 3위는 반드시 그 두 팀 중 하나(또는 그보다 나은 팀)가 차지하므로 100% 안전하다.
+ * - 둘 다 아니면 아직 확정할 수 없다(진행중으로 남긴다).
+ */
+function thirdPointsFloor(teamIds: string[], standings: Record<string, GroupStanding>): number {
+  const pts = teamIds.map((id) => standings[id].points).sort((a, b) => b - a)
+  return pts[2] ?? 0
+}
+
+type GroupThreatVerdict = 'ahead' | 'behind' | 'pending'
+
+function classifyGroupThreat(
+  other: { standings: Record<string, GroupStanding>; finished: boolean; thirdTeamId: string },
+  otherTeamIds: string[],
+  ourStanding: GroupStanding,
+): GroupThreatVerdict {
+  if (other.finished) {
+    return thirdPlaceComparator(other.standings[other.thirdTeamId], ourStanding) < 0 ? 'ahead' : 'behind'
+  }
+  if (thirdPointsFloor(otherTeamIds, other.standings) > ourStanding.points) return 'ahead'
+  const guaranteedBelow = otherTeamIds.filter(
+    (id) => maxPossiblePoints(other.standings[id]) < ourStanding.points,
+  ).length
+  if (guaranteedBelow >= 2) return 'behind'
+  return 'pending'
+}
+
+/**
  * 현재까지의 경기 결과만으로 각 팀의 32강 진출 확정/탈락 여부를 판정한다. 판정은 항상
  * "과대 확정이 없는" 보수적 방향으로 이루어진다(애매하면 확정 대신 진행중으로 남긴다).
  *
@@ -51,8 +85,9 @@ function isRealThreat(
  *   일정이 끝나 3위가 확정된 상태에서, 다른 11개 조 중 아직 이 팀을 앞지를 "가능성이 있는" 조가
  *   7개 이하인 경우(즉 최악의 경우에도 3위 진출 8자리 안에 든다).
  * - 탈락 확정: (a) 자기 조 1·2위 진출이 수학적으로 불가능하고, (b) 자기 조 일정이 모두 끝났으며,
- *   (c-1) 자기 조 3위가 아니거나(4위 확정), (c-2) 3위이더라도 이미 일정이 끝난 다른 조의 3위팀
- *   중 이 팀보다 앞서는 팀이 8개 이상이라 3위 진출 경로도 막힌 경우.
+ *   (c-1) 자기 조 3위가 아니거나(4위 확정), (c-2) 3위이더라도 다른 조 중 `classifyGroupThreat`가
+ *   'ahead'(승점만으로 이미 확정적으로 앞선다고 증명 가능)로 판정한 조가 8개 이상이라 3위 진출
+ *   경로도 막힌 경우 — 다른 조 자체가 아직 안 끝났어도 승점 하한선만으로 확정 가능하다.
  */
 export function computeQualificationStatuses(
   groupTeams: Record<GroupLetter, string[]>,
@@ -76,9 +111,6 @@ export function computeQualificationStatuses(
   }
 
   const groups = Object.keys(perGroupInfo) as GroupLetter[]
-  const finishedThirds = groups
-    .filter((g) => perGroupInfo[g].finished)
-    .map((g) => perGroupInfo[g].standings[perGroupInfo[g].thirdTeamId])
 
   for (const group of groups) {
     const info = perGroupInfo[group]
@@ -89,7 +121,7 @@ export function computeQualificationStatuses(
       const myOrderIndex = info.order.indexOf(teamId)
       const rivals = teamIds.filter((id) => id !== teamId)
 
-      // 1) 자기 조 1·2위 확정(이미 끝난 동률은 위협에서 제외)
+      // 1) 자기 조 1·2위 확정(이미 결판난 동률은 위협에서 제외)
       const threats = rivals.filter((rid) =>
         isRealThreat(s, info.standings[rid], myOrderIndex, info.order.indexOf(rid)),
       ).length
@@ -109,22 +141,22 @@ export function computeQualificationStatuses(
         continue
       }
 
-      // 3) 3위 확정 — 다른 11개 조 중 이미 끝난 조의 3위가 나를 앞서면 확실한 위협,
-      //    아직 안 끝난 조는 결과를 알 수 없으므로 안전하게 위협으로 간주한다.
+      // 3) 3위 확정 — 다른 11개 조를 각각 확정 위협/확정 안전/미정으로 분류한다.
       const otherGroups = groups.filter((g) => g !== group)
-      const possibleThreats = otherGroups.filter((g) => {
-        const other = perGroupInfo[g]
-        if (!other.finished) return true
-        return thirdPlaceComparator(other.standings[other.thirdTeamId], s) <= 0
-      }).length
+      let aheadCount = 0
+      let pendingCount = 0
+      for (const g of otherGroups) {
+        const verdict = classifyGroupThreat(perGroupInfo[g], groupTeams[g], s)
+        if (verdict === 'ahead') aheadCount += 1
+        else if (verdict === 'pending') pendingCount += 1
+      }
 
-      if (possibleThreats <= THIRD_PLACE_SLOTS - 1) {
+      if (aheadCount + pendingCount <= THIRD_PLACE_SLOTS - 1) {
         statuses[teamId] = 'advancing'
         continue
       }
 
-      const outranking = finishedThirds.filter((t) => t.teamId !== teamId && thirdPlaceComparator(t, s) < 0).length
-      statuses[teamId] = outranking >= THIRD_PLACE_SLOTS ? 'eliminated' : 'undecided'
+      statuses[teamId] = aheadCount >= THIRD_PLACE_SLOTS ? 'eliminated' : 'undecided'
     }
   }
 
@@ -254,14 +286,14 @@ export interface ThirdPlaceRouteInfo {
   ourPoints: number
   ourGoalDiff: number
   ourGoalsFor: number
-  /** 이미 조가 끝났고 우리보다 앞서는 조(확정 위협) 수 */
+  /** 3위 자리가 이미 수학적으로 확정됐고(그 조 전체가 안 끝났어도 포함) 우리보다 앞서는 조 수 */
   aheadFinished: number
-  /** 이미 조가 끝났고 우리보다 뒤처진 조 수 */
+  /** 3위 자리가 이미 확정됐고 우리보다 뒤처진 조 수 */
   behindFinished: number
-  /** 아직 조별리그가 진행 중인 조 수 — 결과에 따라 위협이 될 수도, 안 될 수도 있음 */
+  /** 3위 자리가 아직 확정되지 않은 조 수 — 결과에 따라 위협이 될 수도, 안 될 수도 있음 */
   pendingGroups: number
   pendingGroupLetters: GroupLetter[]
-  /** 진행 중인 조 중 이 개수 이하에서만 우리보다 나은 3위팀이 나와야 진출 확정(초과하면 탈락) */
+  /** 미확정 조 중 이 개수 이하에서만 우리보다 나은 3위팀이 나와야 진출 확정(초과하면 탈락) */
   maxPendingAllowed: number
 }
 
@@ -269,6 +301,10 @@ export interface ThirdPlaceRouteInfo {
  * 자기 조가 끝나 3위로 확정됐지만(진출확정/탈락확정 어느 쪽도 아닌 'undecided' 상태) 32강 진출
  * 여부가 다른 조 결과에 따라 정확히 어떻게 갈리는지 설명하기 위한 정보를 계산한다. 자기 조가 아직
  * 안 끝났거나 3위가 아니면(1·2위 또는 4위) null.
+ *
+ * 다른 조가 "이미 확정된 위협/안전"인지는 그 조 전체가 끝났는지가 아니라 `classifyGroupThreat`로
+ * 승점 하한선만으로 판정한다 — 승점은 남은 경기로 줄어들 수 없으므로, 그 조 일정이 남아있어도
+ * 안전하게 위협/안전으로 분류할 수 있는 경우가 있다(computeQualificationStatuses와 동일한 기준).
  */
 export function analyzeThirdPlaceRoute(
   teamId: string,
@@ -296,15 +332,16 @@ export function analyzeThirdPlaceRoute(
     const teamIds = groupTeams[group]
     if (!teamIds || teamIds.length < 4) continue
     const groupMatches = matches.filter((m) => m.group === group)
-    if (groupMatches.length < 6) {
+    const standings = computeStandings(teamIds, groupMatches)
+    const finished = groupMatches.length >= 6
+    const order = rankGroupTeams(teamIds, groupMatches)
+    const verdict = classifyGroupThreat({ standings, finished, thirdTeamId: order[2] }, teamIds, myStanding)
+    if (verdict === 'pending') {
       pendingGroups += 1
       pendingGroupLetters.push(group)
-      continue
+    } else if (verdict === 'ahead') {
+      aheadFinished += 1
     }
-    const order = rankGroupTeams(teamIds, groupMatches)
-    const thirdId = order[2]
-    const standings = computeStandings(teamIds, groupMatches)
-    if (thirdPlaceComparator(standings[thirdId], myStanding) < 0) aheadFinished += 1
   }
 
   return {
