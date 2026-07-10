@@ -80,15 +80,15 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
                   </span>
                 </div>
                 <div className="flex flex-1 items-center justify-center gap-3">
-                  <TeamLink teamId={homeId} />
+                  <TeamLink teamId={homeId} wrap className="min-w-0" />
                   {result ? (
-                    <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
+                    <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 font-bold text-white">
                       {result.homeGoals} - {result.awayGoals}
                     </span>
                   ) : (
-                    <span className="text-gray-500">vs</span>
+                    <span className="shrink-0 text-gray-500">vs</span>
                   )}
-                  <TeamLink teamId={awayId} reverse />
+                  <TeamLink teamId={awayId} reverse wrap className="min-w-0" />
                 </div>
                 <span className="hidden shrink-0 items-center justify-end gap-1.5 sm:flex sm:w-24">
                   {upsetInfo && <UpsetBadge upset={upsetInfo.upset} surpriseDraw={upsetInfo.surpriseDraw} />}

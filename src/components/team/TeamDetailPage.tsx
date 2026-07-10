@@ -38,6 +38,14 @@ interface MatchHistoryEntry {
   upset: boolean
 }
 
+interface UpcomingMatchEntry {
+  key: string
+  label: string
+  date?: string
+  timeSlot?: string
+  opponentId: string | null
+}
+
 export function TeamDetailPage() {
   const teamId = useSelectionStore((s) => s.selectedTeamId)
   const clearTeam = useSelectionStore((s) => s.clearTeam)
@@ -125,6 +133,45 @@ export function TeamDetailPage() {
     return entries
   }, [teamId, teamGroupMatches, knockoutSlots, schedule, drawGroups])
 
+  const upcomingMatches: UpcomingMatchEntry[] = useMemo(() => {
+    if (!teamId) return []
+    const entries: UpcomingMatchEntry[] = []
+
+    if (group) {
+      const playedMatchdays = new Set(teamGroupMatches.map((m) => m.matchday))
+      for (const fx of schedule?.groupMatches ?? []) {
+        if (fx.group !== group || playedMatchdays.has(fx.matchday)) continue
+        const homeId = drawGroups[group][fx.homeSeed - 1]
+        const awayId = drawGroups[group][fx.awaySeed - 1]
+        if (homeId !== teamId && awayId !== teamId) continue
+        entries.push({
+          key: `group-${fx.id}`,
+          label: `조별리그 MD${fx.matchday}`,
+          date: fx.date,
+          timeSlot: fx.timeSlot,
+          opponentId: (homeId === teamId ? awayId : homeId) ?? null,
+        })
+      }
+    }
+
+    for (const slot of Object.values(knockoutSlots)) {
+      if (slot.result) continue
+      const isHome = slot.team1Id === teamId
+      const isAway = slot.team2Id === teamId
+      if (!isHome && !isAway) continue
+      const sched = schedule?.knockoutMatches.find((k) => k.slotId === slot.slotId)
+      entries.push({
+        key: `ko-${slot.slotId}`,
+        label: ROUND_LABEL_KO[slot.round],
+        date: sched?.date,
+        timeSlot: sched?.timeSlot,
+        opponentId: isHome ? slot.team2Id : slot.team1Id,
+      })
+    }
+
+    return entries
+  }, [teamId, group, teamGroupMatches, schedule, drawGroups, knockoutSlots])
+
   const teamProbabilities = simResult && teamId ? simResult.probabilities[teamId] : null
 
   const playedGroupCount = teamGroupMatches.length
@@ -207,21 +254,33 @@ export function TeamDetailPage() {
             {matchHistory.map((entry) => (
               <div
                 key={entry.key}
-                className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm ${
+                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
                   entry.upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
-                <span className="w-24 shrink-0 text-xs text-gray-400">
-                  {entry.label}
-                  {entry.date && <> · {formatKoreanDate(entry.date)}</>}
-                </span>
+                <div className="flex items-center justify-between sm:w-24 sm:shrink-0">
+                  <span className="text-xs text-gray-400">
+                    {entry.label}
+                    {entry.date && <> · {formatKoreanDate(entry.date)}</>}
+                  </span>
+                  <span className="flex items-center gap-1.5 sm:hidden">
+                    <UpsetBadge upset={entry.upset} />
+                    <span
+                      className={`text-xs font-bold ${
+                        entry.result === 'W' ? 'text-emerald-400' : entry.result === 'D' ? 'text-gray-400' : 'text-red-400'
+                      }`}
+                    >
+                      {entry.result === 'W' ? '승' : entry.result === 'D' ? '무' : '패'}
+                    </span>
+                  </span>
+                </div>
                 <span className="flex flex-1 items-center justify-center gap-2">
-                  <TeamLink teamId={entry.opponentId} />
-                  <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white">
+                  <TeamLink teamId={entry.opponentId} wrap className="min-w-0" />
+                  <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 font-bold text-white">
                     {entry.goalsFor} - {entry.goalsAgainst}
                   </span>
                 </span>
-                <span className="flex w-20 shrink-0 items-center justify-end gap-1.5">
+                <span className="hidden w-20 shrink-0 items-center justify-end gap-1.5 sm:flex">
                   <UpsetBadge upset={entry.upset} />
                   <span
                     className={`text-xs font-bold ${
@@ -230,6 +289,36 @@ export function TeamDetailPage() {
                   >
                     {entry.result === 'W' ? '승' : entry.result === 'D' ? '무' : '패'}
                   </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+
+      <GlassCard className="p-4">
+        <h3 className="mb-3 text-sm font-bold text-sky-300">다음 경기 일정</h3>
+        {upcomingMatches.length === 0 ? (
+          <p className="text-sm text-gray-400">
+            {status === 'eliminated' ? '탈락이 확정되어 예정된 경기가 없습니다.' : '예정된 경기가 없습니다.'}
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {upcomingMatches.map((entry) => (
+              <div key={entry.key} className="flex flex-col gap-1 rounded-lg bg-white/5 px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs text-gray-400 sm:w-32 sm:shrink-0">
+                  {entry.label}
+                  {entry.date && <> · {formatKoreanDate(entry.date)}</>}
+                  {entry.timeSlot && ` ${entry.timeSlot}`}
+                </span>
+                <span className="flex flex-1 items-center justify-center gap-2">
+                  <TeamLink teamId={teamId} wrap className="min-w-0" />
+                  <span className="shrink-0 text-gray-500">vs</span>
+                  {entry.opponentId ? (
+                    <TeamLink teamId={entry.opponentId} reverse wrap className="min-w-0" />
+                  ) : (
+                    <span className="text-gray-500">TBD</span>
+                  )}
                 </span>
               </div>
             ))}

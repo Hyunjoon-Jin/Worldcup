@@ -65,7 +65,7 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
                 <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                 <td className="py-1.5">
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <TeamLink teamId={teamId} className="font-medium text-gray-100" />
+                    <TeamLink teamId={teamId} wrap className="min-w-0 font-medium text-gray-100" />
                     <StatusBadge status={status} />
                   </div>
                 </td>

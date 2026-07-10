@@ -66,7 +66,7 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlac
                 >
                   <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                   <td className="py-1.5">
-                    <TeamLink teamId={entry.teamId} className="font-medium text-gray-100" />
+                    <TeamLink teamId={entry.teamId} wrap className="min-w-0 font-medium text-gray-100" />
                   </td>
                   <td className="text-center text-gray-300">{entry.group}</td>
                   <td className="text-center text-gray-300">{gd > 0 ? `+${gd}` : gd}</td>

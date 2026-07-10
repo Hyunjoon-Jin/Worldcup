@@ -7,9 +7,17 @@ interface TeamLinkProps {
   className?: string
   flagClassName?: string
   reverse?: boolean
+  /** 긴 국가명(보스니아 헤르체고비나 등)이 말줄임표로 잘리지 않고 줄바꿈되도록 허용 */
+  wrap?: boolean
 }
 
-export function TeamLink({ teamId, className = '', flagClassName = 'h-3 w-4', reverse = false }: TeamLinkProps) {
+export function TeamLink({
+  teamId,
+  className = '',
+  flagClassName = 'h-3 w-4',
+  reverse = false,
+  wrap = false,
+}: TeamLinkProps) {
   const team = TEAMS_BY_ID[teamId]
   const selectTeam = useSelectionStore((s) => s.selectTeam)
 
@@ -25,7 +33,7 @@ export function TeamLink({ teamId, className = '', flagClassName = 'h-3 w-4', re
       } ${className}`}
     >
       <FlagIcon iso2={team.iso2} className={`shrink-0 ${flagClassName}`} />
-      <span className="truncate">{team.nameKo}</span>
+      <span className={wrap ? 'break-keep' : 'truncate'}>{team.nameKo}</span>
     </button>
   )
 }
