@@ -136,6 +136,103 @@ export function computeQualificationStatuses(
  * 32강 대진표에서 특정 슬롯(조 1위/2위)의 실제 진출 팀이 확정되었는지 표시할 때 사용한다.
  * 반환값은 현재 순위(rankGroupTeams 결과) 순서를 그대로 따르는 boolean 배열이다.
  */
+export type ScenarioVerdict = 'advance' | 'eliminated' | 'tiebreak'
+
+export interface OtherMatchOutcome {
+  key: 'aWin' | 'draw' | 'bWin'
+  label: string
+  verdict: ScenarioVerdict
+  note?: string
+}
+
+export interface OurResultScenario {
+  result: 'win' | 'draw' | 'loss'
+  resultLabel: string
+  ourFinalPoints: number
+  outcomes: OtherMatchOutcome[]
+  /** 3가지 동시경기 결과 모두 같은 판정으로 귀결되면 그 판정, 아니면 null(경우에 따라 갈림) */
+  uniform: ScenarioVerdict | null
+}
+
+/**
+ * 승점만으로 확정 가능한 최선/최악 순위 구간을 구해 타이브레이커 개입 없이 판가름 나는지 분류한다.
+ * 최악의 경우에도 2위 안이면 'advance', 최선의 경우에도 3위 밖이면 'eliminated', 그 경계에
+ * 걸쳐 있으면(동률 상대에 따라 2위/3위가 갈릴 수 있으면) 'tiebreak'. 'eliminated'이면서 최선/최악
+ * 순위가 정확히 3위로 고정되는 경우, 3위 진출 와일드카드 경로가 남아있음을 별도로 알린다.
+ */
+function classifyByPoints(
+  finalPoints: Record<string, number>,
+  teamId: string,
+  groupTeamIds: string[],
+): { verdict: ScenarioVerdict; thirdPlaceRoute: boolean } {
+  const ourPts = finalPoints[teamId]
+  const others = groupTeamIds.filter((id) => id !== teamId).map((id) => finalPoints[id])
+  const strictlyAbove = others.filter((p) => p > ourPts).length
+  const equalCount = others.filter((p) => p === ourPts).length
+  const bestPos = strictlyAbove + 1
+  const worstPos = strictlyAbove + equalCount + 1
+  if (worstPos <= 2) return { verdict: 'advance', thirdPlaceRoute: false }
+  if (bestPos > 2) return { verdict: 'eliminated', thirdPlaceRoute: bestPos === 3 && worstPos === 3 }
+  return { verdict: 'tiebreak', thirdPlaceRoute: false }
+}
+
+/**
+ * 조별리그 2경기를 마친 시점, 마지막(3번째) 라운드에서 우리 팀의 경기 결과(승/무/패) ×
+ * 동시에 열리는 나머지 두 팀의 경기 결과(A승/무/B승) — 총 9가지 조합에 대해 32강 1·2위
+ * 직행 진출 여부를 승점 기준으로 판정한다. 골득실 등 세부 타이브레이커가 필요한 경계 상황은
+ * 'tiebreak'으로 별도 표시한다(3위 진출 와일드카드 경로는 다른 조 결과에 좌우되므로 제외).
+ */
+export function analyzeLastMatchdayScenarios(
+  groupTeamIds: string[],
+  matches: GroupMatch[],
+  teamId: string,
+  otherTeamAId: string,
+  otherTeamBId: string,
+): OurResultScenario[] {
+  const standings = computeStandings(groupTeamIds, matches)
+  const basePoints = Object.fromEntries(groupTeamIds.map((id) => [id, standings[id].points])) as Record<string, number>
+  const opponentId = groupTeamIds.find((id) => id !== teamId && id !== otherTeamAId && id !== otherTeamBId)
+
+  if (!opponentId) return []
+
+  const OUR_RESULTS: { key: 'win' | 'draw' | 'loss'; label: string; our: number; opp: number }[] = [
+    { key: 'win', label: '승리', our: 3, opp: 0 },
+    { key: 'draw', label: '무승부', our: 1, opp: 1 },
+    { key: 'loss', label: '패배', our: 0, opp: 3 },
+  ]
+  const OTHER_RESULTS: { key: 'aWin' | 'draw' | 'bWin'; label: string; a: number; b: number }[] = [
+    { key: 'aWin', label: `${TEAMS_BY_ID[otherTeamAId].nameKo} 승`, a: 3, b: 0 },
+    { key: 'draw', label: '무승부', a: 1, b: 1 },
+    { key: 'bWin', label: `${TEAMS_BY_ID[otherTeamBId].nameKo} 승`, a: 0, b: 3 },
+  ]
+
+  return OUR_RESULTS.map((r) => {
+    const ourFinalPoints = basePoints[teamId] + r.our
+    const opponentFinalPoints = basePoints[opponentId] + r.opp
+
+    const outcomes: OtherMatchOutcome[] = OTHER_RESULTS.map((o) => {
+      const finalPoints: Record<string, number> = {
+        [teamId]: ourFinalPoints,
+        [opponentId]: opponentFinalPoints,
+        [otherTeamAId]: basePoints[otherTeamAId] + o.a,
+        [otherTeamBId]: basePoints[otherTeamBId] + o.b,
+      }
+      const { verdict, thirdPlaceRoute } = classifyByPoints(finalPoints, teamId, groupTeamIds)
+      const note =
+        verdict === 'tiebreak'
+          ? '승점이 같아 상호전적 → 골득실 → 다득점 등 타이브레이커로 순위가 결정됩니다.'
+          : verdict === 'eliminated' && thirdPlaceRoute
+            ? '조 3위로 마감 — 다른 조 3위팀들과의 성적 비교 결과에 따라 32강에 진출할 수도 있습니다.'
+            : undefined
+      return { key: o.key, label: o.label, verdict, note }
+    })
+
+    const uniform = outcomes.every((o) => o.verdict === outcomes[0].verdict) ? outcomes[0].verdict : null
+
+    return { result: r.key, resultLabel: r.label, ourFinalPoints, outcomes, uniform }
+  })
+}
+
 export function computeExactRankLocks(teamIds: string[], matches: GroupMatch[]): boolean[] {
   const standings = computeStandings(teamIds, matches)
   const order = rankGroupTeams(teamIds, matches)

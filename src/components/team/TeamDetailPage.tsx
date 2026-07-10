@@ -10,7 +10,12 @@ import { UpsetBadge } from '../common/UpsetBadge'
 import { ProbBar } from '../probability/ProbBar'
 import { STAGES } from '../probability/probabilityStages'
 import { getRatings, classifyMatchUpset, isUpset } from '../../engine/matchEngine'
-import { computeQualificationStatuses } from '../../engine/qualificationStatus'
+import {
+  analyzeLastMatchdayScenarios,
+  computeQualificationStatuses,
+  type OurResultScenario,
+  type ScenarioVerdict,
+} from '../../engine/qualificationStatus'
 import { runOpponentForecast, runTeamScenarioSimulation, type RoundOpponentForecast, type TeamScenarioResult } from '../../engine/monteCarlo'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
@@ -25,6 +30,25 @@ const ROUND_LABEL_KO: Record<string, string> = {
   SF: '4강',
   THIRD: '3·4위전',
   FINAL: '결승',
+}
+
+const VERDICT_CONFIG: Record<ScenarioVerdict, { label: string; icon: string; className: string }> = {
+  advance: { label: '32강 진출 확정', icon: '✅', className: 'text-emerald-300' },
+  eliminated: { label: '32강 진출 실패', icon: '❌', className: 'text-red-300' },
+  tiebreak: { label: '타이브레이커로 결정', icon: '⚠️', className: 'text-amber-300' },
+}
+
+function VerdictLine({ verdict, text, note }: { verdict: ScenarioVerdict; text?: string; note?: string }) {
+  const config = VERDICT_CONFIG[verdict]
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className={`text-xs font-bold ${config.className}`}>
+        {text && <span className="mr-1 font-normal text-gray-400">{text}</span>}
+        {config.icon} {config.label}
+      </span>
+      {note && <span className="text-[10px] text-gray-500">{note}</span>}
+    </span>
+  )
 }
 
 interface MatchHistoryEntry {
@@ -176,6 +200,26 @@ export function TeamDetailPage() {
 
   const playedGroupCount = teamGroupMatches.length
   const showScenario = playedGroupCount === 2
+
+  const lastMatchdayScenarios: OurResultScenario[] = useMemo(() => {
+    if (!teamId || !group || !showScenario) return []
+    const playedMatchdays = new Set(teamGroupMatches.map((m) => m.matchday))
+    const remainingFixtures = (schedule?.groupMatches ?? []).filter(
+      (fx) => fx.group === group && !playedMatchdays.has(fx.matchday),
+    )
+    if (remainingFixtures.length !== 2) return []
+    const otherFixture = remainingFixtures.find((fx) => {
+      const homeId = drawGroups[group][fx.homeSeed - 1]
+      const awayId = drawGroups[group][fx.awaySeed - 1]
+      return homeId !== teamId && awayId !== teamId
+    })
+    if (!otherFixture) return []
+    const otherTeamAId = drawGroups[group][otherFixture.homeSeed - 1]
+    const otherTeamBId = drawGroups[group][otherFixture.awaySeed - 1]
+    if (!otherTeamAId || !otherTeamBId) return []
+    const groupPlayedMatches = groupMatches.filter((m) => m.group === group)
+    return analyzeLastMatchdayScenarios(groupTeams[group], groupPlayedMatches, teamId, otherTeamAId, otherTeamBId)
+  }, [teamId, group, showScenario, teamGroupMatches, groupMatches, schedule, drawGroups, groupTeams])
 
   useEffect(() => {
     setScenario(null)
@@ -359,6 +403,36 @@ export function TeamDetailPage() {
                   <div className="text-xs text-gray-400">{s.label}</div>
                   <div className="mt-1 text-xl font-bold text-white">{s.value.toFixed(1)}%</div>
                   <div className="text-[10px] text-gray-500">32강 진출 확률</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {lastMatchdayScenarios.length > 0 && (
+            <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+              <p className="text-xs text-gray-400">
+                동시에 열리는 같은 조 나머지 경기 결과에 따라 1·2위 직행 진출 여부가 정확히 어떻게
+                갈리는지 조건별로 정리했습니다 (골득실 등 세부 타이브레이커가 필요한 경우는 별도 표시).
+              </p>
+              {lastMatchdayScenarios.map((rs) => (
+                <div key={rs.result} className="rounded-lg bg-white/5 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-100">
+                      {rs.resultLabel} 시 <span className="font-normal text-gray-400">(승점 {rs.ourFinalPoints}점)</span>
+                    </span>
+                  </div>
+                  {rs.uniform ? (
+                    <VerdictLine verdict={rs.uniform} text="동시경기 결과와 무관하게" />
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {rs.outcomes.map((o) => (
+                        <li key={o.key} className="flex flex-col gap-0.5 text-xs sm:flex-row sm:items-center sm:gap-2">
+                          <span className="shrink-0 text-gray-400">{o.label}:</span>
+                          <VerdictLine verdict={o.verdict} note={o.note} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ))}
             </div>
