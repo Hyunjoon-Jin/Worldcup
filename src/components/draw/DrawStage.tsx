@@ -1,5 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDrawStore } from '../../store/useDrawStore'
+import { useProgressStore } from '../../store/useProgressStore'
+import { useSimulationStore } from '../../store/useSimulationStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
 import { TEAMS_BY_ID, CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { findNextSlot } from '../../engine/drawEngine'
 import { GlassCard } from '../common/GlassCard'
@@ -12,7 +15,20 @@ import { GroupSlotCard } from './GroupSlotCard'
 const POT_LABEL: Record<number, string> = { 1: '포트1', 2: '포트2', 3: '포트3', 4: '포트4' }
 
 export function DrawStage({ onComplete }: { onComplete?: () => void }) {
-  const { state, log, isComplete, drawOne, undoLast, reset } = useDrawStore()
+  const { state, log, isComplete, drawOne, undoLast, reset: resetDraw } = useDrawStore()
+  const resetProgress = useProgressStore((s) => s.reset)
+  const resetSimulation = useSimulationStore((s) => s.reset)
+  const clearSelectedTeam = useSelectionStore((s) => s.clearTeam)
+
+  // 조추첨을 다시 시작하면 이전 조추첨에 딸려있던 일정 진행 상황(경기 결과·토너먼트·우승팀)과
+  // 확률 계산 캐시까지 전부 초기화해, 새 조추첨 결과와 어긋난 데이터가 남지 않도록 한다.
+  const resetEverything = () => {
+    resetDraw()
+    resetProgress()
+    resetSimulation()
+    clearSelectedTeam()
+  }
+
   const nextSlot = findNextSlot(state)
   const lastEntry = log[log.length - 1]
   const lastTeam = lastEntry ? TEAMS_BY_ID[lastEntry.teamId] : null
@@ -63,7 +79,7 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
           <GlassButton variant="ghost" onClick={undoLast} disabled={log.length === 0}>
             ↩ 되돌리기
           </GlassButton>
-          <GlassButton variant="danger" onClick={reset}>
+          <GlassButton variant="danger" onClick={resetEverything}>
             ⟲ 처음부터
           </GlassButton>
         </div>
