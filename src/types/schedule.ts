@@ -11,6 +11,8 @@ export interface ScheduledGroupMatch {
   awaySeed: 1 | 2 | 3 | 4
   day: number
   date: string
+  /** 그 날의 킥오프 시간대(현지시간), 같은 조의 두 경기는 항상 같은 시간대에 배정된다 */
+  timeSlot: string
 }
 
 export interface ScheduledKnockoutMatch {
@@ -19,6 +21,7 @@ export interface ScheduledKnockoutMatch {
   round: KnockoutRound
   slotId: string
   date: string
+  timeSlot: string
 }
 
 export type ScheduledMatch = ScheduledGroupMatch | ScheduledKnockoutMatch
