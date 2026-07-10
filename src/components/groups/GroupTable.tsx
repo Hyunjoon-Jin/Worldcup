@@ -1,7 +1,7 @@
-import { TEAMS_BY_ID } from '../../data/teams'
-import { FlagIcon } from '../common/FlagIcon'
+import { TeamLink } from '../common/TeamLink'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import type { GroupMatch } from '../../types/match'
+import type { QualificationStatus } from '../../engine/qualificationStatus'
 
 interface GroupTableProps {
   teamIds: string[]
@@ -9,6 +9,7 @@ interface GroupTableProps {
   delta?: Record<string, number>
   qualifyLine?: number
   compact?: boolean
+  statusByTeam?: Record<string, QualificationStatus>
 }
 
 function DeltaArrow({ value }: { value: number }) {
@@ -17,7 +18,17 @@ function DeltaArrow({ value }: { value: number }) {
   return <span className="font-bold text-red-400">▼{Math.abs(value)}</span>
 }
 
-export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact = false }: GroupTableProps) {
+function StatusBadge({ status }: { status?: QualificationStatus }) {
+  if (status === 'advancing') {
+    return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">진출확정</span>
+  }
+  if (status === 'eliminated') {
+    return <span className="rounded bg-gray-500/20 px-1.5 py-0.5 text-[9px] font-bold text-gray-400">탈락확정</span>
+  }
+  return null
+}
+
+export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact = false, statusByTeam }: GroupTableProps) {
   const standings = computeStandings(teamIds, matches)
   const order = rankGroupTeams(teamIds, matches)
 
@@ -44,8 +55,8 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
         <tbody>
           {order.map((teamId, idx) => {
             const s = standings[teamId]
-            const team = TEAMS_BY_ID[teamId]
             const gd = s.goalsFor - s.goalsAgainst
+            const status = statusByTeam?.[teamId]
             return (
               <tr
                 key={teamId}
@@ -53,9 +64,9 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
               >
                 <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                 <td className="py-1.5">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <FlagIcon iso2={team.iso2} className="h-3 w-4 shrink-0" />
-                    <span className="truncate font-medium text-gray-100">{team.nameKo}</span>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <TeamLink teamId={teamId} className="font-medium text-gray-100" />
+                    <StatusBadge status={status} />
                   </div>
                 </td>
                 {!compact && (
