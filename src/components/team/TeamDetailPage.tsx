@@ -12,6 +12,7 @@ import { STAGES } from '../probability/probabilityStages'
 import { getRatings, classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import {
   analyzeLastMatchdayScenarios,
+  analyzeThirdPlaceRoute,
   computeQualificationStatuses,
   type OurResultScenario,
   type ScenarioVerdict,
@@ -246,6 +247,7 @@ export function TeamDetailPage() {
 
   const ratings = getRatings(teamId)
   const status = statusByTeam[teamId]
+  const thirdPlaceRoute = status === 'undecided' ? analyzeThirdPlaceRoute(teamId, groupTeams, groupMatches) : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -369,6 +371,42 @@ export function TeamDetailPage() {
           </div>
         )}
       </GlassCard>
+
+      {thirdPlaceRoute && (
+        <GlassCard className="p-4">
+          <h3 className="mb-3 text-sm font-bold text-amber-300">3위 진출 경우의 수 (조별리그 종료)</h3>
+          <p className="mb-3 text-sm text-gray-300">
+            조 {thirdPlaceRoute.group} 3위로 조별리그를 마쳤습니다 (승점 {thirdPlaceRoute.ourPoints}점, 골득실{' '}
+            {thirdPlaceRoute.ourGoalDiff > 0 ? `+${thirdPlaceRoute.ourGoalDiff}` : thirdPlaceRoute.ourGoalDiff}). 3위
+            진출은 12개 조 3위팀 중 상위 8팀에게만 주어집니다.
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg bg-red-500/10 p-2">
+              <div className="text-lg font-bold text-red-300">{thirdPlaceRoute.aheadFinished}</div>
+              <div className="text-[11px] text-gray-400">이미 확정된 위협 조</div>
+            </div>
+            <div className="rounded-lg bg-amber-500/10 p-2">
+              <div className="text-lg font-bold text-amber-300">{thirdPlaceRoute.pendingGroups}</div>
+              <div className="text-[11px] text-gray-400">아직 진행 중인 조</div>
+            </div>
+            <div className="rounded-lg bg-emerald-500/10 p-2">
+              <div className="text-lg font-bold text-emerald-300">{thirdPlaceRoute.behindFinished}</div>
+              <div className="text-[11px] text-gray-400">이미 확정된 안전 조</div>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-gray-300">
+            진행 중인 <strong className="text-white">{thirdPlaceRoute.pendingGroups}개 조</strong> 중{' '}
+            <strong className="text-emerald-300">{thirdPlaceRoute.maxPendingAllowed}개 조 이하</strong>에서만 우리보다
+            나은 3위팀이 나와야 32강 진출이 확정됩니다. {thirdPlaceRoute.maxPendingAllowed + 1}개 조 이상에서 우리보다
+            나은 3위팀이 나오면 탈락합니다.
+          </p>
+          {thirdPlaceRoute.pendingGroupLetters.length > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              진행 중인 조: {thirdPlaceRoute.pendingGroupLetters.map((g) => `조 ${g}`).join(', ')}
+            </p>
+          )}
+        </GlassCard>
+      )}
 
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-emerald-300">라운드별 진출 확률</h3>

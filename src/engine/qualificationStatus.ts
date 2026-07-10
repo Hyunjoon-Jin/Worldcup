@@ -248,3 +248,74 @@ export function computeExactRankLocks(teamIds: string[], matches: GroupMatch[]):
     })
   })
 }
+
+export interface ThirdPlaceRouteInfo {
+  group: GroupLetter
+  ourPoints: number
+  ourGoalDiff: number
+  ourGoalsFor: number
+  /** 이미 조가 끝났고 우리보다 앞서는 조(확정 위협) 수 */
+  aheadFinished: number
+  /** 이미 조가 끝났고 우리보다 뒤처진 조 수 */
+  behindFinished: number
+  /** 아직 조별리그가 진행 중인 조 수 — 결과에 따라 위협이 될 수도, 안 될 수도 있음 */
+  pendingGroups: number
+  pendingGroupLetters: GroupLetter[]
+  /** 진행 중인 조 중 이 개수 이하에서만 우리보다 나은 3위팀이 나와야 진출 확정(초과하면 탈락) */
+  maxPendingAllowed: number
+}
+
+/**
+ * 자기 조가 끝나 3위로 확정됐지만(진출확정/탈락확정 어느 쪽도 아닌 'undecided' 상태) 32강 진출
+ * 여부가 다른 조 결과에 따라 정확히 어떻게 갈리는지 설명하기 위한 정보를 계산한다. 자기 조가 아직
+ * 안 끝났거나 3위가 아니면(1·2위 또는 4위) null.
+ */
+export function analyzeThirdPlaceRoute(
+  teamId: string,
+  groupTeams: Record<GroupLetter, string[]>,
+  matches: GroupMatch[],
+): ThirdPlaceRouteInfo | null {
+  const myGroup = GROUP_LETTERS.find((g) => groupTeams[g]?.includes(teamId))
+  if (!myGroup) return null
+
+  const myGroupMatches = matches.filter((m) => m.group === myGroup)
+  if (myGroupMatches.length < 6) return null
+
+  const myStandings = computeStandings(groupTeams[myGroup], myGroupMatches)
+  const myOrder = rankGroupTeams(groupTeams[myGroup], myGroupMatches)
+  if (myOrder[2] !== teamId) return null
+
+  const myStanding = myStandings[teamId]
+
+  let aheadFinished = 0
+  let pendingGroups = 0
+  const pendingGroupLetters: GroupLetter[] = []
+
+  for (const group of GROUP_LETTERS) {
+    if (group === myGroup) continue
+    const teamIds = groupTeams[group]
+    if (!teamIds || teamIds.length < 4) continue
+    const groupMatches = matches.filter((m) => m.group === group)
+    if (groupMatches.length < 6) {
+      pendingGroups += 1
+      pendingGroupLetters.push(group)
+      continue
+    }
+    const order = rankGroupTeams(teamIds, groupMatches)
+    const thirdId = order[2]
+    const standings = computeStandings(teamIds, groupMatches)
+    if (thirdPlaceComparator(standings[thirdId], myStanding) < 0) aheadFinished += 1
+  }
+
+  return {
+    group: myGroup,
+    ourPoints: myStanding.points,
+    ourGoalDiff: myStanding.goalsFor - myStanding.goalsAgainst,
+    ourGoalsFor: myStanding.goalsFor,
+    aheadFinished,
+    behindFinished: 11 - aheadFinished - pendingGroups,
+    pendingGroups,
+    pendingGroupLetters,
+    maxPendingAllowed: Math.max(0, THIRD_PLACE_SLOTS - 1 - aheadFinished),
+  }
+}
