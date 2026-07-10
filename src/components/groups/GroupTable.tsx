@@ -33,18 +33,18 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
   const order = rankGroupTeams(teamIds, matches)
 
   return (
-    <div className={compact ? '' : 'overflow-x-auto'}>
-      <table className={`w-full text-left text-xs sm:text-sm ${compact ? '' : 'min-w-[420px]'}`}>
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-xs sm:text-sm">
         <thead>
           <tr className="text-gray-400">
             <th className="w-6 py-1"></th>
             <th className="py-1">국가</th>
             {!compact && (
               <>
-                <th className="w-8 py-1 text-center">경기</th>
-                <th className="w-8 py-1 text-center">승</th>
-                <th className="w-8 py-1 text-center">무</th>
-                <th className="w-8 py-1 text-center">패</th>
+                <th className="hidden w-8 py-1 text-center sm:table-cell">경기</th>
+                <th className="hidden w-8 py-1 text-center sm:table-cell">승</th>
+                <th className="hidden w-8 py-1 text-center sm:table-cell">무</th>
+                <th className="hidden w-8 py-1 text-center sm:table-cell">패</th>
               </>
             )}
             <th className="w-10 py-1 text-center">득실</th>
@@ -71,15 +71,15 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
                 </td>
                 {!compact && (
                   <>
-                    <td className="text-center text-gray-300">{s.played}</td>
-                    <td className="text-center text-gray-300">{s.win}</td>
-                    <td className="text-center text-gray-300">{s.draw}</td>
-                    <td className="text-center text-gray-300">{s.loss}</td>
+                    <td className="hidden text-center text-gray-300 sm:table-cell">{s.played}</td>
+                    <td className="hidden text-center text-gray-300 sm:table-cell">{s.win}</td>
+                    <td className="hidden text-center text-gray-300 sm:table-cell">{s.draw}</td>
+                    <td className="hidden text-center text-gray-300 sm:table-cell">{s.loss}</td>
                   </>
                 )}
                 <td className="text-center text-gray-300">
                   {gd > 0 ? `+${gd}` : gd}
-                  {!compact && ` (${s.goalsFor}-${s.goalsAgainst})`}
+                  {!compact && <span className="hidden sm:inline"> ({s.goalsFor}-{s.goalsAgainst})</span>}
                 </td>
                 <td className="text-center text-base font-bold text-white">{s.points}</td>
                 {delta && (

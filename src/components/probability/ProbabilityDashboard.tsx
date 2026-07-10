@@ -42,7 +42,7 @@ export function ProbabilityDashboard() {
         </div>
       </GlassCard>
 
-      <GlassCard className="p-4">
+      <GlassCard className="hidden p-4 sm:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-xs sm:text-sm">
             <thead>
@@ -78,6 +78,36 @@ export function ProbabilityDashboard() {
           </table>
         </div>
       </GlassCard>
+
+      <div className="flex flex-col gap-2 sm:hidden">
+        <div className="flex items-center gap-1.5 overflow-x-auto px-1 text-[11px] text-gray-400">
+          <span className="shrink-0">정렬:</span>
+          {STAGES.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSortKey(s.key)}
+              className={`shrink-0 rounded-full px-2 py-0.5 ${
+                sortKey === s.key ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 text-gray-400'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {rows.map((row, idx) => (
+          <GlassCard key={row.teamId} className="p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="w-5 shrink-0 text-center text-xs text-gray-500">{idx + 1}</span>
+              <TeamLink teamId={row.teamId} className="font-medium text-gray-100" />
+            </div>
+            <div className="space-y-1">
+              {STAGES.map((s) => (
+                <ProbBar key={s.key} pct={row[s.key]} color={s.color} label={s.label} />
+              ))}
+            </div>
+          </GlassCard>
+        ))}
+      </div>
     </div>
   )
 }
