@@ -39,9 +39,9 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
           <tr className="text-gray-400">
             <th className="w-6 py-1"></th>
             <th className="py-1">국가</th>
+            <th className="w-8 py-1 text-center">경기</th>
             {!compact && (
               <>
-                <th className="hidden w-8 py-1 text-center sm:table-cell">경기</th>
                 <th className="hidden w-8 py-1 text-center sm:table-cell">승</th>
                 <th className="hidden w-8 py-1 text-center sm:table-cell">무</th>
                 <th className="hidden w-8 py-1 text-center sm:table-cell">패</th>
@@ -69,9 +69,9 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
                     <StatusBadge status={status} />
                   </div>
                 </td>
+                <td className="text-center text-gray-300">{s.played}</td>
                 {!compact && (
                   <>
-                    <td className="hidden text-center text-gray-300 sm:table-cell">{s.played}</td>
                     <td className="hidden text-center text-gray-300 sm:table-cell">{s.win}</td>
                     <td className="hidden text-center text-gray-300 sm:table-cell">{s.draw}</td>
                     <td className="hidden text-center text-gray-300 sm:table-cell">{s.loss}</td>
