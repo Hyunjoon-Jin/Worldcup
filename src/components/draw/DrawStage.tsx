@@ -7,12 +7,18 @@ import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { PotTray } from './PotTray'
 import { GroupBoard } from './GroupBoard'
+import { GroupSlotCard } from './GroupSlotCard'
+
+const POT_LABEL: Record<number, string> = { 1: '포트1', 2: '포트2', 3: '포트3', 4: '포트4' }
 
 export function DrawStage({ onComplete }: { onComplete?: () => void }) {
   const { state, log, isComplete, drawOne, undoLast, reset } = useDrawStore()
   const nextSlot = findNextSlot(state)
   const lastEntry = log[log.length - 1]
   const lastTeam = lastEntry ? TEAMS_BY_ID[lastEntry.teamId] : null
+  // 방금 뽑힌 팀이 어느 조에 배정됐는지 바로 확인할 수 있도록, 직전 픽의 결과(lastEntry)를
+  // 우선 보여준다. 아직 한 번도 뽑지 않았다면 다음에 채워질 조를 미리 보여준다.
+  const focusGroup = isComplete ? null : (lastEntry?.group ?? nextSlot?.group ?? null)
 
   return (
     <div className="flex flex-col gap-6">
@@ -62,6 +68,25 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
           </GlassButton>
         </div>
       </GlassCard>
+
+      {focusGroup && (
+        <div className="sm:hidden">
+          <p className="mb-2 text-center text-xs text-gray-400">📍 지금 배정 중인 조</p>
+          <GroupSlotCard letter={focusGroup} teams={state.groups[focusGroup]} highlight />
+          <div className="mt-3 flex justify-center gap-2">
+            {([1, 2, 3, 4] as const).map((pot) => (
+              <span
+                key={pot}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                  nextSlot?.pot === pot ? 'bg-sky-400/20 text-sky-300' : 'bg-white/5 text-gray-400'
+                }`}
+              >
+                {POT_LABEL[pot]} {state.pots[pot].length}팀
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <PotTray pots={state.pots} currentPot={nextSlot?.pot ?? null} />
       <GroupBoard groups={state.groups} highlightGroup={nextSlot?.group ?? null} />
