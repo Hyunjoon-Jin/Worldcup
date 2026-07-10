@@ -5,13 +5,32 @@ import type { KnockoutSlotState } from '../../engine/tournamentSimulation'
 
 interface MatchNodeProps {
   slot: KnockoutSlotState
+  /** 잠정 대진(조별리그 진행 중)일 때만 사용: [team1 확정?, team2 확정?] */
+  confirmed?: [boolean, boolean]
 }
 
-function TeamRow({ teamId, isWinner, goals }: { teamId: string | null; isWinner: boolean; goals?: number }) {
+function TeamRow({
+  teamId,
+  isWinner,
+  goals,
+  confirmed,
+}: {
+  teamId: string | null
+  isWinner: boolean
+  goals?: number
+  confirmed?: boolean
+}) {
   return (
     <div className={`flex items-center justify-between gap-2 px-2 py-1 ${isWinner ? 'font-bold text-white' : 'text-gray-300'}`}>
       {teamId ? (
-        <TeamLink teamId={teamId} />
+        <span className="flex min-w-0 items-center gap-1.5">
+          <TeamLink teamId={teamId} />
+          {confirmed && (
+            <span className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-bold text-emerald-300">
+              확정
+            </span>
+          )}
+        </span>
       ) : (
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="h-3 w-4 shrink-0 rounded-[2px] bg-white/10" />
@@ -23,7 +42,7 @@ function TeamRow({ teamId, isWinner, goals }: { teamId: string | null; isWinner:
   )
 }
 
-export function MatchNode({ slot }: MatchNodeProps) {
+export function MatchNode({ slot, confirmed }: MatchNodeProps) {
   const result = slot.result
   const loserTeamId = result ? (result.winnerTeamId === result.homeTeamId ? result.awayTeamId : result.homeTeamId) : null
   const upset = result && loserTeamId ? isUpset(result.winnerTeamId, loserTeamId) : false
@@ -34,12 +53,14 @@ export function MatchNode({ slot }: MatchNodeProps) {
         teamId={slot.team1Id}
         isWinner={!!result && result.winnerTeamId === slot.team1Id}
         goals={result?.homeGoals}
+        confirmed={confirmed?.[0]}
       />
       <div className="mx-2 h-px bg-white/10" />
       <TeamRow
         teamId={slot.team2Id}
         isWinner={!!result && result.winnerTeamId === slot.team2Id}
         goals={result?.awayGoals}
+        confirmed={confirmed?.[1]}
       />
       {(result?.wentToPenalties || upset) && (
         <div className="flex items-center justify-center gap-1 pb-0.5 text-center text-[9px] text-gray-500">

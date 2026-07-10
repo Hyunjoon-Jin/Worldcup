@@ -130,3 +130,24 @@ export function computeQualificationStatuses(
 
   return statuses
 }
+
+/**
+ * 조별 순위 1~4위 각각이 "더 이상 절대 바뀔 수 없는" 상태인지(정확한 순위 확정 여부) 계산한다.
+ * 32강 대진표에서 특정 슬롯(조 1위/2위)의 실제 진출 팀이 확정되었는지 표시할 때 사용한다.
+ * 반환값은 현재 순위(rankGroupTeams 결과) 순서를 그대로 따르는 boolean 배열이다.
+ */
+export function computeExactRankLocks(teamIds: string[], matches: GroupMatch[]): boolean[] {
+  const standings = computeStandings(teamIds, matches)
+  const order = rankGroupTeams(teamIds, matches)
+  const finished = matches.length >= 6
+  if (finished) return order.map(() => true)
+
+  return order.map((teamId, idx) => {
+    const s = standings[teamId]
+    return order.every((rivalId, rivalIdx) => {
+      if (rivalId === teamId) return true
+      if (rivalIdx > idx) return !isRealThreat(s, standings[rivalId], idx, rivalIdx)
+      return !isRealThreat(standings[rivalId], s, rivalIdx, idx)
+    })
+  })
+}
