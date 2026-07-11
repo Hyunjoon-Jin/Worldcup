@@ -25,6 +25,7 @@ import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
+import { useConditionStore } from '../../store/useConditionStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { GroupLetter } from '../../types/group'
 
@@ -111,6 +112,7 @@ export function TeamDetailPage() {
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
   const crisisByTeam = useCrisisTeams()
+  const conditionOffset = useConditionStore((s) => (teamId ? s.offsets[teamId] : undefined)) ?? 0
 
   const [scenario, setScenario] = useState<TeamScenarioResult | null>(null)
   const [scenarioLoading, setScenarioLoading] = useState(false)
@@ -302,6 +304,17 @@ export function TeamDetailPage() {
               {group && ` · 조 ${group}`}
               {team.isHost && ' · 개최국'}
             </p>
+            {Math.abs(conditionOffset) >= 3 && (
+              <p className={`mt-0.5 text-xs font-bold ${conditionOffset > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                {conditionOffset >= 5
+                  ? '🔥 이번 대회 컨디션 매우 좋음'
+                  : conditionOffset > 0
+                    ? '📈 이번 대회 컨디션 좋음'
+                    : conditionOffset <= -5
+                      ? '🥶 이번 대회 컨디션 매우 저조'
+                      : '📉 이번 대회 컨디션 저조'}
+              </p>
+            )}
           </div>
           {status === 'advancing' && (
             <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
