@@ -259,13 +259,76 @@ export interface OurResultScenario {
   uniformNote?: string
 }
 
+export type H2HResult = 'win' | 'draw' | 'loss'
+
+const H2H_LABEL: Record<H2HResult, string> = { win: '승리', draw: '무승부', loss: '패배' }
+
+/** 이미 치른 경기 기록에서 teamId 관점의 상호전적 결과를 찾는다(없으면 아직 안 붙은 경기). */
+function h2hOutcome(teamId: string, rivalId: string, ownMatches: GroupMatch[]): H2HResult | null {
+  const match = ownMatches.find(
+    (m) => (m.homeTeamId === teamId && m.awayTeamId === rivalId) || (m.homeTeamId === rivalId && m.awayTeamId === teamId),
+  )
+  if (!match) return null
+  const isHome = match.homeTeamId === teamId
+  const gf = isHome ? match.homeGoals : match.awayGoals
+  const ga = isHome ? match.awayGoals : match.homeGoals
+  return gf > ga ? 'win' : gf < ga ? 'loss' : 'draw'
+}
+
+/**
+ * 3위 도달 가능(bestPos <= 3) 구간의 와일드카드 판정을 다른 11개 조의 현재 실제 상황 기준으로
+ * 내린다. prefix가 있으면(타이브레이커가 이미 상호전적으로 풀려 3위가 확정된 경우) 그 설명을
+ * note 앞에 붙인다.
+ */
+function evaluateThirdPlaceRoute(
+  ourPts: number,
+  baseStanding: GroupStanding,
+  evaluateWildcard: (ourStanding: GroupStanding) => 'advancing' | 'eliminated' | 'undecided',
+  ownRankCertain: boolean,
+  prefix?: string,
+): { verdict: ScenarioVerdict; note?: string } {
+  const ourHypotheticalStanding: GroupStanding = { ...baseStanding, points: ourPts, played: 3 }
+  const wildcard = evaluateWildcard(ourHypotheticalStanding)
+  const p = prefix ? `${prefix} ` : ''
+
+  if (wildcard === 'eliminated') {
+    return {
+      verdict: 'eliminated',
+      note:
+        p +
+        (ownRankCertain
+          ? '조 3위가 확정되지만, 다른 조 3위팀들의 현재 성적이 이미 앞서 있어 32강 진출 경로가 없습니다.'
+          : '3위가 되어도 다른 조 3위팀들의 현재 성적에 밀려 32강 진출 경로가 없습니다.'),
+    }
+  }
+  if (ownRankCertain && wildcard === 'advancing') {
+    return {
+      verdict: 'advance',
+      note: p + '조 3위가 확정되고, 다른 조들의 현재 상황을 기준으로도 3위 진출 8자리 안에 듭니다.',
+    }
+  }
+  return {
+    verdict: 'thirdPending',
+    note:
+      p +
+      (ownRankCertain
+        ? '조 3위가 확정되지만, 아직 결과가 나오지 않은 다른 조들에 따라 32강 진출 여부가 갈립니다.'
+        : '3위 또는 4위가 될 수 있어, 자기 조 순위와 다른 조 결과에 따라 32강 진출 여부가 함께 갈립니다.'),
+  }
+}
+
 /**
  * 승점만으로 확정 가능한 최선/최악 순위 구간을 구하고, 1·2위 직행이 안 되는 경우에는 3위
  * 와일드카드 경로까지 "다른 11개 조의 현재 실제 상황"을 기준으로 실제 판정한다(단순히
  * "3위면 가능성이 있다"는 식으로 얼버무리지 않는다).
  *
  * - worstPos <= 2: 최악의 경우에도 1·2위 확정 → 'advance'
- * - bestPos <= 2 (그러나 worstPos > 2): 승점이 같아 2위/3위 경계가 타이브레이커에 달림 → 'tiebreak'
+ * - bestPos <= 2 (그러나 worstPos > 2): 승점이 같아 2위/3위 경계가 타이브레이커에 달림. 동률
+ *   상대가 정확히 1팀이면 이미 치른(또는 이번에 가정한) 맞대결 결과가 공식 규정상 최우선
+ *   기준이므로, 그 결과가 승/패로 갈렸다면 타이브레이커가 이미 풀린 것으로 보고 곧바로
+ *   'advance'(맞대결 승) 또는 3위 진출 경로 판정('advance'|'eliminated'|'thirdPending', 맞대결
+ *   패)으로 확정한다. 맞대결이 무승부였거나 동률 상대가 2팀 이상(3파전)이면 골득실 등 추가
+ *   기준이 필요해 'tiebreak'로 남기되, 어떤 팀과 왜 갈리는지 구체적으로 설명한다.
  * - bestPos > 3: 최선의 경우에도 4위 확정 → 3위 진출 경로 자체가 없음 → 'eliminated'
  * - 그 외(3위 도달 가능): evaluateWildcard로 실제 다른 조 상황 대비 3위 진출 가능성을 판정해
  *   'advance'(3위 확정 + 와일드카드 확정 진출) / 'eliminated'(3위가 되어도 다른 조에 밀림) /
@@ -279,50 +342,67 @@ function classifyScenario(
   groupTeamIds: string[],
   baseStanding: GroupStanding,
   evaluateWildcard: (ourStanding: GroupStanding) => 'advancing' | 'eliminated' | 'undecided',
+  h2hByRival: Record<string, H2HResult | null>,
 ): { verdict: ScenarioVerdict; note?: string } {
   const ourPts = finalPoints[teamId]
-  const others = groupTeamIds.filter((id) => id !== teamId).map((id) => finalPoints[id])
+  const rivals = groupTeamIds.filter((id) => id !== teamId)
+  const others = rivals.map((id) => finalPoints[id])
   const strictlyAbove = others.filter((p) => p > ourPts).length
   const equalCount = others.filter((p) => p === ourPts).length
   const bestPos = strictlyAbove + 1
   const worstPos = strictlyAbove + equalCount + 1
 
   if (worstPos <= 2) return { verdict: 'advance' }
+
   if (bestPos <= 2) {
+    const tiedRivals = rivals.filter((id) => finalPoints[id] === ourPts)
+
+    if (tiedRivals.length === 1) {
+      const rivalId = tiedRivals[0]
+      const rivalName = TEAMS_BY_ID[rivalId].nameKo
+      const h2h = h2hByRival[rivalId]
+
+      if (h2h === 'win') {
+        return {
+          verdict: 'advance',
+          note: `${rivalName}와(과) 승점이 같지만, 맞대결에서 승리해 상호전적 기준으로 앞서 2위가 확정됩니다.`,
+        }
+      }
+      if (h2h === 'loss') {
+        return evaluateThirdPlaceRoute(
+          ourPts,
+          baseStanding,
+          evaluateWildcard,
+          true,
+          `${rivalName}와(과) 승점이 같지만, 맞대결에서 패해 상호전적 기준으로 밀려 3위로 내려갑니다.`,
+        )
+      }
+      return {
+        verdict: 'tiebreak',
+        note: `${rivalName}와(과) 승점이 같고 맞대결도 무승부라 상호전적으로 갈리지 않습니다 — 조 전체 골득실 → 다득점 → 페어플레이 → FIFA 랭킹 순으로 2·3위가 결정됩니다.`,
+      }
+    }
+
+    const names = tiedRivals
+      .map((id) => {
+        const h2h = h2hByRival[id]
+        const label = h2h ? `맞대결 ${H2H_LABEL[h2h]}` : '맞대결 기록 없음'
+        return `${TEAMS_BY_ID[id].nameKo}(${label})`
+      })
+      .join(', ')
     return {
       verdict: 'tiebreak',
-      note: '승점이 같아 상호전적 → 골득실 → 다득점 등 타이브레이커로 2·3위 순위가 결정됩니다.',
+      note: `${names}와(과) 세 팀이 승점 동률 — 세 팀 간 미니리그(상호전적 승점 → 골득실 → 다득점)로 먼저 비교하고, 그래도 갈리지 않으면 조 전체 골득실 → 다득점 → 페어플레이 → FIFA 랭킹 순으로 2·3위가 결정됩니다.`,
     }
   }
+
   if (bestPos > 3) {
     return { verdict: 'eliminated', note: '조 4위가 확정되어 32강 진출 경로가 없습니다.' }
   }
 
   // 3위 도달 가능(bestPos <= 3) — 다른 11개 조의 실제 현재 상황을 기준으로 와일드카드 경로를 판정한다.
-  const ourHypotheticalStanding: GroupStanding = { ...baseStanding, points: ourPts, played: 3 }
-  const wildcard = evaluateWildcard(ourHypotheticalStanding)
   const ownRankCertain = worstPos <= 3 // 자기 조 3위 자체는 확정(4위로 밀릴 동률 상대가 없음)
-
-  if (wildcard === 'eliminated') {
-    return {
-      verdict: 'eliminated',
-      note: ownRankCertain
-        ? '조 3위가 확정되지만, 다른 조 3위팀들의 현재 성적이 이미 앞서 있어 32강 진출 경로가 없습니다.'
-        : '3위가 되어도 다른 조 3위팀들의 현재 성적에 밀려 32강 진출 경로가 없습니다.',
-    }
-  }
-  if (ownRankCertain && wildcard === 'advancing') {
-    return {
-      verdict: 'advance',
-      note: '조 3위가 확정되고, 다른 조들의 현재 상황을 기준으로도 3위 진출 8자리 안에 듭니다.',
-    }
-  }
-  return {
-    verdict: 'thirdPending',
-    note: ownRankCertain
-      ? '조 3위가 확정되지만, 아직 결과가 나오지 않은 다른 조들에 따라 32강 진출 여부가 갈립니다.'
-      : '3위 또는 4위가 될 수 있어, 자기 조 순위와 다른 조 결과에 따라 32강 진출 여부가 함께 갈립니다.',
-  }
+  return evaluateThirdPlaceRoute(ourPts, baseStanding, evaluateWildcard, ownRankCertain)
 }
 
 /**
@@ -385,10 +465,20 @@ export function analyzeLastMatchdayScenarios(
   ]
 
   const baseStanding = standings[teamId]
+  // 라운드로빈 구조상 마지막 라운드가 "나 vs 상대"·"A vs B"로 나뉘므로, A·B와는 이미 앞선
+  // 라운드에서 맞대결을 마쳤다 — 그 실제 결과를 그대로 상호전적 판단에 쓴다.
+  const h2hVsA = h2hOutcome(teamId, otherTeamAId, ownMatches)
+  const h2hVsB = h2hOutcome(teamId, otherTeamBId, ownMatches)
 
   return OUR_RESULTS.map((r) => {
     const ourFinalPoints = basePoints[teamId] + r.our
     const opponentFinalPoints = basePoints[opponentId] + r.opp
+    // 상대(opponentId)와의 맞대결은 지금 가정하는 이번 결과 자체다.
+    const h2hByRival: Record<string, H2HResult | null> = {
+      [opponentId]: r.key,
+      [otherTeamAId]: h2hVsA,
+      [otherTeamBId]: h2hVsB,
+    }
 
     const outcomes: OtherMatchOutcome[] = OTHER_RESULTS.map((o) => {
       const finalPoints: Record<string, number> = {
@@ -397,7 +487,7 @@ export function analyzeLastMatchdayScenarios(
         [otherTeamAId]: basePoints[otherTeamAId] + o.a,
         [otherTeamBId]: basePoints[otherTeamBId] + o.b,
       }
-      const { verdict, note } = classifyScenario(finalPoints, teamId, groupTeamIds, baseStanding, evaluateWildcard)
+      const { verdict, note } = classifyScenario(finalPoints, teamId, groupTeamIds, baseStanding, evaluateWildcard, h2hByRival)
       return { key: o.key, label: o.label, verdict, note }
     })
 
