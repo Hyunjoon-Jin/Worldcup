@@ -59,6 +59,58 @@ function thirdPointsFloor(teamIds: string[], standings: Record<string, GroupStan
   return pts[2] ?? 0
 }
 
+/**
+ * 잔여 R경기에서 승점 N점 이상을 채우는 데 필요한 최소 승수를 구한다(나머지는 무승부로 채운다고
+ * 가정한 하한선). 무승부만으로 채워지면(N <= R) 0승으로 충분하다.
+ */
+function minWinsToReach(neededPoints: number, remainingGames: number): number {
+  if (neededPoints <= 0) return 0
+  if (neededPoints <= remainingGames) return 0
+  return Math.min(remainingGames, Math.ceil((neededPoints - remainingGames) / 2))
+}
+
+function buildResultHint(neededPoints: number, remainingGames: number, currentPoints: number): string {
+  if (neededPoints <= 0) return `이미 승점 ${currentPoints}점을 확보해 추가 조건 없이 위협입니다.`
+  const wins = minWinsToReach(neededPoints, remainingGames)
+  if (wins === 0) return `잔여 ${remainingGames}경기에서 승점 ${neededPoints}점 이상 필요 — 무승부만 거둬도 충분합니다.`
+  if (wins >= remainingGames) return `잔여 ${remainingGames}경기 전부 승리해야 승점 ${neededPoints}점 이상을 채울 수 있습니다.`
+  return `잔여 ${remainingGames}경기에서 승점 ${neededPoints}점 이상 필요 — 최소 ${wins}승(나머지는 무승부)이면 충분합니다.`
+}
+
+/**
+ * 'pending' 판정인 조에서, 아직 우리를 앞지를 수학적 가능성이 남은 후보팀들과 각자 필요한
+ * 조건을 계산한다. 그 조의 최종 3위 승점이 우리보다 높아지려면 "4팀 중 최소 3팀의 최종 승점이
+ * 우리보다 높아야" 한다(3번째로 높은 값이 우리를 넘는다는 것은 곧 상위 3개 값이 모두 우리보다
+ * 높다는 것과 동치). 이미 확정적으로 우리보다 뒤처지는 팀(guaranteed behind)은 그 3자리 중
+ * 하나도 채울 수 없으므로, 나머지 후보팀들이 그 3자리를 전부 채워야 한다 — 즉 필요 인원수는
+ * 후보 수와 무관하게 항상 3명이다(단, 후보가 3명보다 적을 수는 없다 — 있다면 애초에 'pending'이
+ * 아니라 'behind'로 판정됐을 것이다).
+ */
+function buildContenders(
+  teamIds: string[],
+  standings: Record<string, GroupStanding>,
+  ourPoints: number,
+): { contenders: ThirdPlaceContender[]; contendersNeeded: number } {
+  const contenders = teamIds
+    .filter((id) => maxPossiblePoints(standings[id]) >= ourPoints)
+    .map((id) => {
+      const s = standings[id]
+      const remainingGames = MATCHES_PER_TEAM - s.played
+      const neededPoints = Math.max(0, ourPoints + 1 - s.points)
+      return {
+        teamId: id,
+        currentPoints: s.points,
+        remainingGames,
+        neededPoints,
+        alreadyAhead: neededPoints <= 0,
+        resultHint: buildResultHint(neededPoints, remainingGames, s.points),
+      }
+    })
+    .sort((a, b) => a.neededPoints - b.neededPoints)
+
+  return { contenders, contendersNeeded: Math.min(3, contenders.length) }
+}
+
 export type GroupThreatVerdict = 'ahead' | 'behind' | 'pending'
 
 function classifyGroupThreat(
@@ -361,6 +413,17 @@ export function computeExactRankLocks(teamIds: string[], matches: GroupMatch[]):
   })
 }
 
+export interface ThirdPlaceContender {
+  teamId: string
+  currentPoints: number
+  remainingGames: number
+  /** 우리 승점을 넘어서기 위해 남은 경기에서 추가로 필요한 승점(이미 넘었으면 0) */
+  neededPoints: number
+  alreadyAhead: boolean
+  /** 어떤 결과 조합이면 조건을 충족하는지 사람이 읽기 쉬운 한 줄 설명 */
+  resultHint: string
+}
+
 export interface ThirdPlaceGroupDetail {
   group: GroupLetter
   verdict: GroupThreatVerdict
@@ -372,6 +435,10 @@ export interface ThirdPlaceGroupDetail {
   finished: boolean
   /** 미정 판정일 때, 왜 아직 확정할 수 없는지 보충 설명 */
   note?: string
+  /** 'pending' 조에서 아직 우리를 앞지를 가능성이 남은 후보팀들(안전 확정팀 제외) */
+  contenders?: ThirdPlaceContender[]
+  /** contenders 중 최소 몇 팀이 조건을 충족해야 이 조가 실제 위협이 되는지 */
+  contendersNeeded?: number
 }
 
 export interface ThirdPlaceRouteInfo {
@@ -450,7 +517,10 @@ export function analyzeThirdPlaceRoute(
         ? `이미 승점 ${candidate.points}점을 확보해 남은 경기 결과와 무관하게 우리보다 앞섭니다.`
         : verdict === 'behind'
           ? '남은 경기를 모두 이겨도 우리보다 승점이 낮을 팀들이라 안전합니다.'
-          : `현재 3위 후보 승점 ${candidate.points}점 — 남은 경기 결과에 따라 우리를 앞지를 수도 있습니다.`
+          : `이 조에서 몇 팀이 어떤 결과를 거두는지에 따라 우리를 앞지를 수도 있습니다 — 아래 조건을 확인하세요.`
+
+    const { contenders, contendersNeeded } =
+      verdict === 'pending' ? buildContenders(teamIds, standings, myStanding.points) : { contenders: [], contendersNeeded: 0 }
 
     groupDetails.push({
       group,
@@ -461,6 +531,8 @@ export function analyzeThirdPlaceRoute(
       goalsFor: candidate.goalsFor,
       finished,
       note,
+      contenders: verdict === 'pending' ? contenders : undefined,
+      contendersNeeded: verdict === 'pending' ? contendersNeeded : undefined,
     })
   }
 

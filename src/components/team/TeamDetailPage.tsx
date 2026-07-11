@@ -465,6 +465,30 @@ export function TeamDetailPage() {
                   <GroupThreatBadge verdict={d.verdict} />
                 </div>
                 {d.note && <p className="mt-1 text-[10px] text-gray-500">{d.note}</p>}
+                {d.verdict === 'pending' && d.contenders && d.contenders.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
+                    <p className="text-[10px] font-bold text-gray-400">
+                      아래 {d.contenders.length}팀 중{' '}
+                      <strong className="text-amber-300">
+                        {d.contendersNeeded === d.contenders.length ? '전부' : `${d.contendersNeeded}팀 이상`}
+                      </strong>
+                      이 조건을 충족하면 이 조가 위협이 됩니다
+                    </p>
+                    {d.contenders.map((c) => (
+                      <div key={c.teamId} className="flex flex-col gap-0.5 rounded bg-white/5 px-2 py-1">
+                        <div className="flex items-center gap-1.5">
+                          <TeamLink teamId={c.teamId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
+                          <span className="shrink-0 text-[10px] text-gray-500">
+                            현재 {c.currentPoints}점 · 잔여 {c.remainingGames}경기
+                          </span>
+                        </div>
+                        <p className={`text-[10px] ${c.alreadyAhead ? 'text-red-300' : 'text-gray-400'}`}>
+                          {c.resultHint}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
