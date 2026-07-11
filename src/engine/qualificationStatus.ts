@@ -59,56 +59,61 @@ function thirdPointsFloor(teamIds: string[], standings: Record<string, GroupStan
   return pts[2] ?? 0
 }
 
-/**
- * 잔여 R경기에서 승점 N점 이상을 채우는 데 필요한 최소 승수를 구한다(나머지는 무승부로 채운다고
- * 가정한 하한선). 무승부만으로 채워지면(N <= R) 0승으로 충분하다.
- */
-function minWinsToReach(neededPoints: number, remainingGames: number): number {
-  if (neededPoints <= 0) return 0
-  if (neededPoints <= remainingGames) return 0
-  return Math.min(remainingGames, Math.ceil((neededPoints - remainingGames) / 2))
+/** 그 조의 4팀 중 아직 서로 붙지 않은(라운드로빈 기준 미대결) 팀 쌍 목록을 구한다. */
+function remainingMatchupsForGroup(
+  teamIds: string[],
+  groupMatches: GroupMatch[],
+): { teamAId: string; teamBId: string }[] {
+  const playedPairs = new Set(groupMatches.map((m) => [m.homeTeamId, m.awayTeamId].sort().join('|')))
+  const pairs: { teamAId: string; teamBId: string }[] = []
+  for (let i = 0; i < teamIds.length; i++) {
+    for (let j = i + 1; j < teamIds.length; j++) {
+      const key = [teamIds[i], teamIds[j]].sort().join('|')
+      if (!playedPairs.has(key)) pairs.push({ teamAId: teamIds[i], teamBId: teamIds[j] })
+    }
+  }
+  return pairs
 }
 
-function buildResultHint(neededPoints: number, remainingGames: number, currentPoints: number): string {
-  if (neededPoints <= 0) return `이미 승점 ${currentPoints}점을 확보해 추가 조건 없이 위협입니다.`
-  const wins = minWinsToReach(neededPoints, remainingGames)
-  if (wins === 0) return `잔여 ${remainingGames}경기에서 승점 ${neededPoints}점 이상 필요 — 무승부만 거둬도 충분합니다.`
-  if (wins >= remainingGames) return `잔여 ${remainingGames}경기 전부 승리해야 승점 ${neededPoints}점 이상을 채울 수 있습니다.`
-  return `잔여 ${remainingGames}경기에서 승점 ${neededPoints}점 이상 필요 — 최소 ${wins}승(나머지는 무승부)이면 충분합니다.`
+export type RemainingMatchVerdict = 'ahead' | 'behind' | 'tied'
+
+export interface RemainingMatchOutcome {
+  key: 'aWin' | 'draw' | 'bWin'
+  label: string
+  verdict: RemainingMatchVerdict
 }
 
 /**
- * 'pending' 판정인 조에서, 아직 우리를 앞지를 수학적 가능성이 남은 후보팀들과 각자 필요한
- * 조건을 계산한다. 그 조의 최종 3위 승점이 우리보다 높아지려면 "4팀 중 최소 3팀의 최종 승점이
- * 우리보다 높아야" 한다(3번째로 높은 값이 우리를 넘는다는 것은 곧 상위 3개 값이 모두 우리보다
- * 높다는 것과 동치). 이미 확정적으로 우리보다 뒤처지는 팀(guaranteed behind)은 그 3자리 중
- * 하나도 채울 수 없으므로, 나머지 후보팀들이 그 3자리를 전부 채워야 한다 — 즉 필요 인원수는
- * 후보 수와 무관하게 항상 3명이다(단, 후보가 3명보다 적을 수는 없다 — 있다면 애초에 'pending'이
- * 아니라 'behind'로 판정됐을 것이다).
+ * 그 조에 남은 경기가 정확히 1경기뿐일 때만 쓸 수 있다 — 이 경우 그 경기를 뺀 나머지 5경기는
+ * 이미 다 끝났으므로(그 경기의 두 팀을 제외한 나머지 2팀은 이미 3경기를 모두 마쳤다), 이
+ * 경기 결과(승/무/패) 3가지 각각에 대해 "최종 3위 승점"이 정확히(승점만으로) 결정된다.
+ * 골득실은 이 마지막 경기의 정확한 스코어를 모르므로 쓰지 않는다 — 승점만으로 우리보다
+ * 확실히 높은지/낮은지 갈리면 'ahead'/'behind', 승점까지 같아지면 골득실 등 추가 기준이
+ * 필요해 'tied'(그 경기 스코어에 달림)로 남긴다.
  */
-function buildContenders(
+function classifyOneRemainingMatch(
   teamIds: string[],
   standings: Record<string, GroupStanding>,
+  matchup: { teamAId: string; teamBId: string },
   ourPoints: number,
-): { contenders: ThirdPlaceContender[]; contendersNeeded: number } {
-  const contenders = teamIds
-    .filter((id) => maxPossiblePoints(standings[id]) >= ourPoints)
-    .map((id) => {
-      const s = standings[id]
-      const remainingGames = MATCHES_PER_TEAM - s.played
-      const neededPoints = Math.max(0, ourPoints + 1 - s.points)
-      return {
-        teamId: id,
-        currentPoints: s.points,
-        remainingGames,
-        neededPoints,
-        alreadyAhead: neededPoints <= 0,
-        resultHint: buildResultHint(neededPoints, remainingGames, s.points),
-      }
-    })
-    .sort((a, b) => a.neededPoints - b.neededPoints)
-
-  return { contenders, contendersNeeded: Math.min(3, contenders.length) }
+): RemainingMatchOutcome[] {
+  const RESULTS: { key: 'aWin' | 'draw' | 'bWin'; label: string; aPts: number; bPts: number }[] = [
+    { key: 'aWin', label: `${TEAMS_BY_ID[matchup.teamAId].nameKo} 승`, aPts: 3, bPts: 0 },
+    { key: 'draw', label: '무승부', aPts: 1, bPts: 1 },
+    { key: 'bWin', label: `${TEAMS_BY_ID[matchup.teamBId].nameKo} 승`, aPts: 0, bPts: 3 },
+  ]
+  return RESULTS.map((r) => {
+    const finalPoints = teamIds
+      .map((id) => {
+        if (id === matchup.teamAId) return standings[id].points + r.aPts
+        if (id === matchup.teamBId) return standings[id].points + r.bPts
+        return standings[id].points
+      })
+      .sort((a, b) => b - a)
+    const thirdHighest = finalPoints[2]
+    const verdict: RemainingMatchVerdict = thirdHighest > ourPoints ? 'ahead' : thirdHighest < ourPoints ? 'behind' : 'tied'
+    return { key: r.key, label: r.label, verdict }
+  })
 }
 
 export type GroupThreatVerdict = 'ahead' | 'behind' | 'pending'
@@ -259,13 +264,76 @@ export interface OurResultScenario {
   uniformNote?: string
 }
 
+export type H2HResult = 'win' | 'draw' | 'loss'
+
+const H2H_LABEL: Record<H2HResult, string> = { win: '승리', draw: '무승부', loss: '패배' }
+
+/** 이미 치른 경기 기록에서 teamId 관점의 상호전적 결과를 찾는다(없으면 아직 안 붙은 경기). */
+function h2hOutcome(teamId: string, rivalId: string, ownMatches: GroupMatch[]): H2HResult | null {
+  const match = ownMatches.find(
+    (m) => (m.homeTeamId === teamId && m.awayTeamId === rivalId) || (m.homeTeamId === rivalId && m.awayTeamId === teamId),
+  )
+  if (!match) return null
+  const isHome = match.homeTeamId === teamId
+  const gf = isHome ? match.homeGoals : match.awayGoals
+  const ga = isHome ? match.awayGoals : match.homeGoals
+  return gf > ga ? 'win' : gf < ga ? 'loss' : 'draw'
+}
+
+/**
+ * 3위 도달 가능(bestPos <= 3) 구간의 와일드카드 판정을 다른 11개 조의 현재 실제 상황 기준으로
+ * 내린다. prefix가 있으면(타이브레이커가 이미 상호전적으로 풀려 3위가 확정된 경우) 그 설명을
+ * note 앞에 붙인다.
+ */
+function evaluateThirdPlaceRoute(
+  ourPts: number,
+  baseStanding: GroupStanding,
+  evaluateWildcard: (ourStanding: GroupStanding) => 'advancing' | 'eliminated' | 'undecided',
+  ownRankCertain: boolean,
+  prefix?: string,
+): { verdict: ScenarioVerdict; note?: string } {
+  const ourHypotheticalStanding: GroupStanding = { ...baseStanding, points: ourPts, played: 3 }
+  const wildcard = evaluateWildcard(ourHypotheticalStanding)
+  const p = prefix ? `${prefix} ` : ''
+
+  if (wildcard === 'eliminated') {
+    return {
+      verdict: 'eliminated',
+      note:
+        p +
+        (ownRankCertain
+          ? '조 3위가 확정되지만, 다른 조 3위팀들의 현재 성적이 이미 앞서 있어 32강 진출 경로가 없습니다.'
+          : '3위가 되어도 다른 조 3위팀들의 현재 성적에 밀려 32강 진출 경로가 없습니다.'),
+    }
+  }
+  if (ownRankCertain && wildcard === 'advancing') {
+    return {
+      verdict: 'advance',
+      note: p + '조 3위가 확정되고, 다른 조들의 현재 상황을 기준으로도 3위 진출 8자리 안에 듭니다.',
+    }
+  }
+  return {
+    verdict: 'thirdPending',
+    note:
+      p +
+      (ownRankCertain
+        ? '조 3위가 확정되지만, 아직 결과가 나오지 않은 다른 조들에 따라 32강 진출 여부가 갈립니다.'
+        : '3위 또는 4위가 될 수 있어, 자기 조 순위와 다른 조 결과에 따라 32강 진출 여부가 함께 갈립니다.'),
+  }
+}
+
 /**
  * 승점만으로 확정 가능한 최선/최악 순위 구간을 구하고, 1·2위 직행이 안 되는 경우에는 3위
  * 와일드카드 경로까지 "다른 11개 조의 현재 실제 상황"을 기준으로 실제 판정한다(단순히
  * "3위면 가능성이 있다"는 식으로 얼버무리지 않는다).
  *
  * - worstPos <= 2: 최악의 경우에도 1·2위 확정 → 'advance'
- * - bestPos <= 2 (그러나 worstPos > 2): 승점이 같아 2위/3위 경계가 타이브레이커에 달림 → 'tiebreak'
+ * - bestPos <= 2 (그러나 worstPos > 2): 승점이 같아 2위/3위 경계가 타이브레이커에 달림. 동률
+ *   상대가 정확히 1팀이면 이미 치른(또는 이번에 가정한) 맞대결 결과가 공식 규정상 최우선
+ *   기준이므로, 그 결과가 승/패로 갈렸다면 타이브레이커가 이미 풀린 것으로 보고 곧바로
+ *   'advance'(맞대결 승) 또는 3위 진출 경로 판정('advance'|'eliminated'|'thirdPending', 맞대결
+ *   패)으로 확정한다. 맞대결이 무승부였거나 동률 상대가 2팀 이상(3파전)이면 골득실 등 추가
+ *   기준이 필요해 'tiebreak'로 남기되, 어떤 팀과 왜 갈리는지 구체적으로 설명한다.
  * - bestPos > 3: 최선의 경우에도 4위 확정 → 3위 진출 경로 자체가 없음 → 'eliminated'
  * - 그 외(3위 도달 가능): evaluateWildcard로 실제 다른 조 상황 대비 3위 진출 가능성을 판정해
  *   'advance'(3위 확정 + 와일드카드 확정 진출) / 'eliminated'(3위가 되어도 다른 조에 밀림) /
@@ -279,50 +347,67 @@ function classifyScenario(
   groupTeamIds: string[],
   baseStanding: GroupStanding,
   evaluateWildcard: (ourStanding: GroupStanding) => 'advancing' | 'eliminated' | 'undecided',
+  h2hByRival: Record<string, H2HResult | null>,
 ): { verdict: ScenarioVerdict; note?: string } {
   const ourPts = finalPoints[teamId]
-  const others = groupTeamIds.filter((id) => id !== teamId).map((id) => finalPoints[id])
+  const rivals = groupTeamIds.filter((id) => id !== teamId)
+  const others = rivals.map((id) => finalPoints[id])
   const strictlyAbove = others.filter((p) => p > ourPts).length
   const equalCount = others.filter((p) => p === ourPts).length
   const bestPos = strictlyAbove + 1
   const worstPos = strictlyAbove + equalCount + 1
 
   if (worstPos <= 2) return { verdict: 'advance' }
+
   if (bestPos <= 2) {
+    const tiedRivals = rivals.filter((id) => finalPoints[id] === ourPts)
+
+    if (tiedRivals.length === 1) {
+      const rivalId = tiedRivals[0]
+      const rivalName = TEAMS_BY_ID[rivalId].nameKo
+      const h2h = h2hByRival[rivalId]
+
+      if (h2h === 'win') {
+        return {
+          verdict: 'advance',
+          note: `${rivalName}와(과) 승점이 같지만, 맞대결에서 승리해 상호전적 기준으로 앞서 2위가 확정됩니다.`,
+        }
+      }
+      if (h2h === 'loss') {
+        return evaluateThirdPlaceRoute(
+          ourPts,
+          baseStanding,
+          evaluateWildcard,
+          true,
+          `${rivalName}와(과) 승점이 같지만, 맞대결에서 패해 상호전적 기준으로 밀려 3위로 내려갑니다.`,
+        )
+      }
+      return {
+        verdict: 'tiebreak',
+        note: `${rivalName}와(과) 승점이 같고 맞대결도 무승부라 상호전적으로 갈리지 않습니다 — 조 전체 골득실 → 다득점 → 페어플레이 → FIFA 랭킹 순으로 2·3위가 결정됩니다.`,
+      }
+    }
+
+    const names = tiedRivals
+      .map((id) => {
+        const h2h = h2hByRival[id]
+        const label = h2h ? `맞대결 ${H2H_LABEL[h2h]}` : '맞대결 기록 없음'
+        return `${TEAMS_BY_ID[id].nameKo}(${label})`
+      })
+      .join(', ')
     return {
       verdict: 'tiebreak',
-      note: '승점이 같아 상호전적 → 골득실 → 다득점 등 타이브레이커로 2·3위 순위가 결정됩니다.',
+      note: `${names}와(과) 세 팀이 승점 동률 — 세 팀 간 미니리그(상호전적 승점 → 골득실 → 다득점)로 먼저 비교하고, 그래도 갈리지 않으면 조 전체 골득실 → 다득점 → 페어플레이 → FIFA 랭킹 순으로 2·3위가 결정됩니다.`,
     }
   }
+
   if (bestPos > 3) {
     return { verdict: 'eliminated', note: '조 4위가 확정되어 32강 진출 경로가 없습니다.' }
   }
 
   // 3위 도달 가능(bestPos <= 3) — 다른 11개 조의 실제 현재 상황을 기준으로 와일드카드 경로를 판정한다.
-  const ourHypotheticalStanding: GroupStanding = { ...baseStanding, points: ourPts, played: 3 }
-  const wildcard = evaluateWildcard(ourHypotheticalStanding)
   const ownRankCertain = worstPos <= 3 // 자기 조 3위 자체는 확정(4위로 밀릴 동률 상대가 없음)
-
-  if (wildcard === 'eliminated') {
-    return {
-      verdict: 'eliminated',
-      note: ownRankCertain
-        ? '조 3위가 확정되지만, 다른 조 3위팀들의 현재 성적이 이미 앞서 있어 32강 진출 경로가 없습니다.'
-        : '3위가 되어도 다른 조 3위팀들의 현재 성적에 밀려 32강 진출 경로가 없습니다.',
-    }
-  }
-  if (ownRankCertain && wildcard === 'advancing') {
-    return {
-      verdict: 'advance',
-      note: '조 3위가 확정되고, 다른 조들의 현재 상황을 기준으로도 3위 진출 8자리 안에 듭니다.',
-    }
-  }
-  return {
-    verdict: 'thirdPending',
-    note: ownRankCertain
-      ? '조 3위가 확정되지만, 아직 결과가 나오지 않은 다른 조들에 따라 32강 진출 여부가 갈립니다.'
-      : '3위 또는 4위가 될 수 있어, 자기 조 순위와 다른 조 결과에 따라 32강 진출 여부가 함께 갈립니다.',
-  }
+  return evaluateThirdPlaceRoute(ourPts, baseStanding, evaluateWildcard, ownRankCertain)
 }
 
 /**
@@ -385,10 +470,20 @@ export function analyzeLastMatchdayScenarios(
   ]
 
   const baseStanding = standings[teamId]
+  // 라운드로빈 구조상 마지막 라운드가 "나 vs 상대"·"A vs B"로 나뉘므로, A·B와는 이미 앞선
+  // 라운드에서 맞대결을 마쳤다 — 그 실제 결과를 그대로 상호전적 판단에 쓴다.
+  const h2hVsA = h2hOutcome(teamId, otherTeamAId, ownMatches)
+  const h2hVsB = h2hOutcome(teamId, otherTeamBId, ownMatches)
 
   return OUR_RESULTS.map((r) => {
     const ourFinalPoints = basePoints[teamId] + r.our
     const opponentFinalPoints = basePoints[opponentId] + r.opp
+    // 상대(opponentId)와의 맞대결은 지금 가정하는 이번 결과 자체다.
+    const h2hByRival: Record<string, H2HResult | null> = {
+      [opponentId]: r.key,
+      [otherTeamAId]: h2hVsA,
+      [otherTeamBId]: h2hVsB,
+    }
 
     const outcomes: OtherMatchOutcome[] = OTHER_RESULTS.map((o) => {
       const finalPoints: Record<string, number> = {
@@ -397,7 +492,7 @@ export function analyzeLastMatchdayScenarios(
         [otherTeamAId]: basePoints[otherTeamAId] + o.a,
         [otherTeamBId]: basePoints[otherTeamBId] + o.b,
       }
-      const { verdict, note } = classifyScenario(finalPoints, teamId, groupTeamIds, baseStanding, evaluateWildcard)
+      const { verdict, note } = classifyScenario(finalPoints, teamId, groupTeamIds, baseStanding, evaluateWildcard, h2hByRival)
       return { key: o.key, label: o.label, verdict, note }
     })
 
@@ -427,17 +522,6 @@ export function computeExactRankLocks(teamIds: string[], matches: GroupMatch[]):
   })
 }
 
-export interface ThirdPlaceContender {
-  teamId: string
-  currentPoints: number
-  remainingGames: number
-  /** 우리 승점을 넘어서기 위해 남은 경기에서 추가로 필요한 승점(이미 넘었으면 0) */
-  neededPoints: number
-  alreadyAhead: boolean
-  /** 어떤 결과 조합이면 조건을 충족하는지 사람이 읽기 쉬운 한 줄 설명 */
-  resultHint: string
-}
-
 export interface ThirdPlaceGroupDetail {
   group: GroupLetter
   verdict: GroupThreatVerdict
@@ -449,10 +533,10 @@ export interface ThirdPlaceGroupDetail {
   finished: boolean
   /** 미정 판정일 때, 왜 아직 확정할 수 없는지 보충 설명 */
   note?: string
-  /** 'pending' 조에서 아직 우리를 앞지를 가능성이 남은 후보팀들(안전 확정팀 제외) */
-  contenders?: ThirdPlaceContender[]
-  /** contenders 중 최소 몇 팀이 조건을 충족해야 이 조가 실제 위협이 되는지 */
-  contendersNeeded?: number
+  /** 'pending' 조에 남은 경기가 정확히 1경기일 때, 그 경기 결과별 위협 여부 */
+  decidingMatch?: { teamAId: string; teamBId: string; outcomes: RemainingMatchOutcome[] }
+  /** 'pending' 조에 남은 경기가 2경기 이상일 때, 아직 안 붙은 경기 목록(결과별 판정은 생략) */
+  remainingFixtures?: { teamAId: string; teamBId: string }[]
 }
 
 export interface ThirdPlaceRouteInfo {
@@ -523,6 +607,12 @@ export function analyzeThirdPlaceRoute(
       aheadFinished += 1
     }
 
+    const remainingMatchups = verdict === 'pending' ? remainingMatchupsForGroup(teamIds, groupMatches) : []
+    const decidingMatch =
+      verdict === 'pending' && remainingMatchups.length === 1
+        ? { ...remainingMatchups[0], outcomes: classifyOneRemainingMatch(teamIds, standings, remainingMatchups[0], myStanding.points) }
+        : undefined
+
     const note = finished
       ? verdict === 'ahead'
         ? `조별리그 종료 — 확정 3위(승점 ${candidate.points}점)가 우리보다 앞섭니다.`
@@ -531,10 +621,9 @@ export function analyzeThirdPlaceRoute(
         ? `이미 승점 ${candidate.points}점을 확보해 남은 경기 결과와 무관하게 우리보다 앞섭니다.`
         : verdict === 'behind'
           ? '남은 경기를 모두 이겨도 우리보다 승점이 낮을 팀들이라 안전합니다.'
-          : `이 조에서 몇 팀이 어떤 결과를 거두는지에 따라 우리를 앞지를 수도 있습니다 — 아래 조건을 확인하세요.`
-
-    const { contenders, contendersNeeded } =
-      verdict === 'pending' ? buildContenders(teamIds, standings, myStanding.points) : { contenders: [], contendersNeeded: 0 }
+          : decidingMatch
+            ? '마지막 남은 경기 결과에 따라 갈립니다 — 아래 경기 결과를 확인하세요.'
+            : `아직 ${remainingMatchups.length}경기가 남아 결과에 따라 갈립니다.`
 
     groupDetails.push({
       group,
@@ -545,8 +634,8 @@ export function analyzeThirdPlaceRoute(
       goalsFor: candidate.goalsFor,
       finished,
       note,
-      contenders: verdict === 'pending' ? contenders : undefined,
-      contendersNeeded: verdict === 'pending' ? contendersNeeded : undefined,
+      decidingMatch,
+      remainingFixtures: verdict === 'pending' && !decidingMatch ? remainingMatchups : undefined,
     })
   }
 

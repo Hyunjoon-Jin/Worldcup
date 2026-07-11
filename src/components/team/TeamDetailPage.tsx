@@ -16,6 +16,7 @@ import {
   computeQualificationStatuses,
   type GroupThreatVerdict,
   type OurResultScenario,
+  type RemainingMatchVerdict,
   type ScenarioVerdict,
 } from '../../engine/qualificationStatus'
 import { runOpponentForecast, runTeamScenarioSimulation, type RoundOpponentForecast, type TeamScenarioResult } from '../../engine/monteCarlo'
@@ -24,6 +25,7 @@ import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
+import { useConditionStore } from '../../store/useConditionStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { GroupLetter } from '../../types/group'
 
@@ -56,6 +58,17 @@ function GroupThreatBadge({ verdict }: { verdict: GroupThreatVerdict }) {
       {config.icon} {config.label}
     </span>
   )
+}
+
+const REMAINING_MATCH_CONFIG: Record<RemainingMatchVerdict, { label: string; icon: string; className: string }> = {
+  ahead: { label: '위협', icon: '🔺', className: 'text-red-300' },
+  behind: { label: '안전', icon: '✅', className: 'text-emerald-300' },
+  tied: { label: '골득실로 결정', icon: '⚠️', className: 'text-amber-300' },
+}
+
+function RemainingMatchVerdictTag({ verdict }: { verdict: RemainingMatchVerdict }) {
+  const config = REMAINING_MATCH_CONFIG[verdict]
+  return <span className={`text-[10px] font-bold ${config.className}`}>{config.icon} {config.label}</span>
 }
 
 function VerdictLine({ verdict, text, note }: { verdict: ScenarioVerdict; text?: string; note?: string }) {
@@ -99,6 +112,7 @@ export function TeamDetailPage() {
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
   const crisisByTeam = useCrisisTeams()
+  const conditionOffset = useConditionStore((s) => (teamId ? s.offsets[teamId] : undefined)) ?? 0
 
   const [scenario, setScenario] = useState<TeamScenarioResult | null>(null)
   const [scenarioLoading, setScenarioLoading] = useState(false)
@@ -290,6 +304,17 @@ export function TeamDetailPage() {
               {group && ` · 조 ${group}`}
               {team.isHost && ' · 개최국'}
             </p>
+            {Math.abs(conditionOffset) >= 3 && (
+              <p className={`mt-0.5 text-xs font-bold ${conditionOffset > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                {conditionOffset >= 5
+                  ? '🔥 이번 대회 컨디션 매우 좋음'
+                  : conditionOffset > 0
+                    ? '📈 이번 대회 컨디션 좋음'
+                    : conditionOffset <= -5
+                      ? '🥶 이번 대회 컨디션 매우 저조'
+                      : '📉 이번 대회 컨디션 저조'}
+              </p>
+            )}
           </div>
           {status === 'advancing' && (
             <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
@@ -302,7 +327,7 @@ export function TeamDetailPage() {
           {status === 'undecided' && crisisByTeam[teamId] && (
             <span
               className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
-              title={`직전 대비 32강 진출 확률 ${crisisByTeam[teamId].drop.toFixed(1)}%p 하락`}
+              title={`32강 진출 확률 ${crisisByTeam[teamId].pct.toFixed(1)}% (50% 미만)`}
             >
               🚨 위기
             </span>
@@ -465,26 +490,31 @@ export function TeamDetailPage() {
                   <GroupThreatBadge verdict={d.verdict} />
                 </div>
                 {d.note && <p className="mt-1 text-[10px] text-gray-500">{d.note}</p>}
-                {d.verdict === 'pending' && d.contenders && d.contenders.length > 0 && (
-                  <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
-                    <p className="text-[10px] font-bold text-gray-400">
-                      아래 {d.contenders.length}팀 중{' '}
-                      <strong className="text-amber-300">
-                        {d.contendersNeeded === d.contenders.length ? '전부' : `${d.contendersNeeded}팀 이상`}
-                      </strong>
-                      이 조건을 충족하면 이 조가 위협이 됩니다
-                    </p>
-                    {d.contenders.map((c) => (
-                      <div key={c.teamId} className="flex flex-col gap-0.5 rounded bg-white/5 px-2 py-1">
-                        <div className="flex items-center gap-1.5">
-                          <TeamLink teamId={c.teamId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
-                          <span className="shrink-0 text-[10px] text-gray-500">
-                            현재 {c.currentPoints}점 · 잔여 {c.remainingGames}경기
-                          </span>
+                {d.verdict === 'pending' && d.decidingMatch && (
+                  <div className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                      <TeamLink teamId={d.decidingMatch.teamAId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
+                      <span className="shrink-0">vs</span>
+                      <TeamLink teamId={d.decidingMatch.teamBId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {d.decidingMatch.outcomes.map((o) => (
+                        <div key={o.key} className="rounded bg-white/5 px-1.5 py-1 text-center">
+                          <div className="text-[10px] text-gray-400">{o.label}</div>
+                          <RemainingMatchVerdictTag verdict={o.verdict} />
                         </div>
-                        <p className={`text-[10px] ${c.alreadyAhead ? 'text-red-300' : 'text-gray-400'}`}>
-                          {c.resultHint}
-                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {d.verdict === 'pending' && d.remainingFixtures && d.remainingFixtures.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
+                    <p className="text-[10px] text-gray-500">남은 경기</p>
+                    {d.remainingFixtures.map((f) => (
+                      <div key={`${f.teamAId}-${f.teamBId}`} className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                        <TeamLink teamId={f.teamAId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
+                        <span className="shrink-0">vs</span>
+                        <TeamLink teamId={f.teamBId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
                       </div>
                     ))}
                   </div>

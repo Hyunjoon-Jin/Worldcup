@@ -1,17 +1,21 @@
 import { TEAMS_BY_ID } from '../data/teams'
+import { useConditionStore } from '../store/useConditionStore'
 import { useSandboxStore } from '../store/useSandboxStore'
 import type { TeamRatings } from '../types/team'
 
 const HOST_ADVANTAGE = 5
 
-export function getRatings(teamId: string): TeamRatings {
-  const team = TEAMS_BY_ID[teamId]
-  const override = useSandboxStore.getState().overrides[teamId]
-  return override ? { ...team.baseRatings, ...override } : team.baseRatings
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+/** 이번 대회의 팀별 컨디션(useConditionStore)을 폼 능력치에 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다. */
+export function getRatings(teamId: string): TeamRatings {
+  const team = TEAMS_BY_ID[teamId]
+  const conditionOffset = useConditionStore.getState().offsets[teamId] ?? 0
+  const conditioned: TeamRatings = { ...team.baseRatings, form: clamp(team.baseRatings.form + conditionOffset, 30, 99) }
+  const override = useSandboxStore.getState().overrides[teamId]
+  return override ? { ...conditioned, ...override } : conditioned
 }
 
 // 실제 축구 경기의 평균 득점(팀당 약 1.3골)에 가깝게 보정하고, 극단적인 능력치 차이에서도

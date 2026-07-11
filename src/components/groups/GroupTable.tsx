@@ -36,7 +36,7 @@ function CrisisBadge({ crisis }: { crisis?: CrisisInfo }) {
   return (
     <span
       className="rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-300"
-      title={`직전 대비 32강 진출 확률 ${crisis.drop.toFixed(1)}%p 하락`}
+      title={`32강 진출 확률 ${crisis.pct.toFixed(1)}% (50% 미만)`}
     >
       🚨 위기
     </span>
