@@ -1,5 +1,6 @@
 import { TEAMS_BY_ID, getTeamsByPot } from '../data/teams'
 import { GROUP_LETTERS, HOST_SLOTS } from '../data/hostSlots'
+import { createSeededRandom, shuffleWith, type RandomFn } from './rng'
 import type { GroupLetter } from '../types/group'
 import type { Pot } from '../types/team'
 
@@ -17,16 +18,11 @@ export interface DrawLogEntry {
   pot: Pot
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
+function shuffle<T>(arr: T[], rand: RandomFn = Math.random): T[] {
+  return shuffleWith(arr, rand)
 }
 
-export function createInitialDrawState(): DrawState {
+export function createInitialDrawState(rand: RandomFn = Math.random): DrawState {
   const groups: GroupSlots = Object.fromEntries(GROUP_LETTERS.map((g) => [g, [null, null, null, null]])) as GroupSlots
 
   for (const [teamId, group] of Object.entries(HOST_SLOTS)) {
@@ -38,7 +34,7 @@ export function createInitialDrawState(): DrawState {
     const teams = getTeamsByPot(pot)
       .filter((t) => !t.isHost)
       .map((t) => t.id)
-    pots[pot] = shuffle(teams)
+    pots[pot] = shuffle(teams, rand)
   }
   return { groups, pots }
 }
@@ -110,11 +106,14 @@ export interface DrawNextResult {
  * 완성 가능한 경우에만 확정하고, 그렇지 않으면(막다른 길) 다른 후보를 다시 뽑는다 —
  * 실제 드로우에서 조 배정 규정을 위반하면 재추첨하는 절차를 시뮬레이션한 것이다.
  */
-export function drawNext(state: DrawState): DrawNextResult | null {
+export function drawNext(state: DrawState, rand: RandomFn = Math.random): DrawNextResult | null {
   const slot = findNextSlot(state)
   if (!slot) return null
   const { pot, group } = slot
-  const candidates = shuffle(state.pots[pot].filter((teamId) => isValidPlacement(teamId, group, state.groups)))
+  const candidates = shuffle(
+    state.pots[pot].filter((teamId) => isValidPlacement(teamId, group, state.groups)),
+    rand,
+  )
 
   for (const teamId of candidates) {
     const probe = cloneState(state)
@@ -136,4 +135,28 @@ export function drawNext(state: DrawState): DrawNextResult | null {
 
 export function isDrawComplete(state: DrawState): boolean {
   return findNextSlot(state) === null
+}
+
+export interface SeededDrawResult {
+  state: DrawState
+  log: DrawLogEntry[]
+}
+
+/**
+ * 주어진 시드로 조추첨을 처음부터 끝까지 한 번에 결정론적으로 실행한다 (C6).
+ * 같은 시드는 항상 같은 조 편성을 만들어, 흥미로운 조추첨을 저장·공유·재현할 수 있다.
+ */
+export function runSeededDraw(seed: string): SeededDrawResult {
+  const rand = createSeededRandom(seed)
+  let state = createInitialDrawState(rand)
+  const log: DrawLogEntry[] = []
+  let guard = 0
+  while (!isDrawComplete(state) && guard < 100) {
+    const result = drawNext(state, rand)
+    if (!result) break
+    state = result.state
+    log.push(result.entry)
+    guard++
+  }
+  return { state, log }
 }

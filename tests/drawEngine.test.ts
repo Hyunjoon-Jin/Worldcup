@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialDrawState, drawNext, isDrawComplete, isValidPlacement } from '../src/engine/drawEngine'
+import { createInitialDrawState, drawNext, isDrawComplete, isValidPlacement, runSeededDraw } from '../src/engine/drawEngine'
 import { TEAMS_BY_ID } from '../src/data/teams'
 import { GROUP_LETTERS } from '../src/data/hostSlots'
 
@@ -46,6 +46,38 @@ describe('drawEngine — 전체 조추첨 완성', () => {
     }
     expect(isDrawComplete(state)).toBe(true)
 
+    for (const g of GROUP_LETTERS) {
+      const teams = state.groups[g].filter(Boolean) as string[]
+      expect(teams).toHaveLength(4)
+      const byConfed: Record<string, number> = {}
+      for (const id of teams) {
+        const c = TEAMS_BY_ID[id].confederation
+        byConfed[c] = (byConfed[c] ?? 0) + 1
+      }
+      for (const [confed, count] of Object.entries(byConfed)) {
+        expect(count).toBeLessThanOrEqual(confed === 'UEFA' ? 2 : 1)
+      }
+    }
+  })
+})
+
+describe('runSeededDraw — 시드 재현성 (C6)', () => {
+  it('같은 시드는 완전히 동일한 조 편성을 만든다', () => {
+    const a = runSeededDraw('WC2026-DEMO')
+    const b = runSeededDraw('WC2026-DEMO')
+    expect(a.state.groups).toEqual(b.state.groups)
+    expect(a.log).toEqual(b.log)
+    expect(isDrawComplete(a.state)).toBe(true)
+  })
+
+  it('다른 시드는 (거의 항상) 다른 편성을 만든다', () => {
+    const a = runSeededDraw('SEED-ONE')
+    const b = runSeededDraw('SEED-TWO')
+    expect(a.state.groups).not.toEqual(b.state.groups)
+  })
+
+  it('시드 조추첨도 대륙연맹 제약을 만족한다', () => {
+    const { state } = runSeededDraw('CONSTRAINT-CHECK')
     for (const g of GROUP_LETTERS) {
       const teams = state.groups[g].filter(Boolean) as string[]
       expect(teams).toHaveLength(4)

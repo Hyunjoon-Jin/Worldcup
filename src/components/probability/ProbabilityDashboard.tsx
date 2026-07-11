@@ -7,6 +7,9 @@ import { ProbBar } from './ProbBar'
 import { STAGES, type NumericKey } from './probabilityStages'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
+import { ITERATION_PRESETS, type IterationPreset } from '../../engine/config'
+
+const PRESET_LABEL: Record<IterationPreset, string> = { fast: '빠름', standard: '표준', precise: '정밀' }
 
 function CrisisTag({ pct }: { pct?: number }) {
   if (pct == null) return null
@@ -21,7 +24,7 @@ function CrisisTag({ pct }: { pct?: number }) {
 }
 
 export function ProbabilityDashboard() {
-  const { result, iterations, isComputing, setIterations, run } = useSimulationStore()
+  const { result, iterations, isComputing, progress, setPreset, run } = useSimulationStore()
   const [sortKey, setSortKey] = useState<NumericKey>('championPct')
   const crisisByTeam = useCrisisTeams()
 
@@ -36,25 +39,49 @@ export function ProbabilityDashboard() {
 
   return (
     <div className="flex flex-col gap-4">
-      <GlassCard strong className="flex flex-col items-center gap-3 p-4 text-center sm:flex-row sm:justify-between">
-        <div className="text-sm text-gray-300">
-          현재까지 확정된 결과를 기반으로 남은 경기를{' '}
-          <strong className="text-white">{iterations.toLocaleString()}회</strong> 몬테카를로 시뮬레이션한 확률입니다.
+      <GlassCard strong className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-between sm:text-left">
+          <div className="text-sm text-gray-300">
+            현재까지 확정된 결과를 기반으로 남은 경기를{' '}
+            <strong className="text-white">{iterations.toLocaleString()}회</strong> 몬테카를로 시뮬레이션한 확률입니다.
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg bg-white/5 p-0.5" role="group" aria-label="시뮬레이션 정밀도">
+              {(Object.keys(ITERATION_PRESETS) as IterationPreset[]).map((preset) => {
+                const isActive = iterations === ITERATION_PRESETS[preset]
+                return (
+                  <button
+                    key={preset}
+                    onClick={() => setPreset(preset)}
+                    aria-pressed={isActive}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      isActive ? 'bg-emerald-500/30 text-emerald-200' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {PRESET_LABEL[preset]}
+                  </button>
+                )
+              })}
+            </div>
+            <GlassButton onClick={run} disabled={isComputing}>
+              {isComputing ? '계산 중…' : '🔄 새로고침'}
+            </GlassButton>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min={200}
-            max={5000}
-            step={100}
-            value={iterations}
-            onChange={(e) => setIterations(Number(e.target.value))}
-            className="w-32 accent-emerald-400"
-          />
-          <GlassButton onClick={run} disabled={isComputing}>
-            {isComputing ? '계산 중…' : '🔄 새로고침'}
-          </GlassButton>
-        </div>
+        {isComputing && (
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-white/10"
+            role="progressbar"
+            aria-valuenow={Math.round(progress * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full rounded-full bg-emerald-400 transition-[width] duration-150"
+              style={{ width: `${Math.max(4, progress * 100)}%` }}
+            />
+          </div>
+        )}
       </GlassCard>
 
       <GlassCard className="hidden p-4 sm:block">

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDrawStore } from '../../store/useDrawStore'
 import { resetTournament } from '../../store/tournamentActions'
@@ -13,9 +14,19 @@ import { GroupSlotCard } from './GroupSlotCard'
 const POT_LABEL: Record<number, string> = { 1: '포트1', 2: '포트2', 3: '포트3', 4: '포트4' }
 
 export function DrawStage({ onComplete }: { onComplete?: () => void }) {
-  const { state, log, isComplete, drawOne, undoLast } = useDrawStore()
+  const { state, log, isComplete, drawOne, undoLast, drawFromSeed, seed } = useDrawStore()
+  const [seedInput, setSeedInput] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const resetEverything = resetTournament
+
+  const copySeed = () => {
+    if (!seed) return
+    void navigator.clipboard?.writeText(seed).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   const nextSlot = findNextSlot(state)
   const lastEntry = log[log.length - 1]
@@ -70,6 +81,35 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
           <GlassButton variant="danger" onClick={resetEverything}>
             ⟲ 처음부터
           </GlassButton>
+        </div>
+
+        <div className="mt-4 border-t border-white/10 pt-3">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <input
+              type="text"
+              value={seedInput}
+              onChange={(e) => setSeedInput(e.target.value)}
+              placeholder="시드 입력 (예: K3P-92FA)"
+              aria-label="조추첨 시드"
+              className="w-40 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
+            />
+            <GlassButton variant="ghost" onClick={() => drawFromSeed(seedInput)}>
+              ⚡ 시드로 즉시 조추첨
+            </GlassButton>
+          </div>
+          {seed && (
+            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
+              <span>
+                이 조추첨 시드: <strong className="font-mono text-emerald-300">{seed}</strong>
+              </span>
+              <button
+                onClick={copySeed}
+                className="rounded bg-white/10 px-2 py-0.5 text-[11px] text-gray-200 hover:bg-white/20"
+              >
+                {copied ? '✓ 복사됨' : '📋 복사'}
+              </button>
+            </div>
+          )}
         </div>
       </GlassCard>
 

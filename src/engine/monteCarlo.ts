@@ -171,35 +171,62 @@ function simulateOneRun(forced?: ForcedOutcome): OneRunOutcome {
   return { throughGroup, r16, qf, sf, final, champion }
 }
 
-export function runMonteCarloSimulation(iterations: number): SimulationResult {
+/**
+ * 몬테카를로 누적기 — 반복을 여러 배치로 나눠 실행할 수 있게 해, UI를 멈추지 않고
+ * 비동기 청크로 계산하고 진행률을 표시하며 중간에 취소할 수 있게 한다 (B1/B3).
+ */
+export function createSimulationAccumulator() {
   const counts: Record<string, TeamProbabilities> = Object.fromEntries(
     TEAMS.map((t) => [
       t.id,
       { teamId: t.id, groupStagePct: 0, r16Pct: 0, qfPct: 0, sfPct: 0, finalPct: 0, championPct: 0 },
     ]),
   )
+  let done = 0
 
-  for (let i = 0; i < iterations; i++) {
-    const outcome = simulateOneRun()
-    for (const id of outcome.throughGroup) counts[id].groupStagePct += 1
-    for (const id of outcome.r16) counts[id].r16Pct += 1
-    for (const id of outcome.qf) counts[id].qfPct += 1
-    for (const id of outcome.sf) counts[id].sfPct += 1
-    for (const id of outcome.final) counts[id].finalPct += 1
-    if (outcome.champion) counts[outcome.champion].championPct += 1
+  return {
+    get done() {
+      return done
+    },
+    /** n회 시뮬레이션을 실행해 누적한다. */
+    runBatch(n: number): void {
+      for (let i = 0; i < n; i++) {
+        const outcome = simulateOneRun()
+        for (const id of outcome.throughGroup) counts[id].groupStagePct += 1
+        for (const id of outcome.r16) counts[id].r16Pct += 1
+        for (const id of outcome.qf) counts[id].qfPct += 1
+        for (const id of outcome.sf) counts[id].sfPct += 1
+        for (const id of outcome.final) counts[id].finalPct += 1
+        if (outcome.champion) counts[outcome.champion].championPct += 1
+      }
+      done += n
+    },
+    /** 지금까지 누적된 결과를 확률(%)로 환산한다. */
+    result(): SimulationResult {
+      const probabilities: Record<string, TeamProbabilities> = {}
+      const divisor = Math.max(1, done)
+      for (const teamId of Object.keys(counts)) {
+        const c = counts[teamId]
+        probabilities[teamId] = {
+          teamId,
+          groupStagePct: (c.groupStagePct / divisor) * 100,
+          r16Pct: (c.r16Pct / divisor) * 100,
+          qfPct: (c.qfPct / divisor) * 100,
+          sfPct: (c.sfPct / divisor) * 100,
+          finalPct: (c.finalPct / divisor) * 100,
+          championPct: (c.championPct / divisor) * 100,
+        }
+      }
+      return { iterations: done, computedAt: Date.now(), probabilities }
+    },
   }
+}
 
-  for (const teamId of Object.keys(counts)) {
-    const c = counts[teamId]
-    c.groupStagePct = (c.groupStagePct / iterations) * 100
-    c.r16Pct = (c.r16Pct / iterations) * 100
-    c.qfPct = (c.qfPct / iterations) * 100
-    c.sfPct = (c.sfPct / iterations) * 100
-    c.finalPct = (c.finalPct / iterations) * 100
-    c.championPct = (c.championPct / iterations) * 100
-  }
-
-  return { iterations, computedAt: Date.now(), probabilities: counts }
+/** 동기 일괄 실행(테스트/단발 계산용). UI에서는 비동기 청크 실행(useSimulationStore)을 쓴다. */
+export function runMonteCarloSimulation(iterations: number): SimulationResult {
+  const acc = createSimulationAccumulator()
+  acc.runBatch(iterations)
+  return acc.result()
 }
 
 export interface TeamScenarioResult {
