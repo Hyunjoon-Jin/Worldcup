@@ -113,13 +113,27 @@ function buildContenders(
 
 export type GroupThreatVerdict = 'ahead' | 'behind' | 'pending'
 
+/**
+ * ourStandingExact=false일 때는 ourStanding이 "마지막 경기 결과를 가정한 가상의 승점"만
+ * 확실할 뿐, 골득실/다득점은 아직 실제로 뛰지 않은 경기의 것이라 알 수 없다(그 경기 직전까지의
+ * 값을 그대로 들고 있을 뿐 가정한 승/무/패의 실제 스코어는 반영되지 않는다). 이 상태에서 승점이
+ * 같은 조와 골득실 타이브레이커까지 비교해버리면, 우리가 아직 넣지 않은 득점을 0으로 취급해
+ * 부당하게 "위협"으로 판정하는 오류가 생긴다 — 그래서 승점이 같으면 골득실 비교로 넘어가지
+ * 않고 'pending'(아직 알 수 없음)으로 남긴다.
+ */
 function classifyGroupThreat(
   other: { standings: Record<string, GroupStanding>; finished: boolean; thirdTeamId: string },
   otherTeamIds: string[],
   ourStanding: GroupStanding,
+  ourStandingExact = true,
 ): GroupThreatVerdict {
   if (other.finished) {
-    return thirdPlaceComparator(other.standings[other.thirdTeamId], ourStanding) < 0 ? 'ahead' : 'behind'
+    const candidate = other.standings[other.thirdTeamId]
+    if (candidate.points !== ourStanding.points) {
+      return candidate.points > ourStanding.points ? 'ahead' : 'behind'
+    }
+    if (!ourStandingExact) return 'pending'
+    return thirdPlaceComparator(candidate, ourStanding) < 0 ? 'ahead' : 'behind'
   }
   if (thirdPointsFloor(otherTeamIds, other.standings) > ourStanding.points) return 'ahead'
   const guaranteedBelow = otherTeamIds.filter(
@@ -351,7 +365,7 @@ export function analyzeLastMatchdayScenarios(
     let pendingCount = 0
     for (const info of Object.values(otherGroupsInfo)) {
       if (!info) continue
-      const verdict = classifyGroupThreat(info, info.teamIds, ourStanding)
+      const verdict = classifyGroupThreat(info, info.teamIds, ourStanding, false)
       if (verdict === 'ahead') aheadCount += 1
       else if (verdict === 'pending') pendingCount += 1
     }
