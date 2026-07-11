@@ -101,16 +101,14 @@ export function ScheduleStage() {
       </GlassCard>
 
       {phase !== 'complete' && top3Champion.length > 0 && (
-        <GlassCard className="p-4">
-          <h3 className="mb-3 text-sm font-bold text-amber-300">🏆 실시간 우승 확률 TOP 3</h3>
-          <div className="space-y-2">
+        <GlassCard className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+          <h3 className="shrink-0 text-xs font-bold whitespace-nowrap text-amber-300">🏆 실시간 우승 확률 TOP 3</h3>
+          <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
             {top3Champion.map((row, idx) => (
-              <div key={row.teamId} className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
-                <span className="w-6 shrink-0 text-center text-lg">{MEDALS[idx]}</span>
-                <TeamLink teamId={row.teamId} className="min-w-0 flex-1 font-medium text-gray-100" />
-                <span className="shrink-0 text-sm font-bold tabular-nums text-amber-300">
-                  {row.championPct.toFixed(1)}%
-                </span>
+              <div key={row.teamId} className="flex items-center gap-1.5">
+                <span className="text-sm">{MEDALS[idx]}</span>
+                <TeamLink teamId={row.teamId} className="text-xs font-medium text-gray-100" />
+                <span className="text-xs font-bold tabular-nums text-amber-300">{row.championPct.toFixed(1)}%</span>
               </div>
             ))}
           </div>
