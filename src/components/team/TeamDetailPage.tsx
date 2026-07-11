@@ -302,7 +302,7 @@ export function TeamDetailPage() {
           {status === 'undecided' && crisisByTeam[teamId] && (
             <span
               className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
-              title={`직전 대비 32강 진출 확률 ${crisisByTeam[teamId].drop.toFixed(1)}%p 하락`}
+              title={`32강 진출 확률 ${crisisByTeam[teamId].pct.toFixed(1)}% (50% 미만)`}
             >
               🚨 위기
             </span>

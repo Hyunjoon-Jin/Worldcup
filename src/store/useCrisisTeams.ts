@@ -1,29 +1,43 @@
 import { useMemo } from 'react'
+import { GROUP_LETTERS } from '../data/hostSlots'
+import { computeQualificationStatuses } from '../engine/qualificationStatus'
+import { useDrawStore } from './useDrawStore'
+import { useProgressStore } from './useProgressStore'
 import { useSimulationStore } from './useSimulationStore'
+import type { GroupLetter } from '../types/group'
 
-/** 직전 계산 대비 32강(조별통과) 진출 확률이 이 퍼센트포인트 이상 떨어지면 "위기"로 표시한다.
- * 몬테카를로 표본 변동성으로 인한 사소한 등락은 위기로 잡히지 않도록 여유를 둔 문턱값이다. */
-const CRISIS_DROP_THRESHOLD = 5
+/** 32강(조별통과) 진출 확률이 이 값 미만이면 "위기"로 표시한다. */
+const CRISIS_PCT_THRESHOLD = 50
 
 export interface CrisisInfo {
-  drop: number
+  pct: number
 }
 
-/** 팀 ID → 위기 정보(확률 하락폭)의 맵. 위기가 아닌 팀은 맵에 없다. */
+/**
+ * 팀 ID → 위기 정보(현재 32강 진출 확률)의 맵. 아직 진출/탈락이 확정되지 않은(undecided) 팀 중
+ * 진출 확률이 50% 미만인 팀만 "위기"로 표시한다 — 이미 진출이 확정됐거나 이미 탈락이 확정된
+ * 팀은 확률이 낮거나(탈락 확정 시 0%에 수렴) 애초에 "위기"라는 표현이 맞지 않으므로 제외한다.
+ */
 export function useCrisisTeams(): Record<string, CrisisInfo> {
   const result = useSimulationStore((s) => s.result)
-  const previousResult = useSimulationStore((s) => s.previousResult)
+  const drawGroups = useDrawStore((s) => s.state.groups)
+  const groupMatches = useProgressStore((s) => s.groupMatches)
 
   return useMemo(() => {
     const crisis: Record<string, CrisisInfo> = {}
-    if (!result || !previousResult) return crisis
+    if (!result) return crisis
+
+    const groupTeams = Object.fromEntries(
+      GROUP_LETTERS.map((g) => [g, (drawGroups[g] as (string | null)[]).filter(Boolean) as string[]]),
+    ) as Record<GroupLetter, string[]>
+    const statusByTeam = computeQualificationStatuses(groupTeams, groupMatches)
+
     for (const teamId of Object.keys(result.probabilities)) {
-      const current = result.probabilities[teamId]?.groupStagePct
-      const previous = previousResult.probabilities[teamId]?.groupStagePct
-      if (current == null || previous == null) continue
-      const drop = previous - current
-      if (drop >= CRISIS_DROP_THRESHOLD) crisis[teamId] = { drop }
+      if (statusByTeam[teamId] !== 'undecided') continue
+      const pct = result.probabilities[teamId]?.groupStagePct
+      if (pct == null) continue
+      if (pct < CRISIS_PCT_THRESHOLD) crisis[teamId] = { pct }
     }
     return crisis
-  }, [result, previousResult])
+  }, [result, drawGroups, groupMatches])
 }
