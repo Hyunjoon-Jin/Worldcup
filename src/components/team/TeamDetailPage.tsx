@@ -23,6 +23,7 @@ import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
+import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { GroupLetter } from '../../types/group'
 
 const ROUND_LABEL_KO: Record<string, string> = {
@@ -77,6 +78,7 @@ interface MatchHistoryEntry {
   goalsAgainst: number
   result: 'W' | 'D' | 'L'
   upset: boolean
+  detailRef: MatchDetailRef
 }
 
 interface UpcomingMatchEntry {
@@ -90,6 +92,7 @@ interface UpcomingMatchEntry {
 export function TeamDetailPage() {
   const teamId = useSelectionStore((s) => s.selectedTeamId)
   const clearTeam = useSelectionStore((s) => s.clearTeam)
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
@@ -148,6 +151,7 @@ export function TeamDetailPage() {
         goalsAgainst,
         result: goalsFor > goalsAgainst ? 'W' : goalsFor < goalsAgainst ? 'L' : 'D',
         upset,
+        detailRef: { kind: 'group', match: m, date: fx?.date, timeSlot: fx?.timeSlot },
       })
     }
 
@@ -161,6 +165,7 @@ export function TeamDetailPage() {
       const opponentId = isHome ? slot.result.awayTeamId : slot.result.homeTeamId
       const won = slot.result.winnerTeamId === teamId
       const loserTeamId = won ? opponentId : teamId
+      const koFixture = schedule?.knockoutMatches.find((f) => f.slotId === slot.slotId)
       entries.push({
         key: `ko-${slot.slotId}`,
         label: ROUND_LABEL_KO[slot.round],
@@ -169,6 +174,7 @@ export function TeamDetailPage() {
         goalsAgainst,
         result: won ? 'W' : 'L',
         upset: isUpset(slot.result.winnerTeamId, loserTeamId),
+        detailRef: { kind: 'knockout', match: slot.result, date: koFixture?.date, timeSlot: koFixture?.timeSlot },
       })
     }
     return entries
@@ -316,7 +322,8 @@ export function TeamDetailPage() {
             {matchHistory.map((entry) => (
               <div
                 key={entry.key}
-                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
+                onClick={() => selectMatch(entry.detailRef)}
+                className={`flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between ${
                   entry.upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
@@ -367,7 +374,23 @@ export function TeamDetailPage() {
         ) : (
           <div className="space-y-1.5">
             {upcomingMatches.map((entry) => (
-              <div key={entry.key} className="flex flex-col gap-1 rounded-lg bg-white/5 px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div
+                key={entry.key}
+                onClick={() =>
+                  entry.opponentId &&
+                  selectMatch({
+                    kind: 'upcoming',
+                    homeTeamId: teamId,
+                    awayTeamId: entry.opponentId,
+                    label: entry.label,
+                    date: entry.date,
+                    timeSlot: entry.timeSlot,
+                  })
+                }
+                className={`flex flex-col gap-1 rounded-lg bg-white/5 px-3 py-1.5 text-sm transition-colors sm:flex-row sm:items-center sm:justify-between ${
+                  entry.opponentId ? 'cursor-pointer hover:bg-white/10' : ''
+                }`}
+              >
                 <span className="text-xs text-gray-400 sm:w-32 sm:shrink-0">
                   {entry.label}
                   {entry.date && <> · {formatKoreanDate(entry.date)}</>}

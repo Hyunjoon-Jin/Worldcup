@@ -9,6 +9,7 @@ import { BracketView } from './components/knockout/BracketView'
 import { ProbabilityDashboard } from './components/probability/ProbabilityDashboard'
 import { SandboxPanel } from './components/sandbox/SandboxPanel'
 import { TeamDetailPage } from './components/team/TeamDetailPage'
+import { MatchDetailModal } from './components/common/MatchDetailModal'
 import { useDrawStore } from './store/useDrawStore'
 import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
@@ -84,6 +85,7 @@ function App() {
           {tab === 'probability' && <ProbabilityDashboard />}
         </>
       )}
+      <MatchDetailModal />
     </AppShell>
   )
 }
