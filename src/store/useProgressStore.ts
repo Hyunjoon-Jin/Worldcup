@@ -284,6 +284,8 @@ export const useProgressStore = create<ProgressStore>()((set, get) => ({
       set({
         knockoutSlots: slots,
         lastKnockoutResults: results,
+        lastDayGroupResults: [],
+        lastDeltaByGroup: {},
         lastBatchDate: pending.date,
         lastBatchTimeSlot: pending.timeSlot,
         champion: finalResult?.winnerTeamId ?? null,
@@ -371,6 +373,8 @@ export const useProgressStore = create<ProgressStore>()((set, get) => ({
       set({
         knockoutSlots,
         lastKnockoutResults: allResults,
+        lastDayGroupResults: [],
+        lastDeltaByGroup: {},
         lastBatchDate: startDate,
         lastBatchTimeSlot: null,
         champion: finalResult?.winnerTeamId ?? null,

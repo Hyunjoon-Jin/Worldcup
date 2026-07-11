@@ -23,6 +23,8 @@ import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
+import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { GroupLetter } from '../../types/group'
 
 const ROUND_LABEL_KO: Record<string, string> = {
@@ -38,6 +40,7 @@ const VERDICT_CONFIG: Record<ScenarioVerdict, { label: string; icon: string; cla
   advance: { label: '32강 진출 확정', icon: '✅', className: 'text-emerald-300' },
   eliminated: { label: '32강 진출 실패', icon: '❌', className: 'text-red-300' },
   tiebreak: { label: '타이브레이커로 결정', icon: '⚠️', className: 'text-amber-300' },
+  thirdPending: { label: '3위 진출 여부 미정', icon: '🔎', className: 'text-sky-300' },
 }
 
 const GROUP_THREAT_CONFIG: Record<GroupThreatVerdict, { label: string; icon: string; className: string }> = {
@@ -77,6 +80,7 @@ interface MatchHistoryEntry {
   goalsAgainst: number
   result: 'W' | 'D' | 'L'
   upset: boolean
+  detailRef: MatchDetailRef
 }
 
 interface UpcomingMatchEntry {
@@ -90,9 +94,11 @@ interface UpcomingMatchEntry {
 export function TeamDetailPage() {
   const teamId = useSelectionStore((s) => s.selectedTeamId)
   const clearTeam = useSelectionStore((s) => s.clearTeam)
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
+  const crisisByTeam = useCrisisTeams()
 
   const [scenario, setScenario] = useState<TeamScenarioResult | null>(null)
   const [scenarioLoading, setScenarioLoading] = useState(false)
@@ -148,6 +154,7 @@ export function TeamDetailPage() {
         goalsAgainst,
         result: goalsFor > goalsAgainst ? 'W' : goalsFor < goalsAgainst ? 'L' : 'D',
         upset,
+        detailRef: { kind: 'group', match: m, date: fx?.date, timeSlot: fx?.timeSlot },
       })
     }
 
@@ -161,6 +168,7 @@ export function TeamDetailPage() {
       const opponentId = isHome ? slot.result.awayTeamId : slot.result.homeTeamId
       const won = slot.result.winnerTeamId === teamId
       const loserTeamId = won ? opponentId : teamId
+      const koFixture = schedule?.knockoutMatches.find((f) => f.slotId === slot.slotId)
       entries.push({
         key: `ko-${slot.slotId}`,
         label: ROUND_LABEL_KO[slot.round],
@@ -169,6 +177,7 @@ export function TeamDetailPage() {
         goalsAgainst,
         result: won ? 'W' : 'L',
         upset: isUpset(slot.result.winnerTeamId, loserTeamId),
+        detailRef: { kind: 'knockout', match: slot.result, date: koFixture?.date, timeSlot: koFixture?.timeSlot },
       })
     }
     return entries
@@ -234,8 +243,7 @@ export function TeamDetailPage() {
     const otherTeamAId = drawGroups[group][otherFixture.homeSeed - 1]
     const otherTeamBId = drawGroups[group][otherFixture.awaySeed - 1]
     if (!otherTeamAId || !otherTeamBId) return []
-    const groupPlayedMatches = groupMatches.filter((m) => m.group === group)
-    return analyzeLastMatchdayScenarios(groupTeams[group], groupPlayedMatches, teamId, otherTeamAId, otherTeamBId)
+    return analyzeLastMatchdayScenarios(group, groupTeams, groupMatches, teamId, otherTeamAId, otherTeamBId)
   }, [teamId, group, showScenario, teamGroupMatches, groupMatches, schedule, drawGroups, groupTeams])
 
   useEffect(() => {
@@ -277,7 +285,8 @@ export function TeamDetailPage() {
           <div className="flex-1">
             <h2 className="font-display text-2xl font-semibold tracking-wide text-white">{team.nameKo}</h2>
             <p className="text-xs text-gray-400">
-              {team.nameEn} · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트 {team.pot}
+              {team.nameEn} · FIFA 랭킹 {team.fifaRankApprox}위 · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트{' '}
+              {team.pot}
               {group && ` · 조 ${group}`}
               {team.isHost && ' · 개최국'}
             </p>
@@ -289,6 +298,14 @@ export function TeamDetailPage() {
           )}
           {status === 'eliminated' && (
             <span className="rounded-full bg-gray-500/20 px-3 py-1 text-xs font-bold text-gray-400">❌ 탈락확정</span>
+          )}
+          {status === 'undecided' && crisisByTeam[teamId] && (
+            <span
+              className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
+              title={`직전 대비 32강 진출 확률 ${crisisByTeam[teamId].drop.toFixed(1)}%p 하락`}
+            >
+              🚨 위기
+            </span>
           )}
         </div>
 
@@ -316,7 +333,8 @@ export function TeamDetailPage() {
             {matchHistory.map((entry) => (
               <div
                 key={entry.key}
-                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
+                onClick={() => selectMatch(entry.detailRef)}
+                className={`flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between ${
                   entry.upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
@@ -367,7 +385,23 @@ export function TeamDetailPage() {
         ) : (
           <div className="space-y-1.5">
             {upcomingMatches.map((entry) => (
-              <div key={entry.key} className="flex flex-col gap-1 rounded-lg bg-white/5 px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div
+                key={entry.key}
+                onClick={() =>
+                  entry.opponentId &&
+                  selectMatch({
+                    kind: 'upcoming',
+                    homeTeamId: teamId,
+                    awayTeamId: entry.opponentId,
+                    label: entry.label,
+                    date: entry.date,
+                    timeSlot: entry.timeSlot,
+                  })
+                }
+                className={`flex flex-col gap-1 rounded-lg bg-white/5 px-3 py-1.5 text-sm transition-colors sm:flex-row sm:items-center sm:justify-between ${
+                  entry.opponentId ? 'cursor-pointer hover:bg-white/10' : ''
+                }`}
+              >
                 <span className="text-xs text-gray-400 sm:w-32 sm:shrink-0">
                   {entry.label}
                   {entry.date && <> · {formatKoreanDate(entry.date)}</>}
@@ -431,6 +465,30 @@ export function TeamDetailPage() {
                   <GroupThreatBadge verdict={d.verdict} />
                 </div>
                 {d.note && <p className="mt-1 text-[10px] text-gray-500">{d.note}</p>}
+                {d.verdict === 'pending' && d.contenders && d.contenders.length > 0 && (
+                  <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
+                    <p className="text-[10px] font-bold text-gray-400">
+                      아래 {d.contenders.length}팀 중{' '}
+                      <strong className="text-amber-300">
+                        {d.contendersNeeded === d.contenders.length ? '전부' : `${d.contendersNeeded}팀 이상`}
+                      </strong>
+                      이 조건을 충족하면 이 조가 위협이 됩니다
+                    </p>
+                    {d.contenders.map((c) => (
+                      <div key={c.teamId} className="flex flex-col gap-0.5 rounded bg-white/5 px-2 py-1">
+                        <div className="flex items-center gap-1.5">
+                          <TeamLink teamId={c.teamId} wrap className="min-w-0" flagClassName="h-2.5 w-3.5" />
+                          <span className="shrink-0 text-[10px] text-gray-500">
+                            현재 {c.currentPoints}점 · 잔여 {c.remainingGames}경기
+                          </span>
+                        </div>
+                        <p className={`text-[10px] ${c.alreadyAhead ? 'text-red-300' : 'text-gray-400'}`}>
+                          {c.resultHint}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

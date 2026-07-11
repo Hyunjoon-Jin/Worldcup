@@ -2,6 +2,7 @@ import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { rankGroupTeams, rankThirdPlaceTeams } from '../../engine/tiebreakers'
 import { GROUP_LETTERS } from '../../data/hostSlots'
+import { TEAMS_BY_ID } from '../../data/teams'
 import type { QualificationStatus } from '../../engine/qualificationStatus'
 import type { GroupLetter } from '../../types/group'
 import type { GroupMatch } from '../../types/match'
@@ -47,6 +48,7 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlac
             <tr className="text-gray-400">
               <th className="w-6 py-1"></th>
               <th className="py-1">국가</th>
+              <th className="hidden w-12 py-1 text-center sm:table-cell">FIFA</th>
               <th className="w-8 py-1 text-center">조</th>
               <th className="w-10 py-1 text-center">득실</th>
               <th className="w-8 py-1 text-center">승점</th>
@@ -67,6 +69,9 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlac
                   <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                   <td className="py-1.5">
                     <TeamLink teamId={entry.teamId} wrap className="min-w-0 font-medium text-gray-100" />
+                  </td>
+                  <td className="hidden text-center text-gray-500 sm:table-cell">
+                    {TEAMS_BY_ID[entry.teamId].fifaRankApprox}위
                   </td>
                   <td className="text-center text-gray-300">{entry.group}</td>
                   <td className="text-center text-gray-300">{gd > 0 ? `+${gd}` : gd}</td>

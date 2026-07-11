@@ -1,14 +1,29 @@
 import { useEffect, useState } from 'react'
+import { TEAMS_BY_ID } from '../../data/teams'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { ProbBar } from './ProbBar'
 import { STAGES, type NumericKey } from './probabilityStages'
 import { useSimulationStore } from '../../store/useSimulationStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
+
+function CrisisTag({ drop }: { drop?: number }) {
+  if (drop == null) return null
+  return (
+    <span
+      className="shrink-0 rounded bg-red-500/20 px-1 py-0.5 text-[9px] font-bold text-red-300"
+      title={`직전 대비 32강 진출 확률 ${drop.toFixed(1)}%p 하락`}
+    >
+      🚨 위기
+    </span>
+  )
+}
 
 export function ProbabilityDashboard() {
   const { result, iterations, isComputing, setIterations, run } = useSimulationStore()
   const [sortKey, setSortKey] = useState<NumericKey>('championPct')
+  const crisisByTeam = useCrisisTeams()
 
   useEffect(() => {
     if (!result) run()
@@ -49,6 +64,7 @@ export function ProbabilityDashboard() {
               <tr className="text-gray-400">
                 <th className="w-6 py-1"></th>
                 <th className="py-1">국가</th>
+                <th className="w-14 py-1 text-right">FIFA</th>
                 {STAGES.map((s) => (
                   <th
                     key={s.key}
@@ -65,8 +81,12 @@ export function ProbabilityDashboard() {
                 <tr key={row.teamId} className="border-t border-white/5">
                   <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                   <td className="py-1.5">
-                    <TeamLink teamId={row.teamId} className="font-medium whitespace-nowrap text-gray-100" />
+                    <div className="flex items-center gap-1.5">
+                      <TeamLink teamId={row.teamId} className="font-medium whitespace-nowrap text-gray-100" />
+                      <CrisisTag drop={crisisByTeam[row.teamId]?.drop} />
+                    </div>
                   </td>
+                  <td className="py-1.5 text-right text-gray-500">{TEAMS_BY_ID[row.teamId].fifaRankApprox}위</td>
                   {STAGES.map((s) => (
                     <td key={s.key} className="w-28 py-1.5 pr-2">
                       <ProbBar pct={row[s.key]} color={s.color} />
@@ -98,7 +118,9 @@ export function ProbabilityDashboard() {
           <GlassCard key={row.teamId} className="p-3">
             <div className="mb-2 flex items-center gap-2">
               <span className="w-5 shrink-0 text-center text-xs text-gray-500">{idx + 1}</span>
-              <TeamLink teamId={row.teamId} className="font-medium text-gray-100" />
+              <TeamLink teamId={row.teamId} className="min-w-0 font-medium text-gray-100" />
+              <span className="shrink-0 text-[10px] text-gray-500">FIFA {TEAMS_BY_ID[row.teamId].fifaRankApprox}위</span>
+              <CrisisTag drop={crisisByTeam[row.teamId]?.drop} />
             </div>
             <div className="space-y-1">
               {STAGES.map((s) => (

@@ -10,6 +10,8 @@ import { classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
+import { useMatchDetailStore } from '../../store/useMatchDetailStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
 import type { GroupLetter } from '../../types/group'
 
 const ROUND_LABEL_KO: Record<string, string> = {
@@ -25,6 +27,7 @@ export function DayResultFeed() {
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { lastDayGroupResults, lastDeltaByGroup, groupMatches, lastKnockoutResults, lastBatchDate, lastBatchTimeSlot, phase } =
     useProgressStore()
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
 
   const groupTeams = useMemo(
     () =>
@@ -37,6 +40,7 @@ export function DayResultFeed() {
     () => computeQualificationStatuses(groupTeams, groupMatches),
     [groupTeams, groupMatches],
   )
+  const crisisByTeam = useCrisisTeams()
 
   const hasGroupResults = lastDayGroupResults.length > 0
   const hasKnockoutResults = lastKnockoutResults.length > 0
@@ -66,7 +70,15 @@ export function DayResultFeed() {
             return (
               <div
                 key={`group-${i}`}
-                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
+                onClick={() =>
+                  selectMatch({
+                    kind: 'group',
+                    match: m,
+                    date: lastBatchDate ?? undefined,
+                    timeSlot: lastBatchTimeSlot ?? undefined,
+                  })
+                }
+                className={`flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between ${
                   upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
@@ -95,7 +107,15 @@ export function DayResultFeed() {
             return (
               <div
                 key={`ko-${i}`}
-                className={`flex flex-col gap-1 rounded-lg px-3 py-1.5 text-sm sm:flex-row sm:items-center sm:justify-between ${
+                onClick={() =>
+                  selectMatch({
+                    kind: 'knockout',
+                    match: m,
+                    date: lastBatchDate ?? undefined,
+                    timeSlot: lastBatchTimeSlot ?? undefined,
+                  })
+                }
+                className={`flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between ${
                   isUpsetResult ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
@@ -135,6 +155,7 @@ export function DayResultFeed() {
                     matches={groupMatches.filter((m) => m.group === group)}
                     delta={lastDeltaByGroup[group]}
                     statusByTeam={statusByTeam}
+                    crisisByTeam={crisisByTeam}
                     compact
                   />
                 </div>

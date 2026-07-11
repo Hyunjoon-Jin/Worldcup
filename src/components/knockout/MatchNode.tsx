@@ -1,6 +1,7 @@
 import { TeamLink } from '../common/TeamLink'
 import { UpsetBadge } from '../common/UpsetBadge'
 import { isUpset } from '../../engine/matchEngine'
+import { useMatchDetailStore } from '../../store/useMatchDetailStore'
 import type { KnockoutSlotState } from '../../engine/tournamentSimulation'
 
 interface MatchNodeProps {
@@ -43,12 +44,16 @@ function TeamRow({
 }
 
 export function MatchNode({ slot, confirmed }: MatchNodeProps) {
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const result = slot.result
   const loserTeamId = result ? (result.winnerTeamId === result.homeTeamId ? result.awayTeamId : result.homeTeamId) : null
   const upset = result && loserTeamId ? isUpset(result.winnerTeamId, loserTeamId) : false
 
   return (
-    <div className={`glass w-44 shrink-0 rounded-xl py-1 text-xs sm:w-52 ${upset ? 'ring-1 ring-red-400/40' : ''}`}>
+    <div
+      onClick={() => result && selectMatch({ kind: 'knockout', match: result })}
+      className={`glass w-44 shrink-0 rounded-xl py-1 text-xs sm:w-52 ${result ? 'cursor-pointer transition-colors hover:bg-white/10' : ''} ${upset ? 'ring-1 ring-red-400/40' : ''}`}
+    >
       <TeamRow
         teamId={slot.team1Id}
         isWinner={!!result && result.winnerTeamId === slot.team1Id}

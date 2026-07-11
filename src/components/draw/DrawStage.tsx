@@ -104,8 +104,8 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
         </div>
       )}
 
-      <PotTray pots={state.pots} currentPot={nextSlot?.pot ?? null} />
       <GroupBoard groups={state.groups} highlightGroup={nextSlot?.group ?? null} />
+      <PotTray pots={state.pots} currentPot={nextSlot?.pot ?? null} />
 
       <GlassCard className="p-4 text-xs leading-relaxed text-gray-400">
         <strong className="text-gray-300">조추첨 규정:</strong> 개최국 3팀(멕시코=A1, 캐나다=B1, 미국=D1)은 사전

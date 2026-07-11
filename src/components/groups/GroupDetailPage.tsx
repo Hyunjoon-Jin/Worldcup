@@ -10,6 +10,8 @@ import { classifyMatchUpset } from '../../engine/matchEngine'
 import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
+import { useMatchDetailStore } from '../../store/useMatchDetailStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
 import type { GroupLetter } from '../../types/group'
 
 interface GroupDetailPageProps {
@@ -20,6 +22,7 @@ interface GroupDetailPageProps {
 export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches } = useProgressStore()
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
 
   const teamIds = (drawGroups[group] as (string | null)[]).filter(Boolean) as string[]
   const fixtures = (schedule?.groupMatches ?? []).filter((m) => m.group === group)
@@ -36,6 +39,7 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
     () => computeQualificationStatuses(groupTeams, groupMatches),
     [groupTeams, groupMatches],
   )
+  const crisisByTeam = useCrisisTeams()
 
   return (
     <div className="flex flex-col gap-4">
@@ -47,7 +51,7 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
       </div>
 
       <GlassCard className="p-4">
-        <GroupTable teamIds={teamIds} matches={played} statusByTeam={statusByTeam} />
+        <GroupTable teamIds={teamIds} matches={played} statusByTeam={statusByTeam} crisisByTeam={crisisByTeam} />
       </GlassCard>
 
       <GlassCard className="p-4">
@@ -66,7 +70,21 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
             return (
               <div
                 key={fx.id}
-                className={`flex flex-col gap-1.5 rounded-lg px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between ${
+                onClick={() =>
+                  selectMatch(
+                    result
+                      ? { kind: 'group', match: result, date: fx.date, timeSlot: fx.timeSlot }
+                      : {
+                          kind: 'upcoming',
+                          homeTeamId: homeId,
+                          awayTeamId: awayId,
+                          label: `조별리그 MD${fx.matchday} · 조 ${group}`,
+                          date: fx.date,
+                          timeSlot: fx.timeSlot,
+                        },
+                  )
+                }
+                className={`flex cursor-pointer flex-col gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between ${
                   upsetInfo?.upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'
                 }`}
               >
