@@ -1,0 +1,53 @@
+// 핵심 플로우 스모크 테스트 (F3): 조추첨 → 결승까지 진행 → 확률 대시보드 렌더.
+// @playwright/test 러너 없이 playwright 크로미움으로 직접 구동한다.
+// 실행: 앱 프리뷰 서버(기본 http://localhost:4173)를 띄운 뒤 `node tests/e2e/smoke.mjs`.
+import { chromium } from 'playwright'
+
+const BASE_URL = process.env.SMOKE_URL ?? 'http://localhost:4173'
+const EXEC_PATH = process.env.PLAYWRIGHT_CHROMIUM ?? undefined
+
+function assert(condition, message) {
+  if (!condition) throw new Error(`❌ ${message}`)
+  console.log(`✓ ${message}`)
+}
+
+const browser = await chromium.launch(EXEC_PATH ? { executablePath: EXEC_PATH } : {})
+const page = await browser.newPage()
+const consoleErrors = []
+// 외부 리소스(폰트 CDN 등) 로드 실패는 앱 버그가 아니라 네트워크/프록시 환경 문제이므로 제외하고,
+// 실제 JS 실행 오류만 게이트한다.
+const isNetworkNoise = (text) => /Failed to load resource|ERR_|net::/.test(text)
+page.on('console', (msg) => {
+  if (msg.type() === 'error' && !isNetworkNoise(msg.text())) consoleErrors.push(msg.text())
+})
+page.on('pageerror', (err) => consoleErrors.push(String(err)))
+
+try {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  assert(await page.getByText('2026 북중미 월드컵 시뮬레이터').isVisible(), '앱이 로드된다')
+
+  // 시드로 즉시 조추첨(결정론적)
+  await page.getByRole('textbox', { name: '조추첨 시드' }).fill('SMOKE-TEST')
+  await page.getByText('시드로 즉시 조추첨').click()
+  await page.getByText('조추첨이 완료되었습니다', { exact: false }).waitFor({ timeout: 10000 })
+  assert(true, '시드 조추첨이 완료된다')
+  assert((await page.getByText('SMOKE-TEST').count()) > 0, '사용한 시드가 표시된다')
+
+  // 일정 진행 탭으로 이동 → 결승까지 자동 진행
+  await page.getByRole('tab', { name: '일정 진행' }).click()
+  await page.getByText('결승까지 자동 진행').click()
+  await page.getByText('우승팀이 결정되었습니다', { exact: false }).waitFor({ timeout: 15000 })
+  assert(true, '결승까지 자동 진행이 우승팀을 결정한다')
+
+  // 확률 대시보드 렌더
+  await page.getByRole('tab', { name: '확률 대시보드' }).click()
+  await page.getByText('몬테카를로 시뮬레이션한 확률', { exact: false }).waitFor({ timeout: 10000 })
+  assert(true, '확률 대시보드가 렌더된다')
+
+  assert(consoleErrors.length === 0, `콘솔 오류가 없다 (발견: ${consoleErrors.length})`)
+  if (consoleErrors.length) console.error(consoleErrors)
+
+  console.log('\n✅ 스모크 테스트 통과')
+} finally {
+  await browser.close()
+}
