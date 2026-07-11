@@ -36,6 +36,49 @@ function samplePoisson(lambda: number): number {
   return k - 1
 }
 
+function poissonPmf(lambda: number, k: number): number {
+  let factorial = 1
+  for (let i = 2; i <= k; i++) factorial *= i
+  return (Math.exp(-lambda) * lambda ** k) / factorial
+}
+
+export interface MatchForecast {
+  homeWinPct: number
+  drawPct: number
+  awayWinPct: number
+}
+
+const FORECAST_GOAL_CAP = 8
+
+/**
+ * 실제 무작위 표본추출 없이, simulateMatch와 동일한 득점 기대값(포아송 분포)을 정확한
+ * 확률 분포 합산으로 계산해 경기 전 승/무/패 예상 확률을 구한다(경기 결과 자체는 그대로
+ * 무작위지만, "경기 전 예상"은 매번 같은 값이 나와야 하므로 시뮬레이션이 아닌 해석적 계산을
+ * 쓴다).
+ */
+export function forecastMatch(homeTeamId: string, awayTeamId: string): MatchForecast {
+  const home = getRatings(homeTeamId)
+  const away = getRatings(awayTeamId)
+  const homeIsHost = TEAMS_BY_ID[homeTeamId].isHost
+  const awayIsHost = TEAMS_BY_ID[awayTeamId].isHost
+  const homeLambda = expectedGoals(home, away, homeIsHost)
+  const awayLambda = expectedGoals(away, home, awayIsHost)
+
+  let homeWin = 0
+  let draw = 0
+  let awayWin = 0
+  for (let h = 0; h <= FORECAST_GOAL_CAP; h++) {
+    for (let a = 0; a <= FORECAST_GOAL_CAP; a++) {
+      const p = poissonPmf(homeLambda, h) * poissonPmf(awayLambda, a)
+      if (h > a) homeWin += p
+      else if (h === a) draw += p
+      else awayWin += p
+    }
+  }
+  const total = homeWin + draw + awayWin
+  return { homeWinPct: (homeWin / total) * 100, drawPct: (draw / total) * 100, awayWinPct: (awayWin / total) * 100 }
+}
+
 export interface SimulatedScore {
   homeGoals: number
   awayGoals: number

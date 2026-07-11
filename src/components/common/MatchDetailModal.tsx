@@ -1,11 +1,18 @@
+import { useMemo } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
+import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
-import { getRatings, classifyMatchUpset } from '../../engine/matchEngine'
+import { getRatings, classifyMatchUpset, forecastMatch, type MatchForecast } from '../../engine/matchEngine'
+import { generateUpsetArticle, type UpsetArticle } from '../../engine/upsetArticle'
+import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
+import { useDrawStore } from '../../store/useDrawStore'
+import { useProgressStore } from '../../store/useProgressStore'
 import { FlagIcon } from './FlagIcon'
 import { GlassCard } from './GlassCard'
 import { UpsetBadge } from './UpsetBadge'
+import type { GroupLetter } from '../../types/group'
 
 const ROUND_LABEL_KO: Record<string, string> = {
   R32: '32강',
@@ -30,15 +37,123 @@ function RatingRow({ label, homeValue, awayValue }: { label: string; homeValue: 
   )
 }
 
+function ForecastBar({ forecast }: { forecast: MatchForecast }) {
+  return (
+    <div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full bg-sky-400" style={{ width: `${forecast.homeWinPct}%` }} />
+        <div className="h-full bg-gray-500" style={{ width: `${forecast.drawPct}%` }} />
+        <div className="h-full bg-rose-400" style={{ width: `${forecast.awayWinPct}%` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+        <span>{forecast.homeWinPct.toFixed(0)}%</span>
+        <span>무 {forecast.drawPct.toFixed(0)}%</span>
+        <span>{forecast.awayWinPct.toFixed(0)}%</span>
+      </div>
+    </div>
+  )
+}
+
+interface GroupStandingInfo {
+  position: number
+  points: number
+  goalDiff: number
+}
+
+function StandingChip({ before, after }: { before?: GroupStandingInfo; after?: GroupStandingInfo }) {
+  if (!after) return null
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
+      {before ? (
+        <>
+          {before.position}위({before.points}점)
+          <span className="text-gray-600">→</span>
+        </>
+      ) : null}
+      <span className="font-bold text-gray-200">
+        {after.position}위({after.points}점, {after.goalDiff > 0 ? `+${after.goalDiff}` : after.goalDiff})
+      </span>
+    </span>
+  )
+}
+
+function ArticleCard({ article }: { article: UpsetArticle }) {
+  return (
+    <div className="rounded-lg border border-red-400/30 bg-red-500/[0.06] p-3">
+      <p className="mb-1.5 text-[10px] font-bold tracking-wide text-red-300/80">📰 이변 속보</p>
+      <h3 className="mb-2 text-sm leading-snug font-bold text-white">{article.headline}</h3>
+      <div className="space-y-1.5">
+        {article.paragraphs.map((p, i) => (
+          <p key={i} className="text-[11px] leading-relaxed text-gray-300">
+            {p}
+          </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function MatchDetailModal() {
   const selected = useMatchDetailStore((s) => s.selected)
   const clearMatch = useMatchDetailStore((s) => s.clearMatch)
   const selectTeam = useSelectionStore((s) => s.selectTeam)
+  const drawGroups = useDrawStore((s) => s.state.groups)
+  const allGroupMatches = useProgressStore((s) => s.groupMatches)
 
-  if (!selected) return null
+  const homeTeamId = selected ? (selected.kind === 'upcoming' ? selected.homeTeamId : selected.match.homeTeamId) : null
+  const awayTeamId = selected ? (selected.kind === 'upcoming' ? selected.awayTeamId : selected.match.awayTeamId) : null
 
-  const homeTeamId = selected.kind === 'upcoming' ? selected.homeTeamId : selected.match.homeTeamId
-  const awayTeamId = selected.kind === 'upcoming' ? selected.awayTeamId : selected.match.awayTeamId
+  const forecast = useMemo(
+    () => (homeTeamId && awayTeamId ? forecastMatch(homeTeamId, awayTeamId) : null),
+    [homeTeamId, awayTeamId],
+  )
+
+  const groupContext = useMemo(() => {
+    if (!selected || selected.kind !== 'group') return null
+    const group = selected.match.group
+    const teamIds = (drawGroups[group] as (string | null)[]).filter(Boolean) as string[]
+    if (teamIds.length < 4) return null
+    const matchday = selected.match.matchday
+    const beforeMatches = allGroupMatches.filter((m) => m.group === group && m.matchday < matchday)
+    const afterMatches = allGroupMatches.filter((m) => m.group === group && m.matchday <= matchday)
+    const beforeOrder = rankGroupTeams(teamIds, beforeMatches)
+    const afterOrder = rankGroupTeams(teamIds, afterMatches)
+    const beforeStandings = computeStandings(teamIds, beforeMatches)
+    const afterStandings = computeStandings(teamIds, afterMatches)
+
+    const infoFor = (teamId: string, order: string[], standings: ReturnType<typeof computeStandings>): GroupStandingInfo => {
+      const s = standings[teamId]
+      return { position: order.indexOf(teamId) + 1, points: s.points, goalDiff: s.goalsFor - s.goalsAgainst }
+    }
+
+    return {
+      group,
+      before: matchday > 1
+        ? { home: infoFor(selected.match.homeTeamId, beforeOrder, beforeStandings), away: infoFor(selected.match.awayTeamId, beforeOrder, beforeStandings) }
+        : null,
+      after: { home: infoFor(selected.match.homeTeamId, afterOrder, afterStandings), away: infoFor(selected.match.awayTeamId, afterOrder, afterStandings) },
+    }
+  }, [selected, drawGroups, allGroupMatches])
+
+  const knockoutContext = useMemo(() => {
+    if (!selected || selected.kind !== 'knockout') return null
+    const findGroupInfo = (teamId: string) => {
+      const group = GROUP_LETTERS.find((g) => (drawGroups[g] as (string | null)[])?.includes(teamId))
+      if (!group) return null
+      const teamIds = (drawGroups[group] as (string | null)[]).filter(Boolean) as string[]
+      const groupMatches = allGroupMatches.filter((m) => m.group === group)
+      const order = rankGroupTeams(teamIds, groupMatches)
+      const position = order.indexOf(teamId) + 1
+      return { group: group as GroupLetter, position }
+    }
+    return {
+      home: findGroupInfo(selected.match.homeTeamId),
+      away: findGroupInfo(selected.match.awayTeamId),
+    }
+  }, [selected, drawGroups, allGroupMatches])
+
+  if (!selected || !homeTeamId || !awayTeamId || !forecast) return null
+
   const homeTeam = TEAMS_BY_ID[homeTeamId]
   const awayTeam = TEAMS_BY_ID[awayTeamId]
   const homeRatings = getRatings(homeTeamId)
@@ -59,11 +174,33 @@ export function MatchDetailModal() {
         : selected.label
 
   const favoredTeamId =
-    homeRatings.overall === awayRatings.overall
-      ? null
-      : homeRatings.overall > awayRatings.overall
-        ? homeTeamId
-        : awayTeamId
+    homeRatings.overall === awayRatings.overall ? null : homeRatings.overall > awayRatings.overall ? homeTeamId : awayTeamId
+
+  const article: UpsetArticle | null =
+    played && upsetInfo && (upsetInfo.upset || upsetInfo.surpriseDraw)
+      ? (() => {
+          const isDraw = !upsetInfo.upset && upsetInfo.surpriseDraw
+          const articleWinnerId = isDraw
+            ? homeRatings.overall <= awayRatings.overall
+              ? homeTeamId
+              : awayTeamId
+            : upsetInfo.winnerTeamId!
+          const articleLoserId = articleWinnerId === homeTeamId ? awayTeamId : homeTeamId
+          const winnerGoals = articleWinnerId === homeTeamId ? homeGoals! : awayGoals!
+          const loserGoals = articleWinnerId === homeTeamId ? awayGoals! : homeGoals!
+          const underdogForecastPct = articleWinnerId === homeTeamId ? forecast.homeWinPct : forecast.awayWinPct
+          return generateUpsetArticle({
+            winnerTeamId: articleWinnerId,
+            loserTeamId: articleLoserId,
+            winnerGoals,
+            loserGoals,
+            isDraw,
+            wentToPenalties: !!wentToPenalties,
+            underdogForecastPct,
+            roundLabel: label,
+          })
+        })()
+      : null
 
   const goToTeam = (teamId: string) => {
     clearMatch()
@@ -75,7 +212,11 @@ export function MatchDetailModal() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={clearMatch}
     >
-      <GlassCard strong className="w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+      <GlassCard
+        strong
+        className="max-h-[88vh] w-full max-w-md overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mb-1 flex items-center justify-between">
           <span className="text-xs font-semibold text-gray-400">{label}</span>
           <button type="button" onClick={clearMatch} className="text-gray-400 hover:text-white" aria-label="닫기">
@@ -135,11 +276,48 @@ export function MatchDetailModal() {
           </p>
         )}
 
+        {article && (
+          <div className="mb-4">
+            <ArticleCard article={article} />
+          </div>
+        )}
+
+        {groupContext && (
+          <div className="mb-4 rounded-lg bg-white/5 p-3">
+            <p className="mb-2 text-center text-[11px] font-bold text-gray-400">조 {groupContext.group} 순위 변동</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-1 flex-col items-center gap-0.5">
+                <span className="text-[11px] text-gray-300">{homeTeam.nameKo}</span>
+                <StandingChip before={groupContext.before?.home} after={groupContext.after.home} />
+              </div>
+              <div className="flex flex-1 flex-col items-center gap-0.5">
+                <span className="text-[11px] text-gray-300">{awayTeam.nameKo}</span>
+                <StandingChip before={groupContext.before?.away} after={groupContext.after.away} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {knockoutContext && (knockoutContext.home || knockoutContext.away) && (
+          <div className="mb-4 rounded-lg bg-white/5 p-3">
+            <p className="mb-2 text-center text-[11px] font-bold text-gray-400">조별리그 성적</p>
+            <div className="flex items-center justify-between gap-2 text-[11px] text-gray-400">
+              <span className="flex-1 text-center">
+                {knockoutContext.home ? `조 ${knockoutContext.home.group} ${knockoutContext.home.position}위로 진출` : '진출 정보 없음'}
+              </span>
+              <span className="flex-1 text-center">
+                {knockoutContext.away ? `조 ${knockoutContext.away.group} ${knockoutContext.away.position}위로 진출` : '진출 정보 없음'}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-lg bg-white/5 p-3">
           <p className="mb-2 text-center text-[11px] font-bold text-gray-400">
-            {played ? '경기 전 전력 비교' : '전력 비교'}
+            {played ? '경기 전 예상' : '예상 승부'}
           </p>
-          <div className="space-y-1.5">
+          <ForecastBar forecast={forecast} />
+          <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
             <RatingRow label="공격" homeValue={homeRatings.attack} awayValue={awayRatings.attack} />
             <RatingRow label="수비" homeValue={homeRatings.defense} awayValue={awayRatings.defense} />
             <RatingRow label="컨디션" homeValue={homeRatings.form} awayValue={awayRatings.form} />
