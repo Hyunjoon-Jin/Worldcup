@@ -1,4 +1,5 @@
 import type { Confederation, Pot, Team, TeamRatings } from '../types/team'
+import { RATINGS_FROM_RANK as R, clamp } from '../engine/config'
 
 interface RawTeam {
   id: string
@@ -75,16 +76,13 @@ const RAW_TEAMS: RawTeam[] = [
   { id: 'CUW', nameKo: '퀴라소', nameEn: 'Curaçao', code: 'CUW', iso2: 'CW', confederation: 'CONCACAF', pot: 4, rank: 48, styleBias: -1 },
 ]
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
-
 function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
   // rank 1 -> ~97, rank 48 -> ~46, roughly linear with a soft floor
-  const overall = clamp(Math.round(97 - (rank - 1) * 1.05), 46, 97)
-  const attack = clamp(overall + Math.round(styleBias * 1.4), 35, 99)
-  const defense = clamp(overall - Math.round(styleBias * 1.4), 35, 99)
-  const form = clamp(overall + Math.round(((rank * 37) % 11) - 5), 40, 99)
+  const overall = clamp(Math.round(R.overallTop - (rank - 1) * R.overallSlope), R.overallFloor, R.overallCap)
+  const styleShift = Math.round(styleBias * R.styleFactor)
+  const attack = clamp(overall + styleShift, R.attackFloor, R.attackCap)
+  const defense = clamp(overall - styleShift, R.attackFloor, R.attackCap)
+  const form = clamp(overall + Math.round(((rank * 37) % 11) - 5), R.formFloor, R.formCap)
   return { attack, defense, form, overall }
 }
 

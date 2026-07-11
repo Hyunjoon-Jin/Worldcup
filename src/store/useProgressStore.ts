@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { GROUP_LETTERS } from '../data/hostSlots'
 import {
   FINAL_SLOT_ID,
@@ -188,7 +189,9 @@ function simulateKnockoutFixtures(fixtures: ScheduledKnockoutMatch[], knockoutSl
   return { slots, results }
 }
 
-export const useProgressStore = create<ProgressStore>()((set, get) => ({
+export const useProgressStore = create<ProgressStore>()(
+  persist(
+    (set, get) => ({
   schedule: null,
   phase: 'idle',
   currentDay: 1,
@@ -382,4 +385,27 @@ export const useProgressStore = create<ProgressStore>()((set, get) => ({
       })
     }
   },
-}))
+    }),
+    {
+      name: 'wc2026-progress-store',
+      version: 1,
+      // 액션 함수는 저장하지 않고, 진행 데이터만 영속화한다(A1). schedule은 결정론적이라
+      // 저장해도 무방하며, 복원 후 initSchedule이 존재하면 재생성하지 않는다.
+      partialize: (state) => ({
+        schedule: state.schedule,
+        phase: state.phase,
+        currentDay: state.currentDay,
+        groupMatches: state.groupMatches,
+        lastBatchDate: state.lastBatchDate,
+        lastBatchTimeSlot: state.lastBatchTimeSlot,
+        lastDayGroupResults: state.lastDayGroupResults,
+        lastDeltaByGroup: state.lastDeltaByGroup,
+        groupResults: state.groupResults,
+        qualifiedThirdGroups: state.qualifiedThirdGroups,
+        knockoutSlots: state.knockoutSlots,
+        lastKnockoutResults: state.lastKnockoutResults,
+        champion: state.champion,
+      }),
+    },
+  ),
+)

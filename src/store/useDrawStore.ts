@@ -45,6 +45,6 @@ export const useDrawStore = create<DrawStore>()(
         })
       },
     }),
-    { name: 'wc2026-draw-store' },
+    { name: 'wc2026-draw-store', version: 1 },
   ),
 )

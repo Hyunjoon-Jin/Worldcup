@@ -19,6 +19,7 @@ import {
 } from './tournamentSimulation'
 import { useDrawStore } from '../store/useDrawStore'
 import { useProgressStore } from '../store/useProgressStore'
+import { OPPONENT_FORECAST_ITERATIONS, SCENARIO_ITERATIONS } from './config'
 import type { GroupLetter } from '../types/group'
 import type { GroupMatch, KnockoutMatch, KnockoutRound } from '../types/match'
 import type { SimulationResult, TeamProbabilities } from '../types/simulation'
@@ -208,7 +209,7 @@ export interface TeamScenarioResult {
 }
 
 /** 해당 팀의 마지막 조별리그 경기 결과(승/무/패)를 가정했을 때 32강 진출 확률을 각각 산출한다. */
-export function runTeamScenarioSimulation(teamId: string, iterations = 500): TeamScenarioResult {
+export function runTeamScenarioSimulation(teamId: string, iterations = SCENARIO_ITERATIONS): TeamScenarioResult {
   const outcomes: Array<'win' | 'draw' | 'loss'> = ['win', 'draw', 'loss']
   const result = {} as TeamScenarioResult
   for (const outcome of outcomes) {
@@ -246,7 +247,7 @@ function findTeamMatchInRound(
 }
 
 /** 라운드별로 이 팀이 만날 가능성이 높은 상대를 반복 시뮬레이션으로 예측한다(도달 조건부 확률). */
-export function runOpponentForecast(teamId: string, iterations = 500): RoundOpponentForecast[] {
+export function runOpponentForecast(teamId: string, iterations = OPPONENT_FORECAST_ITERATIONS): RoundOpponentForecast[] {
   const reachCounts: Record<KnockoutRound, number> = { R32: 0, R16: 0, QF: 0, SF: 0, THIRD: 0, FINAL: 0 }
   const opponentCounts: Record<KnockoutRound, Record<string, number>> = {
     R32: {},

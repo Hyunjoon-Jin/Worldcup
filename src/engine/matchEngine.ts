@@ -2,12 +2,14 @@ import { TEAMS_BY_ID } from '../data/teams'
 import { useConditionStore } from '../store/useConditionStore'
 import { useSandboxStore } from '../store/useSandboxStore'
 import type { TeamRatings } from '../types/team'
-
-const HOST_ADVANTAGE = 5
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
+import {
+  EXPECTED_GOALS,
+  FORECAST_GOAL_CAP,
+  HOST_ADVANTAGE,
+  PENALTY,
+  UPSET_RATING_GAP,
+  clamp,
+} from './config'
 
 /** 이번 대회의 팀별 컨디션(useConditionStore)을 폼 능력치에 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다. */
 export function getRatings(teamId: string): TeamRatings {
@@ -21,8 +23,12 @@ export function getRatings(teamId: string): TeamRatings {
 // 실제 축구 경기의 평균 득점(팀당 약 1.3골)에 가깝게 보정하고, 극단적인 능력치 차이에서도
 // 대량 득점 블로아웃이 지나치게 자주 나오지 않도록 민감도를 낮추고 상하한을 좁혔다.
 function expectedGoals(attacker: TeamRatings, defender: TeamRatings, isHostTeam: boolean): number {
-  const strengthDiff = attacker.attack - defender.defense + (attacker.form - 70) * 0.15 + (isHostTeam ? HOST_ADVANTAGE : 0)
-  return clamp(1.25 + strengthDiff / 38, 0.35, 3.1)
+  const strengthDiff =
+    attacker.attack -
+    defender.defense +
+    (attacker.form - EXPECTED_GOALS.formBaseline) * EXPECTED_GOALS.formWeight +
+    (isHostTeam ? HOST_ADVANTAGE : 0)
+  return clamp(EXPECTED_GOALS.base + strengthDiff / EXPECTED_GOALS.divisor, EXPECTED_GOALS.min, EXPECTED_GOALS.max)
 }
 
 function samplePoisson(lambda: number): number {
@@ -47,8 +53,6 @@ export interface MatchForecast {
   drawPct: number
   awayWinPct: number
 }
-
-const FORECAST_GOAL_CAP = 8
 
 /**
  * 실제 무작위 표본추출 없이, simulateMatch와 동일한 득점 기대값(포아송 분포)을 정확한
@@ -118,8 +122,8 @@ export function simulateKnockoutMatch(homeTeamId: string, awayTeamId: string): S
 
   const home = getRatings(homeTeamId)
   const away = getRatings(awayTeamId)
-  const homeStrength = home.overall + home.form * 0.2 + 50
-  const awayStrength = away.overall + away.form * 0.2 + 50
+  const homeStrength = home.overall + home.form * PENALTY.formFactor + PENALTY.baseline
+  const awayStrength = away.overall + away.form * PENALTY.formFactor + PENALTY.baseline
   const homeWinProb = homeStrength / (homeStrength + awayStrength)
 
   return {
@@ -129,8 +133,6 @@ export function simulateKnockoutMatch(homeTeamId: string, awayTeamId: string): S
     winnerTeamId: Math.random() < homeWinProb ? homeTeamId : awayTeamId,
   }
 }
-
-const UPSET_RATING_GAP = 8
 
 /** 승자의 종합 능력치가 패자보다 일정 격차 이상 낮으면 이변으로 판정한다. */
 export function isUpset(winnerTeamId: string, loserTeamId: string): boolean {

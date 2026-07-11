@@ -26,7 +26,7 @@ export const useSandboxStore = create<SandboxStore>()(
       },
       resetAll: () => set({ overrides: {} }),
     }),
-    { name: 'wc2026-sandbox-store' },
+    { name: 'wc2026-sandbox-store', version: 1 },
   ),
 )
 

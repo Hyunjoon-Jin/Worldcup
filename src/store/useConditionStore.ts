@@ -1,9 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { TEAMS } from '../data/teams'
-
-/** 대회(조추첨)마다 팀별 컨디션이 이 범위 안에서 무작위로 오르내린다(폼 능력치에 가감). */
-const CONDITION_RANGE = 8
+import { CONDITION_RANGE } from '../engine/config'
 
 function rollConditions(): Record<string, number> {
   const offsets: Record<string, number> = {}
@@ -32,6 +30,6 @@ export const useConditionStore = create<ConditionStore>()(
       offsets: rollConditions(),
       reroll: () => set({ offsets: rollConditions() }),
     }),
-    { name: 'wc2026-condition-store' },
+    { name: 'wc2026-condition-store', version: 1 },
   ),
 )
