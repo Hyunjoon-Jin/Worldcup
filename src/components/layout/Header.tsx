@@ -18,6 +18,7 @@ export function Header() {
       <GlassButton
         variant={sandboxMode ? 'danger' : 'ghost'}
         onClick={toggleSandbox}
+        aria-pressed={sandboxMode}
         className="shrink-0"
       >
         {sandboxMode ? '🧪 샌드박스 모드 ON' : '🧪 샌드박스 모드'}

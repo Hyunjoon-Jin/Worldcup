@@ -15,7 +15,7 @@ const ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL'
 const MEDALS = ['🥇', '🥈', '🥉']
 
 export function ScheduleStage() {
-  const { schedule, phase, currentDay, groupMatches, knockoutSlots, initSchedule, advanceDay, advanceTimeSlot, champion } =
+  const { schedule, phase, currentDay, groupMatches, knockoutSlots, initSchedule, advanceDay, advanceTimeSlot, advanceToEnd, champion } =
     useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
   const runSimulation = useSimulationStore((s) => s.run)
@@ -85,6 +85,9 @@ export function ScheduleStage() {
                 </GlassButton>
                 <GlassButton variant="ghost" onClick={advanceDay}>
                   ▶ 다음 날 전체 진행
+                </GlassButton>
+                <GlassButton variant="ghost" onClick={advanceToEnd} disabled={!nextSlotPreview}>
+                  ⏭ 결승까지 자동 진행
                 </GlassButton>
               </div>
               {nextSlotPreview?.date && (

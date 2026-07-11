@@ -47,6 +47,8 @@ interface ProgressStore {
   advanceDay: () => void
   /** 현재 날짜/일정에서 가장 이른 시간대 경기 한 타임만 진행한다. */
   advanceTimeSlot: () => void
+  /** 대회가 끝날 때까지(결승·3-4위전 완료) 남은 모든 경기를 한 번에 진행한다. */
+  advanceToEnd: () => void
   reset: () => void
 }
 
@@ -294,6 +296,17 @@ export const useProgressStore = create<ProgressStore>()(
         champion: finalResult?.winnerTeamId ?? null,
         phase,
       })
+    }
+  },
+
+  advanceToEnd: () => {
+    // advanceDay를 반복 호출해 대회 종료까지 진행한다. 진행이 멈추면(상태 불변) 중단한다.
+    for (let guard = 0; guard < 500; guard++) {
+      const before = get()
+      if (before.phase === 'complete') break
+      before.advanceDay()
+      const after = get()
+      if (after.groupMatches === before.groupMatches && after.knockoutSlots === before.knockoutSlots) break
     }
   },
 

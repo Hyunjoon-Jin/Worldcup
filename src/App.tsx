@@ -15,6 +15,7 @@ import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
 import { useSimulationStore } from './store/useSimulationStore'
+import { resetTournament } from './store/tournamentActions'
 
 type TabId = 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
@@ -27,7 +28,10 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 
 function App() {
-  const [tab, setTab] = useState<TabId>('draw')
+  // 저장된 대회가 완료된 조추첨을 갖고 있으면(이어하기) 일정 탭에서 시작한다 (A3).
+  const [tab, setTab] = useState<TabId>(() => (useDrawStore.getState().isComplete ? 'schedule' : 'draw'))
+  // 새로고침/재방문으로 저장된 대회를 이어가는 경우에만 안내 배너를 띄운다.
+  const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
   const isDrawComplete = useDrawStore((s) => s.isComplete)
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const selectedTeamId = useSelectionStore((s) => s.selectedTeamId)
@@ -63,6 +67,28 @@ function App() {
     <AppShell>
       <Header />
       {sandboxMode && <SandboxPanel />}
+      {showResume && (
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2.5 text-center text-sm text-emerald-100">
+          <span>💾 저장된 대회를 이어가는 중입니다.</span>
+          <button
+            onClick={() => {
+              resetTournament()
+              setTab('draw')
+              setShowResume(false)
+            }}
+            className="rounded-lg bg-emerald-500/25 px-3 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-500/40"
+          >
+            🆕 새 대회 시작
+          </button>
+          <button
+            onClick={() => setShowResume(false)}
+            aria-label="배너 닫기"
+            className="rounded-lg px-2 py-1 text-xs text-emerald-200/70 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="sticky top-2 z-10 mb-6">
         <TabNav
           tabs={TABS.map((t) => ({ ...t, disabled: t.id !== 'draw' && !isDrawComplete }))}
