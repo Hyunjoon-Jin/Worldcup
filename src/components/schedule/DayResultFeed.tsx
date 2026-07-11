@@ -11,6 +11,7 @@ import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
 import type { GroupLetter } from '../../types/group'
 
 const ROUND_LABEL_KO: Record<string, string> = {
@@ -39,6 +40,7 @@ export function DayResultFeed() {
     () => computeQualificationStatuses(groupTeams, groupMatches),
     [groupTeams, groupMatches],
   )
+  const crisisByTeam = useCrisisTeams()
 
   const hasGroupResults = lastDayGroupResults.length > 0
   const hasKnockoutResults = lastKnockoutResults.length > 0
@@ -153,6 +155,7 @@ export function DayResultFeed() {
                     matches={groupMatches.filter((m) => m.group === group)}
                     delta={lastDeltaByGroup[group]}
                     statusByTeam={statusByTeam}
+                    crisisByTeam={crisisByTeam}
                     compact
                   />
                 </div>

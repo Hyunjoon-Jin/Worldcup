@@ -11,6 +11,7 @@ import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
 import type { GroupLetter } from '../../types/group'
 
 interface GroupDetailPageProps {
@@ -38,6 +39,7 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
     () => computeQualificationStatuses(groupTeams, groupMatches),
     [groupTeams, groupMatches],
   )
+  const crisisByTeam = useCrisisTeams()
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,7 +51,7 @@ export function GroupDetailPage({ group, onBack }: GroupDetailPageProps) {
       </div>
 
       <GlassCard className="p-4">
-        <GroupTable teamIds={teamIds} matches={played} statusByTeam={statusByTeam} />
+        <GroupTable teamIds={teamIds} matches={played} statusByTeam={statusByTeam} crisisByTeam={crisisByTeam} />
       </GlassCard>
 
       <GlassCard className="p-4">

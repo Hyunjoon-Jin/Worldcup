@@ -10,6 +10,7 @@ import { computeQualificationStatuses } from '../../engine/qualificationStatus'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSandboxStore } from '../../store/useSandboxStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
 import type { GroupLetter } from '../../types/group'
 
 const TIER_BADGE: Record<string, { label: string; className: string }> = {
@@ -35,6 +36,7 @@ export function GroupStageView() {
     () => computeQualificationStatuses(groupTeams, groupMatches),
     [groupTeams, groupMatches],
   )
+  const crisisByTeam = useCrisisTeams()
 
   const difficultyAnalysis = useMemo(
     () => analyzeGroupDifficulty(groupTeams),
@@ -74,6 +76,7 @@ export function GroupStageView() {
                 teamIds={groupTeams[group]}
                 matches={groupMatches.filter((m) => m.group === group)}
                 statusByTeam={statusByTeam}
+                crisisByTeam={crisisByTeam}
                 compact
               />
             </GlassCard>

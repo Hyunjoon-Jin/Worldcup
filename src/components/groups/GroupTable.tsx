@@ -1,7 +1,9 @@
 import { TeamLink } from '../common/TeamLink'
+import { TEAMS_BY_ID } from '../../data/teams'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import type { GroupMatch } from '../../types/match'
 import type { QualificationStatus } from '../../engine/qualificationStatus'
+import type { CrisisInfo } from '../../store/useCrisisTeams'
 
 interface GroupTableProps {
   teamIds: string[]
@@ -10,6 +12,7 @@ interface GroupTableProps {
   qualifyLine?: number
   compact?: boolean
   statusByTeam?: Record<string, QualificationStatus>
+  crisisByTeam?: Record<string, CrisisInfo>
 }
 
 function DeltaArrow({ value }: { value: number }) {
@@ -28,7 +31,27 @@ function StatusBadge({ status }: { status?: QualificationStatus }) {
   return null
 }
 
-export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact = false, statusByTeam }: GroupTableProps) {
+function CrisisBadge({ crisis }: { crisis?: CrisisInfo }) {
+  if (!crisis) return null
+  return (
+    <span
+      className="rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-300"
+      title={`직전 대비 32강 진출 확률 ${crisis.drop.toFixed(1)}%p 하락`}
+    >
+      🚨 위기
+    </span>
+  )
+}
+
+export function GroupTable({
+  teamIds,
+  matches,
+  delta,
+  qualifyLine = 2,
+  compact = false,
+  statusByTeam,
+  crisisByTeam,
+}: GroupTableProps) {
   const standings = computeStandings(teamIds, matches)
   const order = rankGroupTeams(teamIds, matches)
 
@@ -64,9 +87,15 @@ export function GroupTable({ teamIds, matches, delta, qualifyLine = 2, compact =
               >
                 <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                 <td className="py-1.5">
-                  <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <TeamLink teamId={teamId} wrap className="min-w-0 font-medium text-gray-100" />
+                    {!compact && (
+                      <span className="hidden text-[10px] text-gray-500 sm:inline">
+                        FIFA {TEAMS_BY_ID[teamId].fifaRankApprox}위
+                      </span>
+                    )}
                     <StatusBadge status={status} />
+                    <CrisisBadge crisis={crisisByTeam?.[teamId]} />
                   </div>
                 </td>
                 <td className="text-center text-gray-300">{s.played}</td>

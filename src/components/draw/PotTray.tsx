@@ -35,7 +35,10 @@ export function PotTray({ pots, currentPot }: PotTrayProps) {
                   >
                     <FlagIcon iso2={team.iso2} className="h-2.5 w-3.5" />
                     <span className="truncate">{team.nameKo}</span>
-                    {team.isHost && <span className="ml-auto text-[9px] text-amber-300">개최국</span>}
+                    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                      <span className="text-[9px] text-gray-500">{team.fifaRankApprox}위</span>
+                      {team.isHost && <span className="text-[9px] text-amber-300">개최국</span>}
+                    </span>
                   </li>
                 )
               })}

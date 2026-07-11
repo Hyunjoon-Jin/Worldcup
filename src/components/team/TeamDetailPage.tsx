@@ -23,6 +23,7 @@ import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
+import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { GroupLetter } from '../../types/group'
 
@@ -39,6 +40,7 @@ const VERDICT_CONFIG: Record<ScenarioVerdict, { label: string; icon: string; cla
   advance: { label: '32강 진출 확정', icon: '✅', className: 'text-emerald-300' },
   eliminated: { label: '32강 진출 실패', icon: '❌', className: 'text-red-300' },
   tiebreak: { label: '타이브레이커로 결정', icon: '⚠️', className: 'text-amber-300' },
+  thirdPending: { label: '3위 진출 여부 미정', icon: '🔎', className: 'text-sky-300' },
 }
 
 const GROUP_THREAT_CONFIG: Record<GroupThreatVerdict, { label: string; icon: string; className: string }> = {
@@ -96,6 +98,7 @@ export function TeamDetailPage() {
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
+  const crisisByTeam = useCrisisTeams()
 
   const [scenario, setScenario] = useState<TeamScenarioResult | null>(null)
   const [scenarioLoading, setScenarioLoading] = useState(false)
@@ -240,8 +243,7 @@ export function TeamDetailPage() {
     const otherTeamAId = drawGroups[group][otherFixture.homeSeed - 1]
     const otherTeamBId = drawGroups[group][otherFixture.awaySeed - 1]
     if (!otherTeamAId || !otherTeamBId) return []
-    const groupPlayedMatches = groupMatches.filter((m) => m.group === group)
-    return analyzeLastMatchdayScenarios(groupTeams[group], groupPlayedMatches, teamId, otherTeamAId, otherTeamBId)
+    return analyzeLastMatchdayScenarios(group, groupTeams, groupMatches, teamId, otherTeamAId, otherTeamBId)
   }, [teamId, group, showScenario, teamGroupMatches, groupMatches, schedule, drawGroups, groupTeams])
 
   useEffect(() => {
@@ -283,7 +285,8 @@ export function TeamDetailPage() {
           <div className="flex-1">
             <h2 className="font-display text-2xl font-semibold tracking-wide text-white">{team.nameKo}</h2>
             <p className="text-xs text-gray-400">
-              {team.nameEn} · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트 {team.pot}
+              {team.nameEn} · FIFA 랭킹 {team.fifaRankApprox}위 · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트{' '}
+              {team.pot}
               {group && ` · 조 ${group}`}
               {team.isHost && ' · 개최국'}
             </p>
@@ -295,6 +298,14 @@ export function TeamDetailPage() {
           )}
           {status === 'eliminated' && (
             <span className="rounded-full bg-gray-500/20 px-3 py-1 text-xs font-bold text-gray-400">❌ 탈락확정</span>
+          )}
+          {status === 'undecided' && crisisByTeam[teamId] && (
+            <span
+              className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
+              title={`직전 대비 32강 진출 확률 ${crisisByTeam[teamId].drop.toFixed(1)}%p 하락`}
+            >
+              🚨 위기
+            </span>
           )}
         </div>
 
