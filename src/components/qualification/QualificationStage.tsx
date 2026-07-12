@@ -1,9 +1,11 @@
-import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { useSoundStore } from '../../store/useSoundStore'
+import { playVictory } from '../../engine/sound'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
@@ -521,6 +523,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const probLoading = useQualificationStore((s) => s.probLoading)
   const computeProbabilities = useQualificationStore((s) => s.computeProbabilities)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
+  const soundEnabled = useSoundStore((s) => s.enabled)
   const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
   const [confed, setConfed] = useState<Confederation>(
@@ -529,6 +532,17 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const [selMatch, setSelMatch] = useState<MatchResult | null>(null)
 
   const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
+
+  // 내 팀 본선 진출 순간 효과음·햅틱 (E2). 결과가 새로 나올 때 한 번만 재생.
+  const playedFor = useRef<AllQualificationResult | null>(null)
+  useEffect(() => {
+    if (!result || result === playedFor.current) return
+    playedFor.current = result
+    if (myTeamId && soundEnabled && result.qualified48.includes(myTeamId)) playVictory()
+  }, [result, myTeamId, soundEnabled])
+
+  // 오늘의 예선 시드 (E4 데일리 챌린지): 같은 날이면 전 세계가 같은 예선을 돌린다.
+  const todaySeed = useMemo(() => `DAILY-${new Date().toISOString().slice(0, 10)}`, [])
 
   // 대륙 탭 키보드 이동 (I3): ←/→(또는 ↑/↓)로 대륙 전환, Home/End로 처음/끝.
   const onConfedKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -560,8 +574,18 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             className="w-36 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
           />
           <GlassButton onClick={() => simulate(seedInput)}>⚽ 전체 예선 시뮬레이션</GlassButton>
+          <GlassButton
+            variant="ghost"
+            onClick={() => {
+              setSeedInput(todaySeed)
+              simulate(todaySeed)
+            }}
+            title="오늘 날짜 시드로 전 세계가 같은 예선을 돌립니다"
+          >
+            🗓️ 오늘의 예선
+          </GlassButton>
         </div>
-        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
+        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span>{seed === todaySeed && <span className="ml-1 text-amber-300">· 오늘의 챌린지</span>}</p>}
       </GlassCard>
 
       {!result ? (
