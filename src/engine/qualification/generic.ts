@@ -99,6 +99,7 @@ export function simulateGroupQualification(
   return {
     confederation: cfg.confederation,
     standings,
+    groups: groupRankings,
     qualified: standings.slice(0, cfg.direct),
     playoff: standings.slice(cfg.direct, cfg.direct + cfg.playoff),
     matches,

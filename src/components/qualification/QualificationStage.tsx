@@ -32,63 +32,75 @@ function ConfederationStandings({ confed }: { confed: Confederation }) {
   const standings = computeStandings(r.standings, r.matches)
   const qSet = new Set(r.qualified)
   const pSet = new Set(r.playoff)
+  const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
+  const single = r.groups.length <= 1
 
   return (
     <GlassCard className="p-4">
       {confed === 'CONCACAF' && (
-        <p className="mb-2 text-[11px] text-gray-500">
+        <p className="mb-3 text-[11px] text-gray-500">
           개최국(멕시코·미국·캐나다)은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
         </p>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[500px] text-left text-xs sm:text-sm">
-          <thead>
-            <tr className="text-gray-400">
-              <th className="w-8 py-1 text-center">#</th>
-              <th className="py-1">국가</th>
-              <th className="w-12 py-1 text-center">경기</th>
-              <th className="w-12 py-1 text-center">승점</th>
-              <th className="w-14 py-1 text-center">득실</th>
-              {probabilities && <th className="w-16 py-1 text-right">진출확률</th>}
-              <th className="py-1 text-right">결과</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.standings.map((teamId, idx) => {
-              const s = standings[teamId]
-              const gd = s.goalsFor - s.goalsAgainst
-              const direct = qSet.has(teamId)
-              const po = pSet.has(teamId)
-              return (
-                <tr
-                  key={teamId}
-                  className={`border-t border-white/5 ${direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
-                >
-                  <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
-                  <td className="py-1.5"><NationLabel teamId={teamId} /></td>
-                  <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
-                  <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
-                  <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                  {probabilities && (
-                    <td className="py-1.5 text-right text-sky-300 tabular-nums">
-                      {(probabilities[teamId] ?? 0).toFixed(0)}%
-                    </td>
-                  )}
-                  <td className="py-1.5 text-right">
-                    {direct ? (
-                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
-                    ) : po ? (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 대륙간 PO</span>
-                    ) : (
-                      <span className="text-[10px] text-gray-600">탈락</span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
+        {r.groups.map((groupTeams, gi) => (
+          <div key={gi}>
+            {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{GROUP_LETTERS[gi]}조</p>}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[360px] text-left text-xs sm:text-sm">
+                <thead>
+                  <tr className="text-gray-400">
+                    <th className="w-6 py-1 text-center">#</th>
+                    <th className="py-1">국가</th>
+                    <th className="w-10 py-1 text-center">경기</th>
+                    <th className="w-10 py-1 text-center">승점</th>
+                    <th className="w-12 py-1 text-center">득실</th>
+                    {probabilities && <th className="w-14 py-1 text-right">진출</th>}
+                    <th className="py-1 text-right">결과</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupTeams.map((teamId, idx) => {
+                    const s = standings[teamId]
+                    const gd = s.goalsFor - s.goalsAgainst
+                    const direct = qSet.has(teamId)
+                    const po = pSet.has(teamId)
+                    return (
+                      <tr
+                        key={teamId}
+                        className={`border-t border-white/5 ${direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
+                      >
+                        <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
+                        <td className="py-1.5"><NationLabel teamId={teamId} /></td>
+                        <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
+                        <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
+                        <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
+                        {probabilities && (
+                          <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
+                        )}
+                        <td className="py-1.5 text-right">
+                          {direct ? (
+                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
+                          ) : po ? (
+                            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
+                          ) : (
+                            <span className="text-[10px] text-gray-600">탈락</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
+      {!single && (
+        <p className="mt-3 text-[11px] text-gray-500">
+          ※ 조 순위는 조별 성적, 직행/PO 여부는 전체 대륙 순위(조 1위 우선 → 최고 2위 …)로 결정됩니다.
+        </p>
+      )}
     </GlassCard>
   )
 }

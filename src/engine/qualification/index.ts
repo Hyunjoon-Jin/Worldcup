@@ -49,10 +49,14 @@ export function simulateConfederation(
 /**
  * 전체 지역예선을 시뮬레이션해 본선 48개국을 확정한다 (지역예선 Q2 오케스트레이터).
  * = 대륙별 직행 46(개최 3국 포함) + 대륙간 PO 승자 2.
+ *
+ * ratings를 주입하면(컨디션·샌드박스 반영 등, D1) 그 능력치로 시뮬레이션한다. 미지정 시
+ * base 능력치를 사용한다(순수 함수로 테스트 가능).
  */
-export function simulateAllQualification(seed: string): AllQualificationResult {
-  const ratings: Record<string, TeamRatings> = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
-
+export function simulateAllQualification(
+  seed: string,
+  ratings: Record<string, TeamRatings> = baseRatingsMap(ALL_NATIONS.map((t) => t.id)),
+): AllQualificationResult {
   const byConfederation: Record<string, QualificationResult> = {}
   const directQualified: string[] = []
   const playoffTeams: string[] = []
