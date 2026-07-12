@@ -15,6 +15,8 @@ export interface QualificationResult {
   standings: string[]
   /** 조별 순위(각 조의 팀 ID를 순위순으로). 단일리그면 길이 1 (H1) */
   groups: string[][]
+  /** 각 조의 표시 라벨(다단계 대륙의 "3차 A조" 등, A3/A4). 미지정 시 UI가 알파벳 조로 표기 */
+  groupLabels?: string[]
   /** 본선 직행 팀 */
   qualified: string[]
   /** 대륙간 플레이오프로 가는 팀 */

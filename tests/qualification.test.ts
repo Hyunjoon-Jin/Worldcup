@@ -87,6 +87,42 @@ describe('대륙별 예선 슬롯 정확성 (지역예선 Q2 확장)', () => {
   })
 })
 
+describe('다단계 대륙 구조 (개선 A3·A4)', () => {
+  const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
+
+  it('AFC는 3차·4차·5차 스테이지로 구성된다', () => {
+    const r = simulateConfederation('AFC', allRatings, createSeededRandom('AFC-ms'))
+    // 3차 3개 조 + 4차 2개 조 + 5차 PO = 6개 조
+    expect(r.groups).toHaveLength(6)
+    expect(r.groupLabels).toEqual(['3차 A조', '3차 B조', '3차 C조', '4차 A조', '4차 B조', '5차 PO'])
+    expect(r.qualified).toHaveLength(8) // 3차 6 + 4차 2
+    expect(r.playoff).toHaveLength(1) // 5차 승자
+    // 스테이지가 매치데이로 이어진다(마지막 경기 matchday == 총 라운드 수)
+    expect(Math.max(...r.matches.map((m) => m.matchday))).toBe(r.matchdays)
+    // 진출·PO 팀은 서로 겹치지 않는다
+    expect(new Set([...r.qualified, ...r.playoff]).size).toBe(9)
+  })
+
+  it('CONCACAF는 1차 예선 라운드 + 최종 3개 조로 구성되고 개최국을 제외한다', () => {
+    const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('CCF-ms'))
+    expect(r.groupLabels?.[0]).toBe('1차 예선 라운드')
+    expect(r.groupLabels).toContain('최종 A조')
+    expect(r.groupLabels).toContain('최종 C조')
+    expect(r.qualified).toHaveLength(3) // 최종 각 조 1위
+    expect(r.playoff).toHaveLength(2) // 최고 2위
+    for (const host of ['MEX', 'USA', 'CAN']) {
+      expect(r.qualified).not.toContain(host)
+      expect(r.playoff).not.toContain(host)
+    }
+  })
+
+  it('다단계 대륙을 포함해도 본선 48은 유효하다', () => {
+    const all = simulateAllQualification('MULTISTAGE')
+    expect(new Set(all.qualified48).size).toBe(48)
+    expect(all.qualified48).toHaveLength(48)
+  })
+})
+
 describe('simulateAllQualification — 본선 48 확정', () => {
   it('정확히 48개국, 중복 없음, 개최 3국 포함', () => {
     const all = simulateAllQualification('WORLD-2026')

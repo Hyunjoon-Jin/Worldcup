@@ -3,6 +3,8 @@ import { HOST_SLOTS } from '../../data/hostSlots'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { createSeededRandom, type RandomFn } from '../rng'
 import { simulateGroupQualification, type QualConfig } from './generic'
+import { simulateAfc } from './afc'
+import { simulateConcacaf } from './concacaf'
 import { simulateInterConfedPlayoff, type InterConfedResult } from './interConfed'
 import type { Confederation, TeamRatings } from '../../types/team'
 import type { QualificationResult } from '../../types/qualification'
@@ -41,9 +43,11 @@ export function simulateConfederation(
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
 ): QualificationResult {
+  const teams = nationsByConfederation(confed).map((t) => t.id)
+  // 다단계 구조 대륙은 전용 엔진으로 실제 라운드 구성을 근사한다 (A3·A4).
+  if (confed === 'AFC') return simulateAfc(teams, ratings, rand)
+  if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand) // 개최국 필터는 내부 처리
   const cfg = CONFED_CONFIGS[confed]
-  let teams = nationsByConfederation(confed).map((t) => t.id)
-  if (confed === 'CONCACAF') teams = teams.filter((id) => !HOST_IDS.includes(id))
   return simulateGroupQualification(teams, ratings, rand, { confederation: confed, ...cfg })
 }
 

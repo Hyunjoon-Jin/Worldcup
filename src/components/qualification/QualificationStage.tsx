@@ -202,7 +202,6 @@ function ConfederationStandings({
   const revealed = revealedMap[confed] ?? total
   const full = revealed >= total
   const shownMatches = r.matches.filter((m) => m.matchday <= revealed)
-  const standings = computeStandings(r.standings, shownMatches)
   const qSet = new Set(r.qualified)
   const pSet = new Set(r.playoff)
   const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
@@ -232,9 +231,12 @@ function ConfederationStandings({
 
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
         {r.groups.map((finalOrder, gi) => {
-          const groupTeams = rankGroupTeams(finalOrder, shownMatches.filter((m) => m.group === gi))
+          const groupMatches = shownMatches.filter((m) => m.group === gi)
+          const groupTeams = rankGroupTeams(finalOrder, groupMatches)
+          // 조 자체 경기만으로 순위 지표 계산(다단계 대륙에서 팀이 여러 조에 걸쳐도 정확).
+          const gStand = computeStandings(finalOrder, groupMatches)
           const rows = groupTeams.map((teamId, idx) => {
-            const s = standings[teamId]
+            const s = gStand[teamId]
             return {
               teamId,
               idx,
@@ -244,10 +246,10 @@ function ConfederationStandings({
               po: full && pSet.has(teamId),
             }
           })
-          const groupLabel = single ? '단일리그' : `${GROUP_LETTERS[gi]}조`
+          const groupLabel = r.groupLabels?.[gi] ?? (single ? '단일리그' : `${GROUP_LETTERS[gi]}조`)
           return (
           <div key={gi}>
-            {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{GROUP_LETTERS[gi]}조</p>}
+            {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{groupLabel}</p>}
             {/* 데스크톱: 표 */}
             <div className="hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[360px] text-left text-xs sm:text-sm">
