@@ -19,6 +19,7 @@ const ProbabilityDashboard = lazy(() =>
   import('./components/probability/ProbabilityDashboard').then((m) => ({ default: m.ProbabilityDashboard })),
 )
 const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
+const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
 import { useProgressStore } from './store/useProgressStore'
@@ -29,10 +30,11 @@ import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament } from './store/tournamentActions'
 
-type TabId = 'qualifiers' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
+type TabId = 'qualifiers' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'qualifiers', label: '지역예선' },
+  { id: 'ranking', label: 'FIFA 랭킹' },
   { id: 'draw', label: '조추첨' },
   { id: 'schedule', label: '일정 진행' },
   { id: 'groups', label: '조별리그' },
@@ -41,7 +43,7 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 
 /** 조추첨 완료와 무관하게 언제나 접근 가능한 탭. */
-const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'draw']
+const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'ranking', 'draw']
 
 function App() {
   // 저장된 대회가 완료된 조추첨을 갖고 있으면(이어하기) 일정 탭에서 시작한다 (A3).
@@ -165,6 +167,7 @@ function App() {
         ) : (
           <>
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
+            {tab === 'ranking' && <FifaRankingTab />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
             {tab === 'schedule' && <ScheduleStage />}
             {tab === 'groups' && <GroupStageView />}
