@@ -11,6 +11,20 @@ import { useCareerStore } from './useCareerStore'
 import { finalsFormDeltas } from '../engine/finalsForm'
 import { editionEndRankingPoints, type FinalsResults } from '../engine/qualification/ranking'
 
+const NO_FINALS: FinalsResults = { groupMatches: [], knockoutMatches: [] }
+
+/**
+ * 조추첨 포트 산정용 "현재 FIFA 점수"를 계산한다. 이월 점수(이전 대회 누적) + 이번 대회 예선
+ * 전체 결과를 반영한 점수로, 최신 FIFA 랭킹이 포트에 반영되게 한다. 예선 결과가 없으면 undefined.
+ */
+function currentRankingPoints(): Record<string, number> | undefined {
+  const result = useQualificationStore.getState().result
+  if (!result) return undefined
+  const carried = useCareerStore.getState().rankingBase
+  const carriedArg = Object.keys(carried).length > 0 ? carried : undefined
+  return editionEndRankingPoints(result, NO_FINALS, carriedArg)
+}
+
 /**
  * 새 대회를 시작할 때 관련된 모든 store를 한 번에 원자적으로 초기화한다 (A4).
  *
@@ -41,7 +55,7 @@ export function startFinalsFromQualification(
   seed?: string,
   formOffsets?: Record<string, number>,
 ): void {
-  useDrawStore.getState().drawFromField(teamIds48, seed)
+  useDrawStore.getState().drawFromField(teamIds48, seed, currentRankingPoints())
   useProgressStore.getState().reset()
   useSimulationStore.getState().reset()
   useSelectionStore.getState().clearTeam()
@@ -55,7 +69,7 @@ export function startFinalsFromQualification(
  * 진행할 수 있게 한다. 예선 폼(formOffsets)은 본선 컨디션에 반영하고, 진행/확률/선택을 초기화한다.
  */
 export function prepareFinalsDrawFromQualification(teamIds48: string[], formOffsets?: Record<string, number>): void {
-  useDrawStore.getState().prepareFromField(teamIds48)
+  useDrawStore.getState().prepareFromField(teamIds48, currentRankingPoints())
   useProgressStore.getState().reset()
   useSimulationStore.getState().reset()
   useSelectionStore.getState().clearTeam()

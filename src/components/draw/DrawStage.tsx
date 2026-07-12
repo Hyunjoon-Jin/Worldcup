@@ -17,7 +17,7 @@ import { GroupSlotCard } from './GroupSlotCard'
 const POT_LABEL: Record<number, string> = { 1: '포트1', 2: '포트2', 3: '포트3', 4: '포트4' }
 
 export function DrawStage({ onComplete }: { onComplete?: () => void }) {
-  const { state, log, isComplete, drawOne, undoLast, drawFromSeed, seed } = useDrawStore()
+  const { state, log, isComplete, drawOne, undoLast, drawFromSeed, seed, potComposition, rankPoints } = useDrawStore()
   const [seedInput, setSeedInput] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -148,7 +148,13 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
       )}
 
       <GroupBoard groups={state.groups} highlightGroup={nextSlot?.group ?? null} />
-      <PotTray pots={state.pots} currentPot={nextSlot?.pot ?? null} />
+      <PotTray
+        pots={state.pots}
+        currentPot={nextSlot?.pot ?? null}
+        composition={potComposition}
+        hostIds={getCurrentHostIds()}
+        rankPoints={rankPoints}
+      />
 
       <GlassCard className="p-4 text-xs leading-relaxed text-gray-400">
         <strong className="text-gray-300">조추첨 규정:</strong> 개최국({hostSeedText})은 각 조 1번 시드로 사전

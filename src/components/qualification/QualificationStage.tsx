@@ -17,7 +17,7 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
-import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
+import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, editionEndRankingPoints, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
 import { PROB_ITERATIONS } from '../../store/useQualificationStore'
@@ -1040,6 +1040,13 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const [selMatch, setSelMatch] = useState<MatchResult | null>(null)
 
   const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
+  // 포트 미리보기·조추첨에 쓸 "현재 FIFA 점수"(이월 + 이번 예선 반영). 최신 랭킹이 포트에 반영되게 한다.
+  const careerRankingBase = useCareerStore((s) => s.rankingBase)
+  const potPoints = useMemo(() => {
+    if (!result) return undefined
+    const carried = Object.keys(careerRankingBase).length > 0 ? careerRankingBase : undefined
+    return editionEndRankingPoints(result, { groupMatches: [], knockoutMatches: [] }, carried)
+  }, [result, careerRankingBase])
   // 예선이 전부 끝났는지(부분 진행이면 최종 결과 카드는 스포일러 방지로 숨긴다).
   const fullyRevealed = result ? !isPartialProgress(result, revealed) : false
 
@@ -1293,7 +1300,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 <span className="text-gray-500 transition-transform group-open:rotate-180">▾</span>
               </summary>
               {(() => {
-                const pots = computePots(result.qualified48)
+                const pots = computePots(result.qualified48, undefined, potPoints)
                 const potHostIds = result.hosts
                 const potList: [string, string[]][] = [
                   ['포트 1 (개최국 + 최상위)', [...potHostIds, ...pots[1]]],
