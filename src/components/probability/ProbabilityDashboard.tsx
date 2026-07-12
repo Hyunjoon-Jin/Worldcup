@@ -9,6 +9,7 @@ import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useMomentumStore } from '../../store/useMomentumStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { ProbabilityTrendChart } from './ProbabilityTrendChart'
 import { ITERATION_PRESETS, type IterationPreset } from '../../engine/config'
 
 const PRESET_LABEL: Record<IterationPreset, string> = { fast: '빠름', standard: '표준', precise: '정밀' }
@@ -102,6 +103,8 @@ export function ProbabilityDashboard() {
           </div>
         )}
       </GlassCard>
+
+      <ProbabilityTrendChart />
 
       <GlassCard className="hidden p-4 sm:block">
         <div className="overflow-x-auto">

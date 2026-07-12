@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import { createSimulationAccumulator } from '../engine/monteCarlo'
 import { ITERATION_PRESETS, type IterationPreset } from '../engine/config'
+import { useProgressStore } from './useProgressStore'
 import type { SimulationResult } from '../types/simulation'
+
+/** 대회 진행에 따른 우승 확률 스냅샷 한 점 (v2 #33). */
+export interface ProbPoint {
+  matchesPlayed: number
+  probs: Record<string, number>
+}
 
 interface SimulationStore {
   result: SimulationResult | null
@@ -9,6 +16,8 @@ interface SimulationStore {
   isComputing: boolean
   /** 0..1 계산 진행률 */
   progress: number
+  /** 경기 진행에 따른 우승 확률 추이 (#33) */
+  history: ProbPoint[]
   setIterations: (n: number) => void
   setPreset: (preset: IterationPreset) => void
   run: () => void
@@ -23,11 +32,28 @@ let activeRunId = 0
 
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
+/** 현재까지 확정된(진행된) 경기 수를 센다. */
+function countMatchesPlayed(): number {
+  const p = useProgressStore.getState()
+  const ko = Object.values(p.knockoutSlots).filter((s) => s.result).length
+  return p.groupMatches.length + ko
+}
+
+/** 확률 추이에 현재 진행 시점의 우승 확률을 upsert한다(같은 진행 시점이면 갱신). */
+function appendHistory(history: ProbPoint[], result: SimulationResult): ProbPoint[] {
+  const matchesPlayed = countMatchesPlayed()
+  const probs: Record<string, number> = {}
+  for (const [teamId, p] of Object.entries(result.probabilities)) probs[teamId] = p.championPct
+  const kept = history.filter((h) => h.matchesPlayed < matchesPlayed)
+  return [...kept, { matchesPlayed, probs }]
+}
+
 export const useSimulationStore = create<SimulationStore>()((set, get) => ({
   result: null,
   iterations: ITERATION_PRESETS.standard,
   isComputing: false,
   progress: 0,
+  history: [],
   setIterations: (n) => set({ iterations: n }),
   setPreset: (preset) => set({ iterations: ITERATION_PRESETS[preset] }),
   run: () => {
@@ -46,11 +72,12 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
         await yieldToUi()
       }
       if (runId !== activeRunId) return
-      set({ result: acc.result(), isComputing: false, progress: 1 })
+      const result = acc.result()
+      set({ result, isComputing: false, progress: 1, history: appendHistory(get().history, result) })
     })()
   },
   reset: () => {
     activeRunId++ // 진행 중이던 계산 무효화
-    set({ result: null, isComputing: false, progress: 0 })
+    set({ result: null, isComputing: false, progress: 0, history: [] })
   },
 }))
