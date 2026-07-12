@@ -13,7 +13,7 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
-import { computeRankingMovers, formOffsetsFromResults } from '../../engine/qualification/ranking'
+import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
 import { PROB_ITERATIONS } from '../../store/useQualificationStore'
@@ -127,60 +127,180 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
   )
 }
 
-/** FIFA 랭킹 변동 (월 단위 반영). 현재까지 치른 경기 결과를 Elo로 누적해 순위 상승/하락을 보여준다. */
-function QualRankingMovers({ result }: { result: AllQualificationResult }) {
+const TREND_COLORS = ['#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee']
+
+/** FIFA 점수 변동 추이 SVG 라인 차트. 진행된 경기일에 따라 팀별 점수 변화를 그린다. */
+function RankingTrendChart({ trend }: { trend: TeamTrend[] }) {
+  const W = 340
+  const H = 150
+  const padL = 6
+  const padR = 6
+  const padT = 10
+  const padB = 8
+  const n = trend[0]?.series.length ?? 0
+  const allPts = trend.flatMap((t) => t.series.map((s) => s.points))
+  if (allPts.length === 0) return null
+  const minP = Math.min(...allPts)
+  const maxP = Math.max(...allPts)
+  const range = Math.max(1, maxP - minP)
+  const x = (i: number) => padL + (n <= 1 ? 0 : (i / (n - 1)) * (W - padL - padR))
+  const y = (p: number) => padT + (1 - (p - minP) / range) * (H - padT - padB)
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="FIFA 점수 변동 추이 차트">
+      {trend.map((t, ti) => (
+        <g key={t.teamId}>
+          <polyline
+            fill="none"
+            stroke={TREND_COLORS[ti % TREND_COLORS.length]}
+            strokeWidth="2"
+            strokeLinejoin="round"
+            points={t.series.map((s, i) => `${x(i)},${y(s.points)}`).join(' ')}
+          />
+          {n > 0 && <circle cx={x(n - 1)} cy={y(t.series[n - 1].points)} r="2.5" fill={TREND_COLORS[ti % TREND_COLORS.length]} />}
+        </g>
+      ))}
+    </svg>
+  )
+}
+
+/**
+ * 실시간 FIFA 랭킹 (실제 FIFA 점수 산정 방식 반영). 이미 치른 경기로 점수·순위를 갱신한 현황표와
+ * 진행에 따른 변동 추이 차트를 보여준다. 일별 진행에 연동되어 날짜를 넘길수록 갱신된다.
+ */
+function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult; myTeamId: string | null }) {
   const revealed = useQualificationStore((s) => s.revealed)
-  const movers = useMemo(() => {
-    const played = flattenPlayed(collectPlayedByConfed(result, revealed))
-    if (played.length === 0) return { risers: [], fallers: [] }
-    const all = computeRankingMovers(result, played)
-    return {
-      risers: all.filter((m) => m.delta > 0).slice(0, 6),
-      fallers: all.filter((m) => m.delta < 0).slice(0, 6),
-    }
-  }, [result, revealed])
+  const [sortMode, setSortMode] = useState<'rank' | 'up' | 'down'>('rank')
+  const [expanded, setExpanded] = useState(false)
 
-  if (movers.risers.length === 0 && movers.fallers.length === 0) return null
+  const calendar = useMemo(() => buildQualCalendar(result), [result])
+  const played = useMemo(() => flattenPlayed(collectPlayedByConfed(result, revealed)), [result, revealed])
+  const ranking = useMemo(() => computeLiveRanking(result, played), [result, played])
 
-  const Row = ({ teamId, delta, up }: { teamId: string; delta: number; up: boolean }) => (
-    <div className="flex items-center justify-between text-xs">
-      <NationLabel teamId={teamId} />
-      <span className={`shrink-0 font-bold tabular-nums ${up ? 'text-emerald-300' : 'text-red-300'}`}>
-        {up ? '▲' : '▼'}
-        {Math.abs(delta)}
+  // 진행된 경기일까지의 변동 추이(상위 5팀 + 내 팀)
+  const dayCount = useMemo(
+    () =>
+      calendar.filter((d) => Object.keys(d.revealedByConfed).every((c) => d.revealedByConfed[c] <= (revealed[c] ?? 0)))
+        .length,
+    [calendar, revealed],
+  )
+  const chartIds = useMemo(() => {
+    const top = ranking.slice(0, 5).map((r) => r.teamId)
+    if (myTeamId && ALL_NATIONS_BY_ID[myTeamId] && !top.includes(myTeamId)) top.push(myTeamId)
+    return top
+  }, [ranking, myTeamId])
+  const trend = useMemo(
+    () => computeRankingTrend(result, calendar.slice(0, dayCount), chartIds),
+    [result, calendar, dayCount, chartIds],
+  )
+
+  const sorted = useMemo(() => {
+    if (sortMode === 'up') return [...ranking].sort((a, b) => b.rankDelta - a.rankDelta)
+    if (sortMode === 'down') return [...ranking].sort((a, b) => a.rankDelta - b.rankDelta)
+    return ranking
+  }, [ranking, sortMode])
+
+  const limit = expanded ? 50 : 20
+  const shown = sorted.slice(0, limit)
+  // 내 팀이 목록 밖이면 따로 덧붙인다
+  const myRow = myTeamId ? ranking.find((r) => r.teamId === myTeamId) : undefined
+  const showMyExtra = myRow && !shown.some((r) => r.teamId === myTeamId)
+
+  const DeltaBadge = ({ rankDelta, pointsDelta }: { rankDelta: number; pointsDelta: number }) => {
+    if (rankDelta === 0 && pointsDelta === 0) return <span className="text-[10px] text-gray-600">–</span>
+    const up = rankDelta > 0 || (rankDelta === 0 && pointsDelta > 0)
+    return (
+      <span className={`text-[10px] font-bold tabular-nums ${up ? 'text-emerald-300' : 'text-red-300'}`}>
+        {rankDelta !== 0 && `${up ? '▲' : '▼'}${Math.abs(rankDelta)} `}
+        <span className="font-normal">({pointsDelta >= 0 ? '+' : ''}{pointsDelta})</span>
       </span>
-    </div>
+    )
+  }
+
+  const RankRow = ({ row }: { row: LiveRankRow }) => (
+    <tr className={`border-t border-white/5 ${row.teamId === myTeamId ? 'bg-sky-500/10' : ''}`}>
+      <td className="py-1.5 text-center text-gray-500 tabular-nums">{row.rank}</td>
+      <th scope="row" className="py-1.5 font-normal">
+        <span className="inline-flex items-center gap-1.5">
+          <NationLabel teamId={row.teamId} />
+          {row.teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+        </span>
+      </th>
+      <td className="py-1.5 text-right font-bold tabular-nums text-white">{row.points}</td>
+      <td className="py-1.5 text-right"><DeltaBadge rankDelta={row.rankDelta} pointsDelta={row.pointsDelta} /></td>
+    </tr>
   )
 
   return (
     <GlassCard className="p-4">
-      <details className="group" open>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-sky-300">
-          <span>📈 FIFA 랭킹 변동 (진행 결과 반영)</span>
-          <span className="text-xs text-gray-500 transition-transform group-open:rotate-180">▾</span>
-        </summary>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <p className="mb-1.5 text-[11px] font-bold text-emerald-300">▲ 상승 (선전으로 랭킹 상승)</p>
-            <div className="space-y-1">
-              {movers.risers.length === 0 && <p className="text-[11px] text-gray-600">없음</p>}
-              {movers.risers.map((m) => (
-                <Row key={m.teamId} teamId={m.teamId} delta={m.delta} up />
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="mb-1.5 text-[11px] font-bold text-red-300">▼ 하락 (부진으로 랭킹 하락)</p>
-            <div className="space-y-1">
-              {movers.fallers.length === 0 && <p className="text-[11px] text-gray-600">없음</p>}
-              {movers.fallers.map((m) => (
-                <Row key={m.teamId} teamId={m.teamId} delta={m.delta} up={false} />
-              ))}
-            </div>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-sky-300">📊 실시간 FIFA 랭킹</h3>
+        <div className="flex rounded-lg bg-white/10 p-0.5 text-[11px]">
+          {([['rank', '순위순'], ['up', '급상승'], ['down', '급하락']] as const).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setSortMode(m)}
+              aria-pressed={sortMode === m}
+              className={`rounded-md px-2 py-0.5 ${sortMode === m ? 'bg-sky-500/30 text-sky-200' : 'text-gray-400'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="mb-2 text-[10px] text-gray-500">
+        실제 FIFA 점수 산정 방식(P = P + I×(승점−기대승점), 예선 I=25)으로 진행 결과를 반영합니다.
+      </p>
+
+      {trend[0]?.series.length > 1 && (
+        <div className="mb-3">
+          <p className="mb-1 text-[11px] font-bold text-gray-300">📈 점수 변동 추이 (상위권)</p>
+          <RankingTrendChart trend={trend} />
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            {trend.map((t, ti) => (
+              <span key={t.teamId} className="inline-flex items-center gap-1 text-[10px] text-gray-400">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: TREND_COLORS[ti % TREND_COLORS.length] }} />
+                {ALL_NATIONS_BY_ID[t.teamId]?.nameKo ?? t.teamId}
+                <span className="tabular-nums text-gray-500">{t.series[t.series.length - 1].points}</span>
+              </span>
+            ))}
           </div>
         </div>
-        <p className="mt-2 text-[10px] text-gray-500">※ 경기일을 넘길수록 결과가 누적 반영됩니다. 갱신된 전력은 남은 경기·본선 확률 계산에도 반영됩니다.</p>
-      </details>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[300px] text-left text-xs sm:text-sm">
+          <caption className="sr-only">실시간 FIFA 랭킹 점수 현황</caption>
+          <thead>
+            <tr className="text-gray-400">
+              <th scope="col" className="w-8 py-1 text-center">순위</th>
+              <th scope="col" className="py-1">국가</th>
+              <th scope="col" className="w-16 py-1 text-right">점수</th>
+              <th scope="col" className="w-20 py-1 text-right">등락</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((row) => (
+              <RankRow key={row.teamId} row={row} />
+            ))}
+            {showMyExtra && myRow && (
+              <>
+                <tr>
+                  <td colSpan={4} className="py-0.5 text-center text-[10px] text-gray-600">⋯</td>
+                </tr>
+                <RankRow row={myRow} />
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {ranking.length > 20 && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 w-full rounded-lg bg-white/5 py-1.5 text-[11px] text-gray-300 hover:bg-white/10"
+        >
+          {expanded ? '접기' : `더 보기 (상위 50위까지)`}
+        </button>
+      )}
     </GlassCard>
   )
 }
@@ -982,7 +1102,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
           <QualDailyProgress result={result} onSelectMatch={setSelMatch} />
 
-          <QualRankingMovers result={result} />
+          <QualLiveRanking result={result} myTeamId={myTeamId} />
 
           {fullyRevealed && <QualOverviewCard result={result} onSelect={setConfed} />}
 

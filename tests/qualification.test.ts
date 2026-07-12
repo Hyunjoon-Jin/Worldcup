@@ -22,6 +22,10 @@ import {
   updateRankingPoints,
   computeRankingMovers,
   formOffsetsFromResults,
+  expectedResult,
+  computeLiveRanking,
+  computeRankingTrend,
+  IMPORTANCE_QUALIFIER,
 } from '../src/engine/qualification/ranking'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
 import type { Confederation } from '../src/types/team'
@@ -249,6 +253,28 @@ describe('FIFA 랭킹 Elo 갱신 (월 단위 반영)', () => {
     expect(none.every((m) => m.delta === 0)).toBe(true)
   })
 
+  it('실제 FIFA 공식: 기대승점 대칭·중요도(25) 스케일·승부차기 규칙', () => {
+    // Wₑ(a,b) + Wₑ(b,a) = 1, 동점이면 0.5
+    expect(expectedResult(1500, 1500)).toBeCloseTo(0.5, 6)
+    expect(expectedResult(1700, 1300) + expectedResult(1300, 1700)).toBeCloseTo(1, 6)
+    // I = 25(월드컵 예선)
+    expect(IMPORTANCE_QUALIFIER).toBe(25)
+    // 동점수 팀끼리 승리 시 정확히 I×(1−0.5)=+12.5
+    const p = { A: 1500, B: 1500 }
+    applyMatchElo(p, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 1, awayGoals: 0 })
+    expect(p.A - 1500).toBeCloseTo(12.5, 6)
+    expect(p.B - 1500).toBeCloseTo(-12.5, 6)
+    // 골 차는 반영하지 않는다(1-0이나 5-0이나 동일)
+    const p2 = { A: 1500, B: 1500 }
+    applyMatchElo(p2, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 5, awayGoals: 0 })
+    expect(p2.A).toBeCloseTo(p.A, 6)
+    // 승부차기: 승자 0.75·패자 0.5 → 둘 다 상승 가능(동점수면 승자 +6.25, 패자 0)
+    const pk = { A: 1500, B: 1500 }
+    applyMatchElo(pk, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 1, awayGoals: 1, wentToPenalties: true, winnerTeamId: 'A' })
+    expect(pk.A - 1500).toBeCloseTo(6.25, 6)
+    expect(pk.B - 1500).toBeCloseTo(0, 6)
+  })
+
   it('갱신 함수는 원본 점수 맵을 변경하지 않는다', () => {
     const base = initRankingPoints(['ARG', 'BRA'])
     const snapshot = { ...base }
@@ -275,6 +301,49 @@ describe('FIFA 랭킹 Elo 갱신 (월 단위 반영)', () => {
     const topFaller = movers.find((m) => m.delta < 0)
     if (topRiser) expect(offsets[topRiser.teamId]).toBeGreaterThanOrEqual(0)
     if (topFaller) expect(offsets[topFaller.teamId]).toBeLessThanOrEqual(0)
+  })
+})
+
+describe('실시간 FIFA 랭킹 + 변동 추이', () => {
+  it('실시간 랭킹은 전체 참가국을 점수순으로 정렬하고 등락이 일관된다', () => {
+    const all = simulateAllQualification('LIVE')
+    const played = Object.values(all.byConfederation).flatMap((r) => r.matches)
+    const ranking = computeLiveRanking(all, played)
+    expect(ranking.length).toBeGreaterThan(100)
+    // 점수 내림차순(=순위 오름차순)
+    for (let i = 1; i < ranking.length; i++) {
+      expect(ranking[i - 1].points).toBeGreaterThanOrEqual(ranking[i].points)
+      expect(ranking[i].rank).toBe(i + 1)
+    }
+    // 순위 등락 = baseRank − rank, 점수 등락 = points − basePoints
+    for (const row of ranking) {
+      expect(row.rankDelta).toBe(row.baseRank - row.rank)
+      expect(row.pointsDelta).toBe(row.points - row.basePoints)
+    }
+  })
+
+  it('경기 전 실시간 랭킹은 기존 FIFA 랭킹 순서와 같다(등락 0)', () => {
+    const all = simulateAllQualification('LIVE0')
+    const ranking = computeLiveRanking(all, [])
+    for (const row of ranking) {
+      expect(row.rankDelta).toBe(0)
+      expect(row.pointsDelta).toBe(0)
+    }
+  })
+
+  it('변동 추이는 시작점 + 경기일마다 한 점씩, 시간순 누적이다', () => {
+    const all = simulateAllQualification('TREND')
+    const cal = buildQualCalendar(all)
+    const trend = computeRankingTrend(all, cal, ['ARG', 'BRA'])
+    expect(trend).toHaveLength(2)
+    for (const t of trend) {
+      // 시작점 + 경기일 수
+      expect(t.series).toHaveLength(cal.length + 1)
+      expect(t.series[0].label).toBe('예선 전')
+    }
+    // 일부만 진행하면 그만큼만 추이가 생긴다
+    const partial = computeRankingTrend(all, cal.slice(0, 3), ['ARG'])
+    expect(partial[0].series).toHaveLength(4) // 시작 + 3일
   })
 })
 

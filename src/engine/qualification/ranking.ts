@@ -6,43 +6,65 @@ import type { QualMatch } from '../../types/qualification'
 import type { TeamRatings } from '../../types/team'
 
 /**
- * 경기 결과로 FIFA 랭킹을 갱신하는 Elo 근사 엔진 (월 단위 랭킹 반영).
- * 예선 경기가 진행될수록 승패·이변이 랭킹 점수에 누적 반영되고, 갱신된 점수는
- * 남은 경기·본선의 전력 추정에 쓰인다(확률 계산이 실황을 반영하도록).
+ * 실제 FIFA/코카콜라 세계 랭킹(2018 개정, "SUM" 방식)을 그대로 반영하는 점수 엔진.
+ *
+ *   P_after = P_before + I × (W − Wₑ)
+ *
+ * - I: 경기 중요도 계수(월드컵 예선 = 25).
+ * - W: 경기 결과(승 1 · 무 0.5 · 패 0. 승부차기 승 0.75 · 패 0.5).
+ * - Wₑ: 기대 승점 = 1 / (10^(−dr/600) + 1),  dr = 팀 점수 − 상대 점수.
+ * FIFA 실제 방식대로 골 득실차는 반영하지 않는다(승/무/패만). 승부차기 규칙까지 반영한다.
+ * 시작 점수(basePointsFromRank)만 근사이고, 갱신 방식은 FIFA 공식 그대로다.
  */
 
-const BASE = 2000
-const PER_RANK = 12
+/** 경기 중요도 계수 I (월드컵 예선). */
+export const IMPORTANCE_QUALIFIER = 25
+/** 기대 승점 산정 분모(FIFA 규정값). */
+const FIFA_DIVISOR = 600
+/** 랭킹 1위 근사 점수와 랭킹당 하락폭(시작 점수 근사). */
+const TOP_POINTS = 1850
+const POINTS_PER_RANK = 5
+const FLOOR_POINTS = 820
 
-/** FIFA 랭킹(숫자 작을수록 강함) → 초기 Elo 점수(높을수록 강함). */
+/** FIFA 랭킹(숫자 작을수록 강함) → 시작 랭킹 점수(높을수록 강함). 실제 상위권 분포에 근사. */
 export function basePointsFromRank(rank: number): number {
-  return Math.max(300, BASE - (rank - 1) * PER_RANK)
+  return Math.max(FLOOR_POINTS, TOP_POINTS - rank * POINTS_PER_RANK)
 }
 
-/** Elo 점수 → 유효 랭킹(전력 곡선 입력용). 점수가 높을수록 낮은(=강한) 랭킹 숫자. */
+/** 랭킹 점수 → 유효 랭킹(전력 곡선 입력용). 점수가 높을수록 낮은(=강한) 랭킹 숫자. */
 export function effectiveRankFromPoints(points: number): number {
-  return Math.max(1, (BASE - points) / PER_RANK + 1)
+  return Math.max(1, (TOP_POINTS - points) / POINTS_PER_RANK)
 }
 
-function expectedScore(a: number, b: number): number {
-  return 1 / (1 + Math.pow(10, (b - a) / 400))
+/** FIFA 기대 승점 Wₑ = 1 / (10^(−dr/600) + 1). */
+export function expectedResult(teamPoints: number, oppPoints: number): number {
+  return 1 / (Math.pow(10, -(teamPoints - oppPoints) / FIFA_DIVISOR) + 1)
 }
 
-/** 한 경기 결과로 두 팀의 Elo 점수를 제자리 갱신한다(골 차 가중, 무승부 0.5). */
+/**
+ * 한 경기 결과로 두 팀의 FIFA 랭킹 점수를 제자리 갱신한다(실제 SUM 공식).
+ * 정규 결과는 제로섬(W+W'=1), 승부차기는 W 0.75/0.5라 양팀 모두 상승할 수 있다.
+ */
 export function applyMatchElo(
   points: Record<string, number>,
-  m: { homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number },
-  k = 24,
+  m: { homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number; wentToPenalties?: boolean; winnerTeamId?: string },
+  importance = IMPORTANCE_QUALIFIER,
 ): void {
   const h = points[m.homeTeamId]
   const a = points[m.awayTeamId]
   if (h == null || a == null) return
-  const outcomeH = m.homeGoals > m.awayGoals ? 1 : m.homeGoals < m.awayGoals ? 0 : 0.5
-  const margin = Math.abs(m.homeGoals - m.awayGoals)
-  const weight = 1 + Math.min(1, Math.max(0, margin - 1) * 0.25) // 1~2배(대승일수록 큰 변동)
-  const delta = k * weight * (outcomeH - expectedScore(h, a))
-  points[m.homeTeamId] = h + delta
-  points[m.awayTeamId] = a - delta
+  let wHome: number
+  let wAway: number
+  if (m.wentToPenalties && m.winnerTeamId) {
+    // 승부차기: 승자 0.75, 패자 0.5
+    wHome = m.winnerTeamId === m.homeTeamId ? 0.75 : 0.5
+    wAway = m.winnerTeamId === m.awayTeamId ? 0.75 : 0.5
+  } else {
+    wHome = m.homeGoals > m.awayGoals ? 1 : m.homeGoals < m.awayGoals ? 0 : 0.5
+    wAway = 1 - wHome
+  }
+  points[m.homeTeamId] = h + importance * (wHome - expectedResult(h, a))
+  points[m.awayTeamId] = a + importance * (wAway - expectedResult(a, h))
 }
 
 /** 참가국들의 초기 Elo 점수 맵. */
@@ -121,6 +143,101 @@ export function computeRankingMovers(all: AllQualificationResult, played: QualMa
       points: now[id],
     }))
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || b.points - a.points)
+}
+
+/** 전체 예선 참가국 ID 목록. */
+export function qualParticipantIds(all: AllQualificationResult): string[] {
+  const ids = new Set<string>()
+  for (const c of Object.keys(all.byConfederation)) {
+    for (const m of all.byConfederation[c].matches) {
+      ids.add(m.homeTeamId)
+      ids.add(m.awayTeamId)
+    }
+  }
+  return [...ids]
+}
+
+function rankMap(ids: string[], pts: Record<string, number>): Record<string, number> {
+  const sorted = [...ids].sort(
+    (a, b) => pts[b] - pts[a] || ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox,
+  )
+  const r: Record<string, number> = {}
+  sorted.forEach((id, i) => (r[id] = i + 1))
+  return r
+}
+
+export interface LiveRankRow {
+  teamId: string
+  /** 현재 순위(참가국 내, 1=최강) */
+  rank: number
+  baseRank: number
+  /** 순위 등락(상승 +, 하락 −) */
+  rankDelta: number
+  /** 현재 FIFA 점수(반올림) */
+  points: number
+  basePoints: number
+  /** 점수 등락 */
+  pointsDelta: number
+}
+
+/**
+ * 실시간 FIFA 랭킹 점수 현황. 이미 치른 경기(played)를 반영한 전체 참가국 순위표를 점수순으로 반환한다.
+ */
+export function computeLiveRanking(all: AllQualificationResult, played: QualMatch[]): LiveRankRow[] {
+  const ids = qualParticipantIds(all)
+  const base = initRankingPoints(ids)
+  const now = updateRankingPoints(base, played)
+  const baseRanks = rankMap(ids, base)
+  const nowRanks = rankMap(ids, now)
+  return ids
+    .map((id) => ({
+      teamId: id,
+      rank: nowRanks[id],
+      baseRank: baseRanks[id],
+      rankDelta: baseRanks[id] - nowRanks[id],
+      points: Math.round(now[id]),
+      basePoints: Math.round(base[id]),
+      pointsDelta: Math.round(now[id] - base[id]),
+    }))
+    .sort((a, b) => a.rank - b.rank)
+}
+
+export interface TrendPoint {
+  date: string
+  label: string
+  points: number
+  rank: number
+}
+export interface TeamTrend {
+  teamId: string
+  series: TrendPoint[]
+}
+
+/**
+ * 지정 팀들의 FIFA 점수·순위 변동 추이. 캘린더 경기일 순서로 경기를 누적 적용하며 각 시점의
+ * 점수/순위를 기록한다(변동 추이 차트용). days는 이미 진행된 경기일만 넘기면 실황까지의 추이가 된다.
+ */
+export function computeRankingTrend(
+  all: AllQualificationResult,
+  days: Array<{ date: string; label: string; matches: Array<{ match: QualMatch }> }>,
+  teamIds: string[],
+): TeamTrend[] {
+  const ids = qualParticipantIds(all)
+  const points = initRankingPoints(ids)
+  const trends: TeamTrend[] = teamIds.map((id) => ({ teamId: id, series: [] }))
+  // 시작점(경기 전) 기록
+  const startRanks = rankMap(ids, points)
+  for (const t of trends) {
+    t.series.push({ date: '시작', label: '예선 전', points: Math.round(points[t.teamId]), rank: startRanks[t.teamId] })
+  }
+  for (const day of days) {
+    for (const cm of day.matches) applyMatchElo(points, cm.match)
+    const ranks = rankMap(ids, points)
+    for (const t of trends) {
+      t.series.push({ date: day.date, label: day.label, points: Math.round(points[t.teamId]), rank: ranks[t.teamId] })
+    }
+  }
+  return trends
 }
 
 /**
