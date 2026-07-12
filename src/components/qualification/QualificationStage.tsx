@@ -220,8 +220,16 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
       </GlassCard>
 
       {!result ? (
-        <GlassCard className="p-8 text-center text-sm text-gray-400">
-          아직 예선을 진행하지 않았습니다. "전체 예선 시뮬레이션"을 눌러보세요.
+        <GlassCard className="flex flex-col items-center gap-3 p-8 text-center">
+          <p className="text-sm text-gray-400">
+            예선부터 시작해 본선 진출국을 직접 가리거나, 실제 본선 48개국으로 바로 조추첨을 시작할 수 있어요.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <GlassButton onClick={() => simulate(seedInput)}>⚽ 예선부터 시작</GlassButton>
+            {onStartFinals && (
+              <GlassButton variant="ghost" onClick={onStartFinals}>실제 48개국으로 바로 본선 →</GlassButton>
+            )}
+          </div>
         </GlassCard>
       ) : (
         <>

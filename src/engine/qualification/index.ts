@@ -13,14 +13,15 @@ const HOST_IDS = Object.keys(HOST_SLOTS) // ['MEX','CAN','USA']
  * 대륙별 예선 포맷 설정 (슬롯 정확 + 포맷 근사). numGroups는 참가국 풀 대비 조 크기가
  * 합리적이도록 정한 근사치. CONCACAF는 개최 3국 자동 진출이라 비개최국만 시뮬레이션한다.
  */
+// 실제 예선처럼 모든 대륙을 조 내 홈&어웨이(doubleRound)로 치른다 (A5).
 const CONFED_CONFIGS: Record<Confederation, Omit<QualConfig, 'confederation'>> = {
-  UEFA: { numGroups: 8, direct: SLOT_ALLOCATION.UEFA.direct, playoff: SLOT_ALLOCATION.UEFA.playoff },
-  CAF: { numGroups: 6, direct: SLOT_ALLOCATION.CAF.direct, playoff: SLOT_ALLOCATION.CAF.playoff },
-  AFC: { numGroups: 4, direct: SLOT_ALLOCATION.AFC.direct, playoff: SLOT_ALLOCATION.AFC.playoff },
+  UEFA: { numGroups: 8, direct: SLOT_ALLOCATION.UEFA.direct, playoff: SLOT_ALLOCATION.UEFA.playoff, doubleRound: true },
+  CAF: { numGroups: 6, direct: SLOT_ALLOCATION.CAF.direct, playoff: SLOT_ALLOCATION.CAF.playoff, doubleRound: true },
+  AFC: { numGroups: 4, direct: SLOT_ALLOCATION.AFC.direct, playoff: SLOT_ALLOCATION.AFC.playoff, doubleRound: true },
   CONMEBOL: { numGroups: 1, direct: SLOT_ALLOCATION.CONMEBOL.direct, playoff: SLOT_ALLOCATION.CONMEBOL.playoff, doubleRound: true },
   // CONCACAF direct는 개최 3국 포함 → 비개최국 대상 시뮬은 (direct-3)장
-  CONCACAF: { numGroups: 3, direct: SLOT_ALLOCATION.CONCACAF.direct - HOST_IDS.length, playoff: SLOT_ALLOCATION.CONCACAF.playoff },
-  OFC: { numGroups: 1, direct: SLOT_ALLOCATION.OFC.direct, playoff: SLOT_ALLOCATION.OFC.playoff },
+  CONCACAF: { numGroups: 3, direct: SLOT_ALLOCATION.CONCACAF.direct - HOST_IDS.length, playoff: SLOT_ALLOCATION.CONCACAF.playoff, doubleRound: true },
+  OFC: { numGroups: 1, direct: SLOT_ALLOCATION.OFC.direct, playoff: SLOT_ALLOCATION.OFC.playoff, doubleRound: true },
 }
 
 const CONFEDERATIONS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']

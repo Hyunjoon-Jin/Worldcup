@@ -174,8 +174,8 @@ describe('매치데이 구조 (개선 B1)', () => {
       expect(m.matchday).toBeLessThanOrEqual(18)
     }
   })
-  it('UEFA(4팀 조 단판)는 3라운드', () => {
-    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(3)
+  it('UEFA(4팀 조 홈&어웨이)는 6라운드 (A5)', () => {
+    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(6)
   })
   it('groups 구조가 노출된다(H1)', () => {
     const all = simulateAllQualification('MD')
