@@ -46,6 +46,19 @@ export interface SimScore {
   awayGoals: number
 }
 
+/** 홈 이점을 명시적으로 받는 순수 득점 시뮬(팀 ID 조회 없음 — 예선 등 임의 팀에 안전). */
+export function simulateScoreRaw(
+  homeR: TeamRatings,
+  awayR: TeamRatings,
+  homeHostAdv: number,
+  awayHostAdv: number,
+  rand: RandomFn,
+): SimScore {
+  const homeLambda = expectedGoals(homeR, awayR, homeHostAdv)
+  const awayLambda = expectedGoals(awayR, homeR, awayHostAdv)
+  return { homeGoals: samplePoisson(homeLambda, rand), awayGoals: samplePoisson(awayLambda, rand) }
+}
+
 export function simulateScore(
   homeId: string,
   homeR: TeamRatings,
@@ -53,9 +66,7 @@ export function simulateScore(
   awayR: TeamRatings,
   rand: RandomFn,
 ): SimScore {
-  const homeLambda = expectedGoals(homeR, awayR, hostAdvFor(homeId))
-  const awayLambda = expectedGoals(awayR, homeR, hostAdvFor(awayId))
-  return { homeGoals: samplePoisson(homeLambda, rand), awayGoals: samplePoisson(awayLambda, rand) }
+  return simulateScoreRaw(homeR, awayR, hostAdvFor(homeId), hostAdvFor(awayId), rand)
 }
 
 export interface SimKnockout extends SimScore {

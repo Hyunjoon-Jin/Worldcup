@@ -90,6 +90,9 @@ export const RATINGS_FROM_RANK = {
   formCap: 99,
 } as const
 
+/** 지역예선 홈 경기(홈&어웨이 방식)의 일반 홈 이점. 개최국 특별 이점과 별개(지역예선 Q2). */
+export const QUALIFIER_HOME_ADVANTAGE = 3
+
 /** 몬테카를로 반복 횟수 프리셋 (B2). */
 export const ITERATION_PRESETS = {
   fast: 500,

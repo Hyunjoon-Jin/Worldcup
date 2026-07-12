@@ -1,6 +1,6 @@
-import { TEAMS_BY_ID } from '../data/teams'
+import { ALL_NATIONS_BY_ID } from '../data/nations'
 import type { GroupLetter, GroupStanding } from '../types/group'
-import type { GroupMatch } from '../types/match'
+import type { GroupMatch, MatchResult } from '../types/match'
 
 function emptyStanding(teamId: string): GroupStanding {
   return {
@@ -31,7 +31,7 @@ function applyMatch(standing: GroupStanding, goalsFor: number, goalsAgainst: num
   }
 }
 
-export function computeStandings(teamIds: string[], matches: GroupMatch[]): Record<string, GroupStanding> {
+export function computeStandings(teamIds: string[], matches: MatchResult[]): Record<string, GroupStanding> {
   const table: Record<string, GroupStanding> = Object.fromEntries(teamIds.map((id) => [id, emptyStanding(id)]))
   for (const m of matches) {
     if (table[m.homeTeamId]) table[m.homeTeamId] = applyMatch(table[m.homeTeamId], m.homeGoals, m.awayGoals)
@@ -70,7 +70,7 @@ function byFairPlay(stats: Record<string, GroupStanding>): Comparator {
   // 페어플레이는 벌점이 적을수록 유리(오름차순)하므로 부호를 반대로 비교한다.
   return (a, b) => stats[a].fairPlayScore - stats[b].fairPlayScore
 }
-const byFifaRank: Comparator = (a, b) => TEAMS_BY_ID[a].fifaRankApprox - TEAMS_BY_ID[b].fifaRankApprox
+const byFifaRank: Comparator = (a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
 
 /**
  * 2026 월드컵부터 적용되는 조별리그 순위 결정 기준(월드컵 사상 최초로 전체 골득실보다
@@ -80,12 +80,12 @@ const byFifaRank: Comparator = (a, b) => TEAMS_BY_ID[a].fifaRankApprox - TEAMS_B
  * 3팀 이상이 얽힌 경우 4위 팀과의 경기를 제외한 미니리그로 비교하고, 그 결과 일부만
  * 분리되고 나머지가 여전히 동률이면 남은 팀들에 대해 처음부터 다시 적용한다.
  */
-export function rankGroupTeams(teamIds: string[], matches: GroupMatch[]): string[] {
+export function rankGroupTeams(teamIds: string[], matches: MatchResult[]): string[] {
   const overall = computeStandings(teamIds, matches)
   return resolveTier(teamIds, overall, matches)
 }
 
-function resolveTier(tier: string[], overall: Record<string, GroupStanding>, matches: GroupMatch[]): string[] {
+function resolveTier(tier: string[], overall: Record<string, GroupStanding>, matches: MatchResult[]): string[] {
   if (tier.length <= 1) return tier
 
   const pointsSorted = [...tier].sort(byPoints(overall))
@@ -101,7 +101,7 @@ function resolveTier(tier: string[], overall: Record<string, GroupStanding>, mat
   return result
 }
 
-function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding>, matches: GroupMatch[]): string[] {
+function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding>, matches: MatchResult[]): string[] {
   if (tier.length <= 1) return tier
 
   const tierSet = new Set(tier)

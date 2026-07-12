@@ -82,7 +82,7 @@ const RAW_TEAMS: RawTeam[] = [
   { id: 'CUW', nameKo: '퀴라소', nameEn: 'Curaçao', code: 'CUW', iso2: 'CW', confederation: 'CONCACAF', pot: 4, rank: 48, styleBias: -1 },
 ]
 
-function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
+export function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
   // 거듭제곱 곡선: 상위권은 밀집, 하위로 갈수록 격차 확대 (C1)
   const t = (rank - 1) / (R.totalRanks - 1)
   const overall = clamp(Math.round(R.overallTop - R.overallSpan * Math.pow(t, R.overallExponent)), R.overallFloor, R.overallCap)
