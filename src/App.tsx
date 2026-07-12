@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { MotionConfig } from 'framer-motion'
 import { AppShell } from './components/layout/AppShell'
 import { Header } from './components/layout/Header'
 import { TabNav } from './components/layout/TabNav'
@@ -22,6 +23,7 @@ import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
 import { useSimulationStore } from './store/useSimulationStore'
 import { useMomentumStore } from './store/useMomentumStore'
+import { useA11yStore } from './store/useA11yStore'
 import { resetTournament } from './store/tournamentActions'
 
 type TabId = 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
@@ -41,6 +43,7 @@ function App() {
   const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
   const isDrawComplete = useDrawStore((s) => s.isComplete)
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
+  const reduceMotion = useA11yStore((s) => s.reduceMotion)
   const selectedTeamId = useSelectionStore((s) => s.selectedTeamId)
   const clearTeam = useSelectionStore((s) => s.clearTeam)
   const initSchedule = useProgressStore((s) => s.initSchedule)
@@ -76,6 +79,7 @@ function App() {
   }, [])
 
   return (
+    <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
     <AppShell>
       <Header />
       {sandboxMode && (
@@ -133,6 +137,7 @@ function App() {
       <DebugPanel />
       <OnboardingOverlay />
     </AppShell>
+    </MotionConfig>
   )
 }
 

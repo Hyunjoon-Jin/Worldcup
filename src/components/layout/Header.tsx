@@ -1,12 +1,10 @@
 import { GlassButton } from '../common/GlassButton'
+import { SettingsMenu } from './SettingsMenu'
 import { useSandboxStore } from '../../store/useSandboxStore'
-import { useThemeStore } from '../../store/useThemeStore'
 
 export function Header() {
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const toggleSandbox = useSandboxStore((s) => s.toggleSandbox)
-  const theme = useThemeStore((s) => s.theme)
-  const toggleTheme = useThemeStore((s) => s.toggle)
 
   return (
     <header className="flex flex-col items-center gap-3 px-4 pt-8 pb-4 text-center sm:flex-row sm:justify-between sm:text-left">
@@ -20,20 +18,13 @@ export function Header() {
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <GlassButton
-          variant="ghost"
-          onClick={toggleTheme}
-          aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-          aria-pressed={theme === 'light'}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </GlassButton>
-        <GlassButton
           variant={sandboxMode ? 'danger' : 'ghost'}
           onClick={toggleSandbox}
           aria-pressed={sandboxMode}
         >
           {sandboxMode ? '🧪 샌드박스 모드 ON' : '🧪 샌드박스 모드'}
         </GlassButton>
+        <SettingsMenu />
       </div>
     </header>
   )
