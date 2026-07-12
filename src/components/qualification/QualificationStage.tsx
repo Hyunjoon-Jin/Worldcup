@@ -4,10 +4,12 @@ import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSoundStore } from '../../store/useSoundStore'
 import { playVictory } from '../../engine/sound'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
+import { rankAcrossGroups } from '../../engine/qualification/generic'
 import { extractQualDrama } from '../../engine/qualification/drama'
 import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, computeQualHighlights, type QualTeamStat } from '../../engine/qualification/stats'
 import { pickQualUpset } from '../../engine/qualification/upset'
@@ -70,14 +72,41 @@ function MatchList({
 
 const CONFEDS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']
 
-function NationLabel({ teamId, className = '' }: { teamId: string; className?: string }) {
+/** 국가 라벨. 기본은 클릭 시 국가 상세 페이지로 이동(interactive). 버튼 안에 들어가는 자리에서는
+ *  interactive={false}로 정적 라벨로 쓴다(버튼 중첩 방지). */
+function NationLabel({
+  teamId,
+  className = '',
+  interactive = true,
+}: {
+  teamId: string
+  className?: string
+  interactive?: boolean
+}) {
   const nation = ALL_NATIONS_BY_ID[teamId]
+  const selectTeam = useSelectionStore((s) => s.selectTeam)
   if (!nation) return <span className="text-gray-100">{teamId}</span>
-  return (
-    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+  const inner = (
+    <>
       <FlagIcon iso2={nation.iso2} className="h-3 w-4 shrink-0" />
       <span className="font-medium text-gray-100">{nation.nameKo}</span>
-    </span>
+    </>
+  )
+  if (!interactive) {
+    return <span className={`inline-flex items-center gap-1.5 ${className}`}>{inner}</span>
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        selectTeam(teamId)
+      }}
+      title={`${nation.nameKo} 상세 보기`}
+      className={`inline-flex min-w-0 items-center gap-1.5 text-left hover:underline hover:decoration-emerald-300/60 hover:underline-offset-2 ${className}`}
+    >
+      {inner}
+    </button>
   )
 }
 
@@ -464,7 +493,7 @@ function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult
               {topQualifier && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-300">
                   <span className="text-[9px] text-gray-500">대표</span>
-                  <NationLabel teamId={topQualifier} />
+                  <NationLabel teamId={topQualifier} interactive={false} />
                 </div>
               )}
             </button>
@@ -709,8 +738,26 @@ function MyTeamQualBanner({
 }
 
 /** 직행/PO/탈락 상태 배지 (색+아이콘+텍스트 병행, I4). 진행 중이면 '—'. */
-function ResultBadge({ full, direct, po }: { full: boolean; direct: boolean; po: boolean }) {
-  if (!full) return <span className="text-[10px] text-gray-600">—</span>
+function ResultBadge({
+  full,
+  direct,
+  po,
+  provDirect,
+  provPo,
+}: {
+  full: boolean
+  direct: boolean
+  po: boolean
+  /** 진행 중 잠정 진출 상황(현재 순위 기준) */
+  provDirect?: boolean
+  provPo?: boolean
+}) {
+  if (!full) {
+    // 진행 중: 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
+    if (provDirect) return <span className="rounded border border-dashed border-emerald-400/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300/90">잠정 직행</span>
+    if (provPo) return <span className="rounded border border-dashed border-amber-400/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-300/90">잠정 PO</span>
+    return <span className="text-[10px] text-gray-600">—</span>
+  }
   if (direct) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
   if (po) return <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
   return <span className="text-[10px] text-gray-600">탈락</span>
@@ -819,6 +866,18 @@ function ConfederationStandings({
   const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
   const single = r.groups.length <= 1
 
+  // 진행 중 잠정 진출 현황(현재 순위 기준). 단일 조별 대륙만 — 다단계(AFC·CONCACAF)는 스테이지
+  // 로직이라 횡단 순위 투영이 부정확하므로 잠정 표시를 생략한다.
+  const provisional = ((): { direct: Set<string>; po: Set<string> } => {
+    if (full || r.groupLabels) return { direct: new Set(), po: new Set() }
+    const provRankings = r.groups.map((fo, gi) => rankGroupTeams(fo, shownMatches.filter((m) => m.group === gi)))
+    const order = rankAcrossGroups(provRankings, shownMatches, r.standings)
+    return {
+      direct: new Set(order.slice(0, r.qualified.length)),
+      po: new Set(order.slice(r.qualified.length, r.qualified.length + r.playoff.length)),
+    }
+  })()
+
   return (
     <GlassCard className="p-4">
       {confed === 'CONCACAF' && (
@@ -883,7 +942,7 @@ function ConfederationStandings({
                   {rows.map(({ teamId, idx, s, gd, direct, po }) => (
                     <tr
                       key={teamId}
-                      className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
+                      className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : ''}`}
                     >
                       <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                       <th scope="row" className="py-1.5 font-normal">
@@ -898,7 +957,7 @@ function ConfederationStandings({
                       {probabilities && (
                         <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
                       )}
-                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} /></td>
+                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -910,7 +969,7 @@ function ConfederationStandings({
                 <li
                   key={teamId}
                   className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
-                    teamId === myTeamId ? 'bg-sky-500/15 ring-1 ring-sky-400/40' : direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : 'bg-white/5'
+                    teamId === myTeamId ? 'bg-sky-500/15 ring-1 ring-sky-400/40' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : 'bg-white/5'
                   }`}
                 >
                   <span className="w-4 shrink-0 text-center text-[11px] text-gray-500 tabular-nums">{idx + 1}</span>
@@ -926,7 +985,7 @@ function ConfederationStandings({
                       {probabilities && <span className="text-sky-300">{(probabilities[teamId] ?? 0).toFixed(0)}%</span>}
                     </div>
                   </div>
-                  <ResultBadge full={full} direct={direct} po={po} />
+                  <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} />
                 </li>
               ))}
             </ul>
@@ -940,7 +999,9 @@ function ConfederationStandings({
           ? single
             ? '※ 상위권 직행, 다음 순위 대륙간 PO로 결정됩니다.'
             : '※ 조 순위는 조별 성적, 직행/PO 여부는 전체 대륙 순위(조 1위 우선 → 최고 2위 …)로 결정됩니다.'
-          : '※ 진행 중 — 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'}
+          : r.groupLabels
+            ? '※ 진행 중 — 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'
+            : '※ 진행 중 — 점선 배지는 현재 순위 기준 잠정 진출 상황(확정 아님)입니다. 라운드를 넘기면 실시간으로 바뀝니다.'}
       </p>
     </GlassCard>
   )

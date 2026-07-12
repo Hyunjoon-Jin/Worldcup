@@ -119,6 +119,33 @@ export function playSingleGroup(
  * 전체 기록으로 횡단 비교해 글로벌 순위를 만든 뒤, 상위 direct 직행 + 다음 playoff를 PO로 보낸다.
  * numGroups=1이면 단일리그(CONMEBOL·OFC)와 동일하게 동작한다.
  */
+/**
+ * 조별 순위(각 조 순위순 팀 배열)와 경기 기록으로 대륙 전체 순위를 만든다.
+ * 같은 조내 순위(1위끼리, 2위끼리 …)를 전체 기록(승점·득실·다득점·랭킹)으로 횡단 비교한다.
+ * 진행 중 잠정 순위 계산에도 재사용한다(전달하는 matches를 치른 경기로 한정).
+ */
+export function rankAcrossGroups(groupRankings: string[][], matches: QualMatch[], teams: string[]): string[] {
+  const overall = computeStandings(teams, matches)
+  const byRecord = (a: string, b: string) => {
+    const sa = overall[a]
+    const sb = overall[b]
+    if (sb.points !== sa.points) return sb.points - sa.points
+    const gda = sa.goalsFor - sa.goalsAgainst
+    const gdb = sb.goalsFor - sb.goalsAgainst
+    if (gdb !== gda) return gdb - gda
+    if (sb.goalsFor !== sa.goalsFor) return sb.goalsFor - sa.goalsFor
+    return ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+  }
+  const maxLen = groupRankings.length ? Math.max(...groupRankings.map((r) => r.length)) : 0
+  const standings: string[] = []
+  for (let pos = 0; pos < maxLen; pos++) {
+    const atPos = groupRankings.map((r) => r[pos]).filter(Boolean) as string[]
+    atPos.sort(byRecord)
+    standings.push(...atPos)
+  }
+  return standings
+}
+
 export function simulateGroupQualification(
   teams: string[],
   ratings: Record<string, TeamRatings>,
@@ -145,26 +172,7 @@ export function simulateGroupQualification(
     groupRankings.push(ranking)
   })
 
-  const overall = computeStandings(teams, matches)
-  const byRecord = (a: string, b: string) => {
-    const sa = overall[a]
-    const sb = overall[b]
-    if (sb.points !== sa.points) return sb.points - sa.points
-    const gda = sa.goalsFor - sa.goalsAgainst
-    const gdb = sb.goalsFor - sb.goalsAgainst
-    if (gdb !== gda) return gdb - gda
-    if (sb.goalsFor !== sa.goalsFor) return sb.goalsFor - sa.goalsFor
-    return ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
-  }
-
-  // 같은 조내 순위(1위끼리, 2위끼리 …)를 전체 기록으로 횡단 비교해 글로벌 순위를 만든다.
-  const maxLen = Math.max(...groupRankings.map((r) => r.length))
-  const standings: string[] = []
-  for (let pos = 0; pos < maxLen; pos++) {
-    const atPos = groupRankings.map((r) => r[pos]).filter(Boolean) as string[]
-    atPos.sort(byRecord)
-    standings.push(...atPos)
-  }
+  const standings = rankAcrossGroups(groupRankings, matches, teams)
 
   return {
     confederation: cfg.confederation,
