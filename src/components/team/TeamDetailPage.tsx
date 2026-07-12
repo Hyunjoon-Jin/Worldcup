@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CONFEDERATION_LABEL_KO, TEAMS_BY_ID } from '../../data/teams'
+import { titlesFor } from '../../data/history'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
@@ -123,6 +124,7 @@ export function TeamDetailPage() {
   const [forecastLoading, setForecastLoading] = useState(false)
 
   const team = teamId ? TEAMS_BY_ID[teamId] : null
+  const titleHistory = teamId ? titlesFor(teamId) : null
 
   const group = useMemo<GroupLetter | null>(() => {
     if (!teamId) return null
@@ -320,6 +322,12 @@ export function TeamDetailPage() {
               {group && ` · 조 ${group}`}
               {team.isHost && ' · 개최국'}
             </p>
+            {titleHistory && (
+              <p className="mt-0.5 text-xs font-bold text-amber-300" title={`우승 연도: ${titleHistory.years.join(', ')}`}>
+                🏆 역대 월드컵 우승 {titleHistory.titles}회{' '}
+                <span className="font-normal text-gray-500">({titleHistory.years.join(', ')})</span>
+              </p>
+            )}
             {Math.abs(conditionOffset) >= 3 && (
               <p className={`mt-0.5 text-xs font-bold ${conditionOffset > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
                 {conditionOffset >= 5

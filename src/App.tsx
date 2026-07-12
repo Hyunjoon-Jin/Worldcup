@@ -52,6 +52,28 @@ function App() {
     if (isDrawComplete) initSchedule()
   }, [isDrawComplete, initSchedule])
 
+  // 키보드 단축키: 숫자 1~5로 탭 전환 (v2 #37). 입력 요소에 포커스가 있으면 무시한다.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
+      const idx = Number(e.key) - 1
+      if (idx >= 0 && idx < TABS.length) {
+        const t = TABS[idx]
+        if (t.id === 'draw' || isDrawComplete) {
+          clearTeam()
+          setTab(t.id)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isDrawComplete, clearTeam])
+
+  const isComputing = useSimulationStore((s) => s.isComputing)
+
   // 경기가 진행되거나(그룹/토너먼트 결과 갱신) 샌드박스 능력치가 바뀔 때마다
   // 확률 대시보드를 새로고침 없이 자동으로 재계산한다(연타 시 과도한 재계산을 막기 위해 디바운스).
   useEffect(() => {
@@ -81,6 +103,15 @@ function App() {
   return (
     <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
     <AppShell>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[80] focus:rounded-lg focus:bg-emerald-500 focus:px-3 focus:py-2 focus:text-sm focus:text-white"
+      >
+        본문 바로가기
+      </a>
+      <div aria-live="polite" className="sr-only">
+        {isComputing ? '확률을 계산하고 있습니다.' : ''}
+      </div>
       <Header />
       {sandboxMode && (
         <Suspense fallback={null}>
@@ -120,6 +151,7 @@ function App() {
         />
       </div>
 
+      <div id="main-content" />
       <Suspense fallback={<div className="py-16 text-center text-sm text-gray-500">불러오는 중…</div>}>
         {selectedTeamId ? (
           <TeamDetailPage />
