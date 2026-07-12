@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# scratch/verification scripts (not part of the app)
+/shot*.mjs
+/kb.mjs
+/verify.mjs
+/shot*.png
