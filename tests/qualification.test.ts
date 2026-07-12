@@ -5,6 +5,8 @@ import { nationsByConfederation, baseRatingsMap, ALL_NATIONS, ALL_NATIONS_BY_ID 
 import { SLOT_ALLOCATION } from '../src/data/confederations'
 import { createSeededRandom } from '../src/engine/rng'
 import { computePots, runSeededDraw } from '../src/engine/drawEngine'
+import { createQualProbAccumulator } from '../src/engine/qualification/probability'
+import { extractQualDrama } from '../src/engine/qualification/drama'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -138,6 +140,41 @@ describe('computePots — 예선 결과 → 본선 동적 포트 (지역예선 Q
     // 12개 조가 4팀씩
     for (const g of Object.values(state.groups) as (string | null)[][]) {
       expect(g.filter(Boolean)).toHaveLength(4)
+    }
+  })
+})
+
+describe('예선 진출 확률 (지역예선 Q5)', () => {
+  it('개최국은 항상 100%, 강팀 > 약팀 진출률', () => {
+    const acc = createQualProbAccumulator('PROB')
+    acc.runBatch(30)
+    const probs = acc.result()
+    expect(probs.USA).toBe(100)
+    expect(probs.MEX).toBe(100)
+    // 아르헨티나(랭킹1)가 볼리비아(약체)보다 진출률 높음
+    expect(probs.ARG ?? 0).toBeGreaterThanOrEqual(probs.BOL ?? 0)
+  })
+
+  it('같은 seedBase는 같은 확률을 재현한다', () => {
+    const a = createQualProbAccumulator('SAME')
+    a.runBatch(20)
+    const b = createQualProbAccumulator('SAME')
+    b.runBatch(20)
+    expect(a.result().ARG).toBe(b.result().ARG)
+  })
+})
+
+describe('예선 드라마 (지역예선 Q6)', () => {
+  it('깜짝 진출/충격 탈락을 랭킹 대조로 뽑고 개최국은 제외한다', () => {
+    const all = simulateAllQualification('DRAMA')
+    const drama = extractQualDrama(all)
+    expect(drama.surpriseQualifiers.length).toBeGreaterThan(0)
+    for (const d of drama.surpriseQualifiers) {
+      expect(['MEX', 'USA', 'CAN']).not.toContain(d.teamId)
+      expect(all.qualified48).toContain(d.teamId)
+    }
+    for (const d of drama.shockEliminations) {
+      expect(all.qualified48).not.toContain(d.teamId)
     }
   })
 })

@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
+import { useMemo } from 'react'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings } from '../../engine/tiebreakers'
+import { extractQualDrama } from '../../engine/qualification/drama'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import type { Confederation } from '../../types/team'
@@ -24,6 +26,7 @@ function NationLabel({ teamId, className = '' }: { teamId: string; className?: s
 
 function ConfederationStandings({ confed }: { confed: Confederation }) {
   const result = useQualificationStore((s) => s.result)
+  const probabilities = useQualificationStore((s) => s.probabilities)
   const r = result?.byConfederation[confed]
   if (!r) return null
   const standings = computeStandings(r.standings, r.matches)
@@ -46,6 +49,7 @@ function ConfederationStandings({ confed }: { confed: Confederation }) {
               <th className="w-12 py-1 text-center">경기</th>
               <th className="w-12 py-1 text-center">승점</th>
               <th className="w-14 py-1 text-center">득실</th>
+              {probabilities && <th className="w-16 py-1 text-right">진출확률</th>}
               <th className="py-1 text-right">결과</th>
             </tr>
           </thead>
@@ -65,6 +69,11 @@ function ConfederationStandings({ confed }: { confed: Confederation }) {
                   <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                   <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                   <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
+                  {probabilities && (
+                    <td className="py-1.5 text-right text-sky-300 tabular-nums">
+                      {(probabilities[teamId] ?? 0).toFixed(0)}%
+                    </td>
+                  )}
                   <td className="py-1.5 text-right">
                     {direct ? (
                       <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
@@ -89,8 +98,13 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const seed = useQualificationStore((s) => s.seed)
   const result = useQualificationStore((s) => s.result)
   const simulate = useQualificationStore((s) => s.simulate)
+  const probabilities = useQualificationStore((s) => s.probabilities)
+  const probLoading = useQualificationStore((s) => s.probLoading)
+  const computeProbabilities = useQualificationStore((s) => s.computeProbabilities)
   const [seedInput, setSeedInput] = useState('')
   const [confed, setConfed] = useState<Confederation>('UEFA')
+
+  const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
 
   return (
     <div className="flex flex-col gap-5">
@@ -119,19 +133,24 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
         </GlassCard>
       ) : (
         <>
-          <div className="flex flex-wrap gap-1.5">
-            {CONFEDS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setConfed(c)}
-                aria-pressed={confed === c}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  confed === c ? 'bg-emerald-500/25 text-emerald-200' : 'bg-white/5 text-gray-400 hover:text-white'
-                }`}
-              >
-                {CONFEDERATION_LABEL_KO[c]}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {CONFEDS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setConfed(c)}
+                  aria-pressed={confed === c}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    confed === c ? 'bg-emerald-500/25 text-emerald-200' : 'bg-white/5 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {CONFEDERATION_LABEL_KO[c]}
+                </button>
+              ))}
+            </div>
+            <GlassButton variant="ghost" onClick={computeProbabilities} disabled={probLoading}>
+              {probLoading ? '진출 확률 계산 중…' : probabilities ? '🔄 진출 확률 재계산' : '📊 본선 진출 확률'}
+            </GlassButton>
           </div>
 
           <ConfederationStandings confed={confed} />
@@ -179,6 +198,59 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 </div>
               ))}
             </div>
+          </GlassCard>
+
+          {drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
+            <GlassCard className="p-4">
+              <h3 className="mb-3 text-sm font-bold text-amber-300">🎭 예선 이변</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold text-emerald-300">🐎 깜짝 본선행 (랭킹 낮은데 진출)</p>
+                  <div className="space-y-1">
+                    {drama.surpriseQualifiers.map((d) => (
+                      <div key={d.teamId} className="flex items-center justify-between text-xs">
+                        <NationLabel teamId={d.teamId} />
+                        <span className="text-[10px] text-gray-500">FIFA {d.rank}위</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold text-red-300">💥 충격 탈락 (랭킹 높은데 탈락)</p>
+                  <div className="space-y-1">
+                    {drama.shockEliminations.map((d) => (
+                      <div key={d.teamId} className="flex items-center justify-between text-xs">
+                        <NationLabel teamId={d.teamId} />
+                        <span className="text-[10px] text-gray-500">FIFA {d.rank}위</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+          )}
+
+          <GlassCard className="p-4">
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-gray-200">
+                <span>📖 예선 규정 도움말</span>
+                <span className="text-xs text-gray-500 transition-transform group-open:rotate-180">▾</span>
+              </summary>
+              <div className="mt-3 space-y-2 text-[11px] leading-relaxed text-gray-400">
+                <p>
+                  <strong className="text-emerald-300">슬롯 배분:</strong> UEFA 16 · CAF 9 · AFC 8 · CONMEBOL 6 ·
+                  CONCACAF 6(개최 3국 포함) · OFC 1 = 46 직행. 여기에 대륙간 플레이오프 2장을 더해 총 48개국.
+                </p>
+                <p>
+                  <strong className="text-emerald-300">개최국:</strong> 미국·멕시코·캐나다는 예선 없이 자동 진출합니다.
+                </p>
+                <p>
+                  <strong className="text-emerald-300">대륙간 플레이오프:</strong> 각 대륙의 PO행 팀(총 6팀)이
+                  시드 브래킷으로 맞붙어 2장을 가립니다.
+                </p>
+                <p>세부 포맷은 시뮬레이션에 맞게 근사했으며, 조추첨 이후처럼 예선 결과도 실제 대회와 무관한 가상 시뮬레이션입니다.</p>
+              </div>
+            </details>
           </GlassCard>
         </>
       )}
