@@ -7,7 +7,10 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
-import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, type QualTeamStat } from '../../engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, type QualTeamStat } from '../../engine/qualification/stats'
+import { pickQualUpset } from '../../engine/qualification/upset'
+import { generateUpsetArticle } from '../../engine/upsetArticle'
+import { PROB_ITERATIONS } from '../../store/useQualificationStore'
 import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
@@ -114,6 +117,45 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
           <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
         </div>
       )}
+    </GlassCard>
+  )
+}
+
+/** 예선 이변 기사 (F2). 최대 이변 경기를 뉴스 기사 형태로 생성해 보여준다. */
+function QualUpsetArticleCard({ result }: { result: AllQualificationResult }) {
+  const article = useMemo(() => {
+    const params = pickQualUpset(result)
+    return params ? { params, article: generateUpsetArticle(params) } : null
+  }, [result])
+  if (!article) return null
+  const { params, article: a } = article
+  const winner = ALL_NATIONS_BY_ID[params.winnerTeamId]
+  const loser = ALL_NATIONS_BY_ID[params.loserTeamId]
+  return (
+    <GlassCard className="p-4">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-gray-200">
+          <span>📰 예선 이변 기사</span>
+          <span className="text-xs text-gray-500 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <article className="mt-3">
+          <h4 className="mb-2 font-display text-base font-bold leading-snug text-white">{a.headline}</h4>
+          <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-400">
+            <NationLabel teamId={params.winnerTeamId} />
+            <span className="font-bold tabular-nums text-white">{params.winnerGoals}-{params.loserGoals}</span>
+            <NationLabel teamId={params.loserTeamId} />
+            <span className="text-gray-600">· {params.roundLabel}</span>
+          </div>
+          <div className="space-y-2 text-xs leading-relaxed text-gray-300">
+            {a.paragraphs.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-gray-600">
+            ※ FIFA 랭킹 {winner?.fifaRankApprox}위 {winner?.nameKo}가 {loser?.fifaRankApprox}위 {loser?.nameKo}를 꺾은 결과 기반 · 가상 기사
+          </p>
+        </article>
+      </details>
     </GlassCard>
   )
 }
@@ -225,6 +267,7 @@ function MyTeamQualBanner({
         <div className="shrink-0 text-right">
           <p className="text-[10px] text-gray-400">진출 확률</p>
           <p className="text-lg font-bold tabular-nums text-sky-300">{probability.toFixed(0)}%</p>
+          <p className="text-[9px] text-gray-500 tabular-nums">±{probMarginPct(probability, PROB_ITERATIONS).toFixed(1)}%</p>
         </div>
       )}
     </div>
@@ -587,6 +630,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             />
           )}
 
+          {probabilities && (
+            <p className="-mt-2 text-[10px] text-gray-500">
+              ※ 진출 확률은 {PROB_ITERATIONS}회 시뮬레이션 표본 추정치이며 ±오차범위(95% 신뢰구간)를 갖습니다 (G2).
+            </p>
+          )}
+
           <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />
 
           <GlassCard className="p-4">
@@ -688,6 +737,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </GlassCard>
 
           <QualStatsCard result={result} />
+
+          <QualUpsetArticleCard result={result} />
 
           {probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
 

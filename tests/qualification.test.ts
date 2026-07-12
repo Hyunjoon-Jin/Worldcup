@@ -8,7 +8,9 @@ import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import { createQualProbAccumulator } from '../src/engine/qualification/probability'
 import { extractQualDrama } from '../src/engine/qualification/drama'
 import { QUAL_FORMAT } from '../src/engine/qualification/formats'
-import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis } from '../src/engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct } from '../src/engine/qualification/stats'
+import { pickQualUpset } from '../src/engine/qualification/upset'
+import { generateUpsetArticle } from '../src/engine/upsetArticle'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -119,6 +121,44 @@ describe('예선 통계 대시보드 (개선 F5)', () => {
     const s = computeQualStats(all, 100)
     const arg = s.topScorers.concat(s.mostWins).find((t) => t.teamId === 'ARG')
     if (arg) expect(arg.played).toBe(arg.wins + arg.draws + arg.losses)
+  })
+})
+
+describe('진출 확률 신뢰구간 (개선 G2)', () => {
+  it('오차범위는 p=50%에서 최대, 0·100%에서 0이고 표본이 커지면 좁아진다', () => {
+    expect(probMarginPct(0, 300)).toBe(0)
+    expect(probMarginPct(100, 300)).toBe(0)
+    // p=50%가 가장 큰 오차
+    expect(probMarginPct(50, 300)).toBeGreaterThan(probMarginPct(20, 300))
+    // 표본이 커지면 오차범위 감소
+    expect(probMarginPct(50, 1200)).toBeLessThan(probMarginPct(50, 300))
+    // n<=0 방어
+    expect(probMarginPct(50, 0)).toBe(0)
+  })
+})
+
+describe('예선 이변 기사 (개선 F2)', () => {
+  it('약체가 강호를 이긴 최대 격차 경기를 골라 기사를 만든다', () => {
+    const all = simulateAllQualification('UPSET')
+    const params = pickQualUpset(all)
+    expect(params).toBeTruthy()
+    if (params) {
+      // 승자의 FIFA 랭킹 숫자가 패자보다 커야(=약체) 이변
+      expect(ALL_NATIONS_BY_ID[params.winnerTeamId].fifaRankApprox).toBeGreaterThan(
+        ALL_NATIONS_BY_ID[params.loserTeamId].fifaRankApprox,
+      )
+      expect(params.winnerGoals).toBeGreaterThan(params.loserGoals)
+      const article = generateUpsetArticle(params)
+      expect(article.headline.length).toBeGreaterThan(0)
+      expect(article.paragraphs.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('같은 시드는 같은 이변 경기를 고른다', () => {
+    const a = pickQualUpset(simulateAllQualification('UPSET-SAME'))
+    const b = pickQualUpset(simulateAllQualification('UPSET-SAME'))
+    expect(a?.winnerTeamId).toBe(b?.winnerTeamId)
+    expect(a?.loserTeamId).toBe(b?.loserTeamId)
   })
 })
 

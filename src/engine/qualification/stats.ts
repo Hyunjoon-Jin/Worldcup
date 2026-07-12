@@ -49,6 +49,16 @@ export interface QualStats {
   biggestWin: { match: QualMatch; margin: number } | null
 }
 
+/**
+ * 표본 기반 진출 확률의 95% 신뢰구간 오차범위(±%)를 계산한다 (G2).
+ * 비율 p에 대한 표준오차 = sqrt(p(1-p)/n), 95% 신뢰수준은 ×1.96.
+ */
+export function probMarginPct(pct: number, n: number): number {
+  if (n <= 0) return 0
+  const p = Math.min(1, Math.max(0, pct / 100))
+  return 1.96 * Math.sqrt((p * (1 - p)) / n) * 100
+}
+
 /** 행운/불운 분석 항목(G5). */
 export interface LuckEntry {
   teamId: string

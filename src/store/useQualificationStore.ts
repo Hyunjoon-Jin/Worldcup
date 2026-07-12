@@ -48,8 +48,8 @@ interface QualificationStore {
   reset: () => void
 }
 
-/** 진출 확률 계산 반복 수(워커에서 실행하므로 상향). */
-const PROB_ITERATIONS = 300
+/** 진출 확률 계산 반복 수(워커에서 실행하므로 상향). 신뢰구간 계산(G2)에도 쓰인다. */
+export const PROB_ITERATIONS = 300
 const PROB_BATCH = 15
 let probRunId = 0
 let probWorker: Worker | null = null
