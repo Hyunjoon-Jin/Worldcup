@@ -2,6 +2,7 @@ import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
 import { playSingleGroup, snakeSeed } from './generic'
+import { QUAL_FORMAT, GROUP_LETTERS, type AfcFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
 
@@ -20,6 +21,7 @@ export function simulateAfc(
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
 ): QualificationResult {
+  const fmt = QUAL_FORMAT.AFC as AfcFormat
   const directSlots = SLOT_ALLOCATION.AFC.direct // 8
   const sorted = [...teams].sort(byRank)
 
@@ -31,18 +33,17 @@ export function simulateAfc(
   const direct: string[] = []
   const round4Pool: string[] = []
 
-  // 3차: 3개 조 (같은 스테이지 조들은 동일 매치데이 창에서 병행 → 고정 base 사용)
+  // 3차: N개 조 (같은 스테이지 조들은 동일 매치데이 창에서 병행 → 고정 base 사용)
   const r3Base = md
-  const r3Letters = ['A', 'B', 'C']
-  snakeSeed(sorted, 3).forEach((g, i) => {
+  snakeSeed(sorted, fmt.round3Groups).forEach((g, i) => {
     const { matches, ranking, lastMatchday } = playSingleGroup(g, ratings, rand, {
-      doubleRound: true,
+      doubleRound: fmt.doubleRound,
       groupIndex: groupRankings.length,
       matchdayOffset: r3Base,
     })
     allMatches.push(...matches)
     groupRankings.push(ranking)
-    groupLabels.push(`3차 ${r3Letters[i]}조`)
+    groupLabels.push(`3차 ${GROUP_LETTERS[i]}조`)
     md = Math.max(md, lastMatchday)
     if (ranking[0]) direct.push(ranking[0])
     if (ranking[1]) direct.push(ranking[1])
@@ -50,19 +51,18 @@ export function simulateAfc(
     if (ranking[3]) round4Pool.push(ranking[3])
   })
 
-  // 4차: 3·4위 팀들을 2개 조로 (3차 종료 후 시작 → 고정 base)
+  // 4차: 3·4위 팀들을 N개 조로 (3차 종료 후 시작 → 고정 base)
   const round5Pool: string[] = []
   const r4Base = md
-  const r4Letters = ['A', 'B']
-  snakeSeed([...round4Pool].sort(byRank), 2).forEach((g, i) => {
+  snakeSeed([...round4Pool].sort(byRank), fmt.round4Groups).forEach((g, i) => {
     const { matches, ranking, lastMatchday } = playSingleGroup(g, ratings, rand, {
-      doubleRound: true,
+      doubleRound: fmt.doubleRound,
       groupIndex: groupRankings.length,
       matchdayOffset: r4Base,
     })
     allMatches.push(...matches)
     groupRankings.push(ranking)
-    groupLabels.push(`4차 ${r4Letters[i]}조`)
+    groupLabels.push(`4차 ${GROUP_LETTERS[i]}조`)
     md = Math.max(md, lastMatchday)
     if (ranking[0]) direct.push(ranking[0])
     if (ranking[1]) round5Pool.push(ranking[1])

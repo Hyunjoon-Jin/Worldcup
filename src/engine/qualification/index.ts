@@ -2,29 +2,15 @@ import { ALL_NATIONS, baseRatingsMap, nationsByConfederation } from '../../data/
 import { HOST_SLOTS } from '../../data/hostSlots'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { createSeededRandom, type RandomFn } from '../rng'
-import { simulateGroupQualification, type QualConfig } from './generic'
+import { simulateGroupQualification } from './generic'
 import { simulateAfc } from './afc'
 import { simulateConcacaf } from './concacaf'
+import { QUAL_FORMAT } from './formats'
 import { simulateInterConfedPlayoff, type InterConfedResult } from './interConfed'
 import type { Confederation, TeamRatings } from '../../types/team'
 import type { QualificationResult } from '../../types/qualification'
 
 const HOST_IDS = Object.keys(HOST_SLOTS) // ['MEX','CAN','USA']
-
-/**
- * 대륙별 예선 포맷 설정 (슬롯 정확 + 포맷 근사). numGroups는 참가국 풀 대비 조 크기가
- * 합리적이도록 정한 근사치. CONCACAF는 개최 3국 자동 진출이라 비개최국만 시뮬레이션한다.
- */
-// 실제 예선처럼 모든 대륙을 조 내 홈&어웨이(doubleRound)로 치른다 (A5).
-const CONFED_CONFIGS: Record<Confederation, Omit<QualConfig, 'confederation'>> = {
-  UEFA: { numGroups: 12, direct: SLOT_ALLOCATION.UEFA.direct, playoff: SLOT_ALLOCATION.UEFA.playoff, doubleRound: true },
-  CAF: { numGroups: 9, direct: SLOT_ALLOCATION.CAF.direct, playoff: SLOT_ALLOCATION.CAF.playoff, doubleRound: true },
-  AFC: { numGroups: 4, direct: SLOT_ALLOCATION.AFC.direct, playoff: SLOT_ALLOCATION.AFC.playoff, doubleRound: true },
-  CONMEBOL: { numGroups: 1, direct: SLOT_ALLOCATION.CONMEBOL.direct, playoff: SLOT_ALLOCATION.CONMEBOL.playoff, doubleRound: true },
-  // CONCACAF direct는 개최 3국 포함 → 비개최국 대상 시뮬은 (direct-3)장
-  CONCACAF: { numGroups: 3, direct: SLOT_ALLOCATION.CONCACAF.direct - HOST_IDS.length, playoff: SLOT_ALLOCATION.CONCACAF.playoff, doubleRound: true },
-  OFC: { numGroups: 1, direct: SLOT_ALLOCATION.OFC.direct, playoff: SLOT_ALLOCATION.OFC.playoff, doubleRound: true },
-}
 
 const CONFEDERATIONS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']
 
@@ -47,8 +33,17 @@ export function simulateConfederation(
   // 다단계 구조 대륙은 전용 엔진으로 실제 라운드 구성을 근사한다 (A3·A4).
   if (confed === 'AFC') return simulateAfc(teams, ratings, rand)
   if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand) // 개최국 필터는 내부 처리
-  const cfg = CONFED_CONFIGS[confed]
-  return simulateGroupQualification(teams, ratings, rand, { confederation: confed, ...cfg })
+  // 단일 조별 스테이지 대륙: 포맷(조 수·홈&어웨이)은 QUAL_FORMAT, 슬롯은 SLOT_ALLOCATION에서 (C4).
+  const fmt = QUAL_FORMAT[confed]
+  if (fmt.kind !== 'groups') throw new Error(`조별 포맷이 아닌 대륙: ${confed}`)
+  const slots = SLOT_ALLOCATION[confed]
+  return simulateGroupQualification(teams, ratings, rand, {
+    confederation: confed,
+    numGroups: fmt.numGroups,
+    direct: slots.direct,
+    playoff: slots.playoff,
+    doubleRound: fmt.doubleRound,
+  })
 }
 
 /**

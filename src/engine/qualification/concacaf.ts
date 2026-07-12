@@ -4,6 +4,7 @@ import { HOST_SLOTS } from '../../data/hostSlots'
 import { computeStandings } from '../tiebreakers'
 import { type RandomFn } from '../matchCore'
 import { playSingleGroup, snakeSeed } from './generic'
+import { QUAL_FORMAT, GROUP_LETTERS, type ConcacafFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
 
@@ -22,6 +23,7 @@ export function simulateConcacaf(
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
 ): QualificationResult {
+  const fmt = QUAL_FORMAT.CONCACAF as ConcacafFormat
   const pool = teams.filter((id) => !HOST_IDS.includes(id))
   const directSlots = SLOT_ALLOCATION.CONCACAF.direct - HOST_IDS.length // 3
   const playoffSlots = SLOT_ALLOCATION.CONCACAF.playoff // 2
@@ -32,9 +34,9 @@ export function simulateConcacaf(
   const groupLabels: string[] = []
   let md = 0
 
-  // 최종 라운드는 3개 조 × 3팀 = 9팀. 상위 시드는 최종 라운드 직행, 하위권은 1차를 거친다.
-  const FINAL_SIZE = 9
-  const prelimSurvivors = Math.min(2, Math.max(0, pool.length - (FINAL_SIZE - 2)))
+  // 최종 라운드(예: 3개 조 × 3팀 = 9팀). 상위 시드는 최종 라운드 직행, 하위권은 1차를 거친다.
+  const FINAL_SIZE = fmt.finalSize
+  const prelimSurvivors = Math.min(fmt.prelimSurvivors, Math.max(0, pool.length - (FINAL_SIZE - fmt.prelimSurvivors)))
 
   let finalists: string[]
   if (pool.length <= FINAL_SIZE) {
@@ -56,10 +58,9 @@ export function simulateConcacaf(
     finalists = [...autoIntoFinal, ...ranking.slice(0, prelimSurvivors)]
   }
 
-  // 최종 라운드: 3개 조
+  // 최종 라운드: N개 조
   const finalBase = md
-  const finalLetters = ['A', 'B', 'C']
-  const numFinalGroups = Math.min(3, finalists.length)
+  const numFinalGroups = Math.min(fmt.finalGroups, finalists.length)
   const direct: string[] = []
   const runnersUp: string[] = []
   const finalGroupMatches: QualMatch[] = []
@@ -72,7 +73,7 @@ export function simulateConcacaf(
     allMatches.push(...matches)
     finalGroupMatches.push(...matches)
     groupRankings.push(ranking)
-    groupLabels.push(`최종 ${finalLetters[i]}조`)
+    groupLabels.push(`최종 ${GROUP_LETTERS[i]}조`)
     md = Math.max(md, lastMatchday)
     if (ranking[0]) direct.push(ranking[0])
     if (ranking[1]) runnersUp.push(ranking[1])

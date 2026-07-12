@@ -7,6 +7,7 @@ import { createSeededRandom } from '../src/engine/rng'
 import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import { createQualProbAccumulator } from '../src/engine/qualification/probability'
 import { extractQualDrama } from '../src/engine/qualification/drama'
+import { QUAL_FORMAT } from '../src/engine/qualification/formats'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -84,6 +85,32 @@ describe('대륙별 예선 슬롯 정확성 (지역예선 Q2 확장)', () => {
     expect(r.qualified).toHaveLength(SLOT_ALLOCATION.CONCACAF.direct - 3) // 3
     expect(r.playoff).toHaveLength(2)
     for (const host of ['MEX', 'USA', 'CAN']) expect(r.qualified).not.toContain(host)
+  })
+})
+
+describe('포맷 데이터 주도화 (개선 C4)', () => {
+  const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
+
+  it('단일 조별 대륙의 조 수는 QUAL_FORMAT.numGroups를 따른다', () => {
+    for (const c of ['UEFA', 'CAF', 'CONMEBOL', 'OFC'] as const) {
+      const fmt = QUAL_FORMAT[c]
+      if (fmt.kind !== 'groups') continue
+      const r = simulateConfederation(c, allRatings, createSeededRandom(`fmt-${c}`))
+      expect(r.groups.length).toBe(fmt.numGroups)
+    }
+  })
+
+  it('AFC/CONCACAF 스테이지 조 수가 포맷 파라미터와 일치한다', () => {
+    const afc = QUAL_FORMAT.AFC
+    if (afc.kind === 'afc') {
+      const r = simulateConfederation('AFC', allRatings, createSeededRandom('fmt-afc'))
+      expect(r.groups.length).toBe(afc.round3Groups + afc.round4Groups + 1) // +5차 PO
+    }
+    const ccf = QUAL_FORMAT.CONCACAF
+    if (ccf.kind === 'concacaf') {
+      const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('fmt-ccf'))
+      expect(r.groups.length).toBe(1 + ccf.finalGroups) // 1차 + 최종 조들
+    }
   })
 })
 
