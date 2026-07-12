@@ -10,6 +10,7 @@ import { extractQualDrama } from '../src/engine/qualification/drama'
 import { QUAL_FORMAT } from '../src/engine/qualification/formats'
 import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct } from '../src/engine/qualification/stats'
 import { pickQualUpset } from '../src/engine/qualification/upset'
+import { runWhatIfScenarios } from '../src/engine/qualification/whatif'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
 import type { Confederation } from '../src/types/team'
 
@@ -134,6 +135,25 @@ describe('진출 확률 신뢰구간 (개선 G2)', () => {
     expect(probMarginPct(50, 1200)).toBeLessThan(probMarginPct(50, 300))
     // n<=0 방어
     expect(probMarginPct(50, 0)).toBe(0)
+  })
+})
+
+describe('What-if 진출 분석 (개선 G3)', () => {
+  it('전력을 높일수록 진출 확률이 오르고 낮출수록 내려간다', () => {
+    // 약체(볼리비아)로 델타 효과가 뚜렷하게 나타나도록
+    const scenarios = runWhatIfScenarios('BOL', [-15, 0, 30], 25, 'WHATIF')
+    expect(scenarios).toHaveLength(3)
+    const [weak, base, strong] = scenarios
+    expect(strong.probability).toBeGreaterThanOrEqual(base.probability)
+    expect(base.probability).toBeGreaterThanOrEqual(weak.probability)
+    // 크게 강화하면 유의미하게 상승
+    expect(strong.probability).toBeGreaterThan(weak.probability)
+  })
+
+  it('같은 seedBase는 같은 결과를 재현한다', () => {
+    const a = runWhatIfScenarios('KOR', [0, 10], 15, 'WHATIF-SAME')
+    const b = runWhatIfScenarios('KOR', [0, 10], 15, 'WHATIF-SAME')
+    expect(a.map((s) => s.probability)).toEqual(b.map((s) => s.probability))
   })
 })
 

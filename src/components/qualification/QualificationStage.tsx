@@ -11,6 +11,7 @@ import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
 import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, type QualTeamStat } from '../../engine/qualification/stats'
 import { pickQualUpset } from '../../engine/qualification/upset'
+import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
 import { PROB_ITERATIONS } from '../../store/useQualificationStore'
 import type { AllQualificationResult } from '../../engine/qualification'
@@ -117,6 +118,58 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
           <span className="font-bold tabular-nums text-white">{bw.match.homeGoals}-{bw.match.awayGoals}</span>
           <NationLabel teamId={bw.match.awayTeamId} />
           <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
+        </div>
+      )}
+    </GlassCard>
+  )
+}
+
+/** What-if 진출 분석 (G3). 내 팀 전력을 가정해 진출 확률 변화를 몬테카를로로 추정. */
+function QualWhatIfCard({ teamId, seedBase }: { teamId: string; seedBase: string }) {
+  const [scenarios, setScenarios] = useState<WhatIfScenario[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const nation = ALL_NATIONS_BY_ID[teamId]
+
+  if (!nation) return null
+
+  const run = () => {
+    setLoading(true)
+    // 무거운 몬테카를로가 UI 페인트를 막지 않도록 한 틱 뒤 실행.
+    setTimeout(() => {
+      const s = runWhatIfScenarios(teamId, [-10, -5, 0, 5, 10], 60, `${seedBase}-${teamId}`)
+      setScenarios(s)
+      setLoading(false)
+    }, 20)
+  }
+
+  const labelFor = (d: number) => (d === 0 ? '현재 전력' : d > 0 ? `+${d} 강화` : `${d} 약화`)
+
+  return (
+    <GlassCard className="p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-sky-300">🔮 What-if · {nation.nameKo} 전력별 진출 확률</h3>
+        <GlassButton variant="ghost" onClick={run} disabled={loading}>
+          {loading ? '계산 중…' : scenarios ? '🔄 다시 분석' : '분석 실행'}
+        </GlassButton>
+      </div>
+      {!scenarios && !loading && (
+        <p className="text-[11px] text-gray-500">내 팀 전력을 ±로 가정했을 때 본선 진출 확률이 어떻게 달라지는지 시뮬레이션합니다.</p>
+      )}
+      {scenarios && (
+        <div className="space-y-2">
+          {scenarios.map((s) => (
+            <div key={s.delta} className="flex items-center gap-2 text-xs">
+              <span className={`w-20 shrink-0 ${s.delta === 0 ? 'font-bold text-sky-300' : 'text-gray-400'}`}>{labelFor(s.delta)}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                <div
+                  className={`h-full rounded-full ${s.delta === 0 ? 'bg-sky-400/70' : 'bg-emerald-500/50'}`}
+                  style={{ width: `${s.probability}%` }}
+                />
+              </div>
+              <span className="w-12 shrink-0 text-right font-bold tabular-nums text-white">{s.probability.toFixed(0)}%</span>
+            </div>
+          ))}
+          <p className="pt-1 text-[10px] text-gray-500">※ 각 시나리오 60회 시뮬레이션 표본 추정치입니다.</p>
         </div>
       )}
     </GlassCard>
@@ -765,6 +818,10 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           <QualUpsetArticleCard result={result} />
 
           {probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
+
+          {myTeamId && ALL_NATIONS_BY_ID[myTeamId] && !result.hosts.includes(myTeamId) && (
+            <QualWhatIfCard teamId={myTeamId} seedBase={seed ?? 'WHATIF'} />
+          )}
 
           <QualDifficultyCard />
 
