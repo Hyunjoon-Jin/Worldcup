@@ -1,5 +1,5 @@
-import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
 import { EXPECTED_GOALS, PENALTY, clamp, hostAdvantageFor } from './config'
+import { isCurrentHost } from './hostContext'
 import type { TeamRatings } from '../types/team'
 
 /**
@@ -10,9 +10,9 @@ import type { TeamRatings } from '../types/team'
 
 export type RandomFn = () => number
 
-/** 개최국 홈 경기일 때만 팀별 홈 이점, 아니면 0 (정적 데이터 기반). */
+/** 현재 대회 개최국일 때만 홈 이점, 아니면 0 (커리어 모드에서 대회마다 개최국이 바뀐다). */
 export function hostAdvFor(teamId: string): number {
-  return TEAMS_BY_ID[teamId].isHost ? hostAdvantageFor(teamId) : 0
+  return isCurrentHost(teamId) ? hostAdvantageFor(teamId) : 0
 }
 
 export function expectedGoals(attacker: TeamRatings, defender: TeamRatings, hostAdvantage: number): number {

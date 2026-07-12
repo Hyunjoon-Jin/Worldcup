@@ -21,9 +21,9 @@ export function simulateAfc(
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
   locked?: LockedLookup,
+  directSlots: number = SLOT_ALLOCATION.AFC.direct,
 ): QualificationResult {
   const fmt = QUAL_FORMAT.AFC as AfcFormat
-  const directSlots = SLOT_ALLOCATION.AFC.direct // 8
   const sorted = [...teams].sort(byRank)
 
   const allMatches: QualMatch[] = []

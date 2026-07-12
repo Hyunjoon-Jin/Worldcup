@@ -1,6 +1,7 @@
 import { getTeamsByPot } from '../data/teams'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
-import { GROUP_LETTERS, HOST_SLOTS } from '../data/hostSlots'
+import { GROUP_LETTERS } from '../data/hostSlots'
+import { getCurrentHostIds } from './hostContext'
 import { createSeededRandom, shuffleWith, type RandomFn } from './rng'
 import type { GroupLetter } from '../types/group'
 import type { Pot } from '../types/team'
@@ -28,32 +29,41 @@ function shuffle<T>(arr: T[], rand: RandomFn = Math.random): T[] {
  * 실제 규정대로 포트1 = 개최 3국 + 최상위 9국, 이후 12국씩. 개최국은 슬롯에 사전 고정되므로
  * 반환 풀에는 포함하지 않는다(비개최 45국을 9·12·12·12로 분배).
  */
-export function computePots(teamIds48: string[]): PotPools {
+export function computePots(teamIds48: string[], hostIds: string[] = getCurrentHostIds()): PotPools {
+  const hostSet = new Set(hostIds)
   const nonHost = teamIds48
-    .filter((id) => !TEAMS_BY_ID[id]?.isHost)
+    .filter((id) => !hostSet.has(id))
     .sort((a, b) => (TEAMS_BY_ID[a]?.fifaRankApprox ?? 999) - (TEAMS_BY_ID[b]?.fifaRankApprox ?? 999))
+  // 개최국은 각 조 1번 시드로 고정되므로 포트1 비개최 인원 = 12 − 개최국 수, 나머지 포트는 12씩.
+  const pot1 = Math.max(0, 12 - hostIds.length)
   return {
-    1: nonHost.slice(0, 9),
-    2: nonHost.slice(9, 21),
-    3: nonHost.slice(21, 33),
-    4: nonHost.slice(33, 45),
+    1: nonHost.slice(0, pot1),
+    2: nonHost.slice(pot1, pot1 + 12),
+    3: nonHost.slice(pot1 + 12, pot1 + 24),
+    4: nonHost.slice(pot1 + 24, pot1 + 36),
   }
 }
 
-/** potPools 미지정 시 기본(실제 2025 드로우 포트) 구성을 사용한다. */
-export function createInitialDrawState(rand: RandomFn = Math.random, potPools?: PotPools): DrawState {
+/** potPools 미지정 시 기본 구성. 개최국(현재 대회)을 각 조 1번 시드로 고정 배정한다. */
+export function createInitialDrawState(
+  rand: RandomFn = Math.random,
+  potPools?: PotPools,
+  hostIds: string[] = getCurrentHostIds(),
+): DrawState {
   const groups: GroupSlots = Object.fromEntries(GROUP_LETTERS.map((g) => [g, [null, null, null, null]])) as GroupSlots
 
-  for (const [teamId, group] of Object.entries(HOST_SLOTS)) {
-    groups[group][0] = teamId
-  }
+  // 개최국을 앞쪽 조부터 1번 시드로 고정한다(MEX→A, CAN→B, USA→C …).
+  const hostSet = new Set(hostIds)
+  hostIds.forEach((teamId, i) => {
+    if (i < GROUP_LETTERS.length) groups[GROUP_LETTERS[i]][0] = teamId
+  })
 
   const pots: PotPools = { 1: [], 2: [], 3: [], 4: [] }
   for (const pot of [1, 2, 3, 4] as Pot[]) {
     const teams = potPools
       ? potPools[pot]
       : getTeamsByPot(pot)
-          .filter((t) => !t.isHost)
+          .filter((t) => !hostSet.has(t.id))
           .map((t) => t.id)
     pots[pot] = shuffle(teams, rand)
   }

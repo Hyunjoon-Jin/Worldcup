@@ -4,10 +4,14 @@ import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSoundStore } from '../../store/useSoundStore'
 import { playVictory } from '../../engine/sound'
-import { startFinalsFromQualification } from '../../store/tournamentActions'
+import { startFinalsFromQualification, advanceToNextEdition } from '../../store/tournamentActions'
+import { useCareerStore } from '../../store/useCareerStore'
+import { useProgressStore } from '../../store/useProgressStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
+import { rankAcrossGroups } from '../../engine/qualification/generic'
 import { extractQualDrama } from '../../engine/qualification/drama'
 import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, computeQualHighlights, type QualTeamStat } from '../../engine/qualification/stats'
 import { pickQualUpset } from '../../engine/qualification/upset'
@@ -21,7 +25,7 @@ import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { computePots } from '../../engine/drawEngine'
-import { HOST_SLOTS } from '../../data/hostSlots'
+import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
@@ -70,14 +74,41 @@ function MatchList({
 
 const CONFEDS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']
 
-function NationLabel({ teamId, className = '' }: { teamId: string; className?: string }) {
+/** 국가 라벨. 기본은 클릭 시 국가 상세 페이지로 이동(interactive). 버튼 안에 들어가는 자리에서는
+ *  interactive={false}로 정적 라벨로 쓴다(버튼 중첩 방지). */
+function NationLabel({
+  teamId,
+  className = '',
+  interactive = true,
+}: {
+  teamId: string
+  className?: string
+  interactive?: boolean
+}) {
   const nation = ALL_NATIONS_BY_ID[teamId]
+  const selectTeam = useSelectionStore((s) => s.selectTeam)
   if (!nation) return <span className="text-gray-100">{teamId}</span>
-  return (
-    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+  const inner = (
+    <>
       <FlagIcon iso2={nation.iso2} className="h-3 w-4 shrink-0" />
       <span className="font-medium text-gray-100">{nation.nameKo}</span>
-    </span>
+    </>
+  )
+  if (!interactive) {
+    return <span className={`inline-flex items-center gap-1.5 ${className}`}>{inner}</span>
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        selectTeam(teamId)
+      }}
+      title={`${nation.nameKo} 상세 보기`}
+      className={`inline-flex min-w-0 items-center gap-1.5 text-left hover:underline hover:decoration-emerald-300/60 hover:underline-offset-2 ${className}`}
+    >
+      {inner}
+    </button>
   )
 }
 
@@ -464,7 +495,7 @@ function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult
               {topQualifier && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-300">
                   <span className="text-[9px] text-gray-500">대표</span>
-                  <NationLabel teamId={topQualifier} />
+                  <NationLabel teamId={topQualifier} interactive={false} />
                 </div>
               )}
             </button>
@@ -709,8 +740,26 @@ function MyTeamQualBanner({
 }
 
 /** 직행/PO/탈락 상태 배지 (색+아이콘+텍스트 병행, I4). 진행 중이면 '—'. */
-function ResultBadge({ full, direct, po }: { full: boolean; direct: boolean; po: boolean }) {
-  if (!full) return <span className="text-[10px] text-gray-600">—</span>
+function ResultBadge({
+  full,
+  direct,
+  po,
+  provDirect,
+  provPo,
+}: {
+  full: boolean
+  direct: boolean
+  po: boolean
+  /** 진행 중 잠정 진출 상황(현재 순위 기준) */
+  provDirect?: boolean
+  provPo?: boolean
+}) {
+  if (!full) {
+    // 진행 중: 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
+    if (provDirect) return <span className="rounded border border-dashed border-emerald-400/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300/90">잠정 직행</span>
+    if (provPo) return <span className="rounded border border-dashed border-amber-400/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-300/90">잠정 PO</span>
+    return <span className="text-[10px] text-gray-600">—</span>
+  }
   if (direct) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
   if (po) return <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
   return <span className="text-[10px] text-gray-600">탈락</span>
@@ -819,11 +868,26 @@ function ConfederationStandings({
   const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
   const single = r.groups.length <= 1
 
+  // 진행 중 잠정 진출 현황(현재 순위 기준). 단일 조별 대륙만 — 다단계(AFC·CONCACAF)는 스테이지
+  // 로직이라 횡단 순위 투영이 부정확하므로 잠정 표시를 생략한다.
+  const provisional = ((): { direct: Set<string>; po: Set<string> } => {
+    if (full || r.groupLabels) return { direct: new Set(), po: new Set() }
+    const provRankings = r.groups.map((fo, gi) => rankGroupTeams(fo, shownMatches.filter((m) => m.group === gi)))
+    const order = rankAcrossGroups(provRankings, shownMatches, r.standings)
+    return {
+      direct: new Set(order.slice(0, r.qualified.length)),
+      po: new Set(order.slice(r.qualified.length, r.qualified.length + r.playoff.length)),
+    }
+  })()
+
+  // 이 대륙에 속한 현재 대회 개최국(예선 없이 자동 진출) — 커리어 모드로 매 대회 바뀔 수 있다.
+  const confedHosts = getCurrentHostIds().filter((id) => ALL_NATIONS_BY_ID[id]?.confederation === confed)
+
   return (
     <GlassCard className="p-4">
-      {confed === 'CONCACAF' && (
+      {confedHosts.length > 0 && (
         <p className="mb-3 text-[11px] text-gray-500">
-          개최국(멕시코·미국·캐나다)은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
+          개최국({confedHosts.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join('·')})은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
         </p>
       )}
 
@@ -883,7 +947,7 @@ function ConfederationStandings({
                   {rows.map(({ teamId, idx, s, gd, direct, po }) => (
                     <tr
                       key={teamId}
-                      className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
+                      className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : ''}`}
                     >
                       <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                       <th scope="row" className="py-1.5 font-normal">
@@ -898,7 +962,7 @@ function ConfederationStandings({
                       {probabilities && (
                         <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
                       )}
-                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} /></td>
+                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -910,7 +974,7 @@ function ConfederationStandings({
                 <li
                   key={teamId}
                   className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
-                    teamId === myTeamId ? 'bg-sky-500/15 ring-1 ring-sky-400/40' : direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : 'bg-white/5'
+                    teamId === myTeamId ? 'bg-sky-500/15 ring-1 ring-sky-400/40' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : 'bg-white/5'
                   }`}
                 >
                   <span className="w-4 shrink-0 text-center text-[11px] text-gray-500 tabular-nums">{idx + 1}</span>
@@ -926,7 +990,7 @@ function ConfederationStandings({
                       {probabilities && <span className="text-sky-300">{(probabilities[teamId] ?? 0).toFixed(0)}%</span>}
                     </div>
                   </div>
-                  <ResultBadge full={full} direct={direct} po={po} />
+                  <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} />
                 </li>
               ))}
             </ul>
@@ -940,7 +1004,9 @@ function ConfederationStandings({
           ? single
             ? '※ 상위권 직행, 다음 순위 대륙간 PO로 결정됩니다.'
             : '※ 조 순위는 조별 성적, 직행/PO 여부는 전체 대륙 순위(조 1위 우선 → 최고 2위 …)로 결정됩니다.'
-          : '※ 진행 중 — 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'}
+          : r.groupLabels
+            ? '※ 진행 중 — 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'
+            : '※ 진행 중 — 점선 배지는 현재 순위 기준 잠정 진출 상황(확정 아님)입니다. 라운드를 넘기면 실시간으로 바뀝니다.'}
       </p>
     </GlassCard>
   )
@@ -957,6 +1023,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const soundEnabled = useSoundStore((s) => s.enabled)
   const revealed = useQualificationStore((s) => s.revealed)
+  // 커리어 모드: 현재 대회 연도·개최국, 방금 끝난 본선(우승팀)이면 "다음 대회로" 진행 가능.
+  const editionYear = useCareerStore((s) => s.year)
+  const editionIndex = useCareerStore((s) => s.editionIndex)
+  const hostIds = useCareerStore((s) => s.hostIds)
+  const finalsComplete = useProgressStore((s) => s.phase === 'complete')
+  const champion = useProgressStore((s) => s.champion)
   const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
   const [confed, setConfed] = useState<Confederation>(
@@ -995,10 +1067,37 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   return (
     <div className="flex flex-col gap-5">
       <GlassCard strong className="p-5 text-center">
-        <p className="mb-1 text-sm font-semibold text-white">🌍 월드컵 지역예선</p>
+        <p className="mb-1 text-sm font-semibold text-white">
+          🌍 {editionYear} 월드컵 지역예선
+          {editionIndex > 0 && <span className="ml-1.5 text-[11px] font-normal text-amber-300">· 커리어 {editionIndex + 1}번째 대회</span>}
+        </p>
+        <p className="mb-2 text-[11px] text-sky-300">
+          🏟️ 개최국:{' '}
+          {hostIds.map((id, i) => (
+            <span key={id}>
+              {i > 0 && ' · '}
+              {ALL_NATIONS_BY_ID[id]?.nameKo ?? id}
+            </span>
+          ))}
+        </p>
         <p className="mb-4 text-xs text-gray-400">
           6개 대륙 예선 + 대륙간 플레이오프를 시뮬레이션해 <strong className="text-emerald-300">본선 48개국</strong>을 가립니다.
         </p>
+        {finalsComplete && (
+          <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+            <p className="text-xs text-amber-200">
+              🏆 {champion ? `${ALL_NATIONS_BY_ID[champion]?.nameKo ?? champion} 우승으로 ` : ''}
+              {editionYear} 대회가 끝났습니다. 다음 대회로 흐름을 이어가면 개최국이 새로 선정되고, 이번 대회 성적이 각 팀의 전력에 반영됩니다.
+            </p>
+            <GlassButton
+              className="mt-2"
+              onClick={() => advanceToNextEdition()}
+              title="다음 대회 개최국을 새로 선정하고, 이번 성적을 반영해 새 예선을 시작합니다"
+            >
+              🔜 다음 대회로 →
+            </GlassButton>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-center gap-2">
           <input
             type="text"
@@ -1191,9 +1290,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               </summary>
               {(() => {
                 const pots = computePots(result.qualified48)
-                const hostIds = Object.keys(HOST_SLOTS)
+                const potHostIds = result.hosts
                 const potList: [string, string[]][] = [
-                  ['포트 1 (개최국 + 최상위 9)', [...hostIds, ...pots[1]]],
+                  ['포트 1 (개최국 + 최상위)', [...potHostIds, ...pots[1]]],
                   ['포트 2', pots[2]],
                   ['포트 3', pots[3]],
                   ['포트 4', pots[4]],
@@ -1207,7 +1306,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                           {ids.map((id) => (
                             <div key={id} className="flex items-center gap-1.5 text-[11px]">
                               <NationLabel teamId={id} />
-                              {hostIds.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
+                              {potHostIds.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
                             </div>
                           ))}
                         </div>
@@ -1277,7 +1376,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                   CONCACAF 6(개최 3국 포함) · OFC 1 = 46 직행. 여기에 대륙간 플레이오프 2장을 더해 총 48개국.
                 </p>
                 <p>
-                  <strong className="text-emerald-300">개최국:</strong> 미국·멕시코·캐나다는 예선 없이 자동 진출합니다.
+                  <strong className="text-emerald-300">개최국:</strong>{' '}
+                  {getCurrentHostIds().map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join('·')}는 예선 없이 자동
+                  진출합니다. (커리어 모드에서는 대회마다 개최국이 새로 선정됩니다.)
                 </p>
                 <p>
                   <strong className="text-emerald-300">대륙간 플레이오프:</strong> 각 대륙의 PO행 팀(총 6팀)이

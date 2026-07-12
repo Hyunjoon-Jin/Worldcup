@@ -25,6 +25,7 @@ import {
   expectedResult,
   computeLiveRanking,
   computeRankingTrend,
+  overallDeltasFromResults,
   IMPORTANCE_QUALIFIER,
 } from '../src/engine/qualification/ranking'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
@@ -304,6 +305,25 @@ describe('FIFA 랭킹 Elo 갱신 (월 단위 반영)', () => {
   })
 })
 
+describe('성적 반영 능력치 보정 (overallDeltasFromResults)', () => {
+  it('경기 전에는 보정이 0이고, 진행 후에는 ±maxDelta 범위 안에서 부호가 갈린다', () => {
+    const all = simulateAllQualification('PERF')
+    // 경기 전(빈 배열) → 전부 0
+    const none = overallDeltasFromResults(all, [], 5)
+    expect(Object.values(none).every((v) => v === 0)).toBe(true)
+    // 전체 진행 → 범위 내, 상승·하락 모두 존재
+    const played = Object.values(all.byConfederation).flatMap((r) => r.matches)
+    const deltas = overallDeltasFromResults(all, played, 5)
+    for (const v of Object.values(deltas)) {
+      expect(v).toBeGreaterThanOrEqual(-5)
+      expect(v).toBeLessThanOrEqual(5)
+    }
+    const vals = Object.values(deltas)
+    expect(vals.some((v) => v > 0)).toBe(true)
+    expect(vals.some((v) => v < 0)).toBe(true)
+  })
+})
+
 describe('실시간 FIFA 랭킹 + 변동 추이', () => {
   it('실시간 랭킹은 전체 참가국을 점수순으로 정렬하고 등락이 일관된다', () => {
     const all = simulateAllQualification('LIVE')
@@ -544,6 +564,34 @@ describe('포맷 데이터 주도화 (개선 C4)', () => {
       const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('fmt-ccf'))
       expect(r.groups.length).toBe(1 + ccf.finalGroups) // 1차 + 최종 조들
     }
+  })
+})
+
+describe('동적 개최국 (커리어 모드)', () => {
+  it('다른 대륙 개최국이면 그 대륙 직행이 줄고 48은 유효하다', () => {
+    // ESP·POR(UEFA 2) + MAR(CAF 1) 공동 개최
+    const all = simulateAllQualification('HOSTS-A', undefined, undefined, ['ESP', 'POR', 'MAR'])
+    expect(all.qualified48).toHaveLength(48)
+    expect(new Set(all.qualified48).size).toBe(48)
+    for (const h of ['ESP', 'POR', 'MAR']) expect(all.qualified48).toContain(h)
+    // UEFA 직행 = 16 − 2(개최), CAF 직행 = 9 − 1
+    expect(all.byConfederation.UEFA.qualified).toHaveLength(SLOT_ALLOCATION.UEFA.direct - 2)
+    expect(all.byConfederation.CAF.qualified).toHaveLength(SLOT_ALLOCATION.CAF.direct - 1)
+    // 개최국은 자기 대륙 예선 진출국에 포함되지 않는다
+    expect(all.byConfederation.UEFA.qualified).not.toContain('ESP')
+    expect(all.byConfederation.CAF.qualified).not.toContain('MAR')
+  })
+
+  it('아시아 단독 개최(사우디)면 AFC 직행이 7로 줄고 48 유효', () => {
+    const all = simulateAllQualification('HOSTS-B', undefined, undefined, ['KSA'])
+    expect(all.qualified48).toHaveLength(48)
+    expect(new Set(all.qualified48).size).toBe(48)
+    expect(all.qualified48).toContain('KSA')
+    expect(all.byConfederation.AFC.qualified).toHaveLength(SLOT_ALLOCATION.AFC.direct - 1)
+    expect(all.byConfederation.AFC.qualified).not.toContain('KSA')
+    // 개최국이 없는 CONCACAF는 원래대로 직행 3 + PO 2(비개최 풀)... 이 경우 개최국이 CONCACAF에
+    // 없으므로 CONCACAF 직행 = 6 - 0 = 6.
+    expect(all.byConfederation.CONCACAF.qualified).toHaveLength(SLOT_ALLOCATION.CONCACAF.direct)
   })
 })
 

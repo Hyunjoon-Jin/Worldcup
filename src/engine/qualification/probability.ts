@@ -12,6 +12,7 @@ export function createQualProbAccumulator(
   seedBase: string,
   ratings?: Record<string, TeamRatings>,
   lockedByConfed?: Record<string, LockedLookup>,
+  hostIds?: string[],
 ) {
   const counts: Record<string, number> = {}
   let done = 0
@@ -21,7 +22,7 @@ export function createQualProbAccumulator(
     },
     runBatch(n: number): void {
       for (let i = 0; i < n; i++) {
-        const res = simulateAllQualification(`${seedBase}-${done + i}`, ratings, lockedByConfed)
+        const res = simulateAllQualification(`${seedBase}-${done + i}`, ratings, lockedByConfed, hostIds)
         for (const id of res.qualified48) counts[id] = (counts[id] ?? 0) + 1
       }
       done += n

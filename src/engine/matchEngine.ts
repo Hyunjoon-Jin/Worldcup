@@ -2,6 +2,7 @@ import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
 import { useConditionStore } from '../store/useConditionStore'
 import { useMomentumStore } from '../store/useMomentumStore'
 import { useSandboxStore } from '../store/useSandboxStore'
+import { usePerformanceStore } from '../store/usePerformanceStore'
 import type { TeamRatings } from '../types/team'
 import { FORECAST_GOAL_CAP, UPSET_RATING_GAP, clamp } from './config'
 import { expectedGoals, hostAdvFor, poissonPmf, simulateKnockout, simulateScore } from './matchCore'
@@ -17,10 +18,13 @@ const bump = () => {
 useConditionStore.subscribe(bump)
 useSandboxStore.subscribe(bump)
 useMomentumStore.subscribe(bump)
+usePerformanceStore.subscribe(bump)
 
 /**
- * 이번 대회의 팀별 컨디션(useConditionStore)과 진행 중 모멘텀(useMomentumStore, C4)을 폼 능력치에
- * 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다. 결과는 store가 바뀌기 전까지 캐시된다(불변으로 취급).
+ * 이번 대회의 팀별 컨디션(useConditionStore)·진행 중 모멘텀(useMomentumStore)·성적 반영 보정
+ * (usePerformanceStore)을 능력치에 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다.
+ * 성적 보정(perfDelta)은 공격·수비·종합에 소폭 더해 "잘 나가는 팀은 능력치가 살짝 오르고
+ * 부진하면 살짝 내려가도록" 한다. 결과는 store가 바뀌기 전까지 캐시된다(불변으로 취급).
  */
 export function getRatings(teamId: string): TeamRatings {
   if (cacheVersion !== storeVersion) {
@@ -31,11 +35,15 @@ export function getRatings(teamId: string): TeamRatings {
   if (cached) return cached
 
   const team = TEAMS_BY_ID[teamId]
+  const base = team.baseRatings
   const conditionOffset = useConditionStore.getState().offsets[teamId] ?? 0
   const momentumOffset = useMomentumStore.getState().offsets[teamId] ?? 0
+  const perfDelta = usePerformanceStore.getState().deltas[teamId] ?? 0
   const conditioned: TeamRatings = {
-    ...team.baseRatings,
-    form: clamp(team.baseRatings.form + conditionOffset + momentumOffset, 30, 99),
+    attack: clamp(base.attack + perfDelta, 1, 99),
+    defense: clamp(base.defense + perfDelta, 1, 99),
+    overall: clamp(base.overall + perfDelta, 1, 99),
+    form: clamp(base.form + conditionOffset + momentumOffset, 30, 99),
   }
   const override = useSandboxStore.getState().overrides[teamId]
   const result = override ? { ...conditioned, ...override } : conditioned
