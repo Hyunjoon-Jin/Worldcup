@@ -21,6 +21,8 @@ import {
   type ScenarioVerdict,
 } from '../../engine/qualificationStatus'
 import { runOpponentForecast, runTeamScenarioSimulation, type RoundOpponentForecast, type TeamScenarioResult } from '../../engine/monteCarlo'
+import { buildSnapshot } from '../../engine/buildSnapshot'
+import { runSensitivity, type SensitivityPoint } from '../../engine/sensitivity'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
@@ -122,6 +124,8 @@ export function TeamDetailPage() {
   const [scenarioLoading, setScenarioLoading] = useState(false)
   const [forecast, setForecast] = useState<RoundOpponentForecast[] | null>(null)
   const [forecastLoading, setForecastLoading] = useState(false)
+  const [sensitivity, setSensitivity] = useState<SensitivityPoint[] | null>(null)
+  const [sensitivityLoading, setSensitivityLoading] = useState(false)
 
   const team = teamId ? TEAMS_BY_ID[teamId] : null
   const titleHistory = teamId ? titlesFor(teamId) : null
@@ -268,6 +272,7 @@ export function TeamDetailPage() {
   useEffect(() => {
     setScenario(null)
     setForecast(null)
+    setSensitivity(null)
     if (!teamId) return
 
     if (playedGroupCount === 2) {
@@ -650,6 +655,55 @@ export function TeamDetailPage() {
             {forecast.every((f) => f.reachPct <= 0.5) && (
               <p className="text-sm text-gray-400">32강 진출 가능성이 낮아 예상 상대를 추정하기 어렵습니다.</p>
             )}
+          </div>
+        )}
+      </GlassCard>
+
+      <GlassCard className="p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-sky-300">능력치 민감도 분석</h3>
+          {teamId && (
+            <GlassButton
+              variant="ghost"
+              disabled={sensitivityLoading}
+              onClick={() => {
+                setSensitivityLoading(true)
+                const snap = buildSnapshot()
+                setTimeout(() => {
+                  setSensitivity(runSensitivity(snap, teamId, [-5, 0, 5], 250))
+                  setSensitivityLoading(false)
+                }, 10)
+              }}
+            >
+              {sensitivityLoading ? '분석 중…' : '▶ 분석 실행'}
+            </GlassButton>
+          )}
+        </div>
+        <p className="mb-3 text-[11px] text-gray-500">
+          이 팀의 공격·수비·종합 능력치가 ±5 변하면 우승 확률이 어떻게 달라지는지 시뮬레이션합니다.
+        </p>
+        {!sensitivity ? (
+          <p className="text-sm text-gray-400">{sensitivityLoading ? '' : '분석을 실행해 보세요.'}</p>
+        ) : (
+          <div className="space-y-2">
+            {sensitivity.map((pt) => {
+              const maxPct = Math.max(...sensitivity.map((s) => s.championPct), 0.1)
+              const label = pt.delta === 0 ? '기본 능력치' : pt.delta > 0 ? `능력치 +${pt.delta}` : `능력치 ${pt.delta}`
+              return (
+                <div key={pt.delta} className="flex items-center gap-2 text-xs">
+                  <span className={`w-24 shrink-0 ${pt.delta === 0 ? 'font-bold text-gray-200' : 'text-gray-400'}`}>{label}</span>
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full bg-sky-400"
+                      style={{ width: `${(pt.championPct / maxPct) * 100}%` }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right font-bold tabular-nums text-sky-300">
+                    {pt.championPct.toFixed(1)}%
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
       </GlassCard>
