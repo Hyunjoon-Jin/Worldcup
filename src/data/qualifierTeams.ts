@@ -1,5 +1,5 @@
 import type { Confederation, Team } from '../types/team'
-import { ratingsFromRank } from './teams'
+import { ratingsFromRank, resolveStyleBias } from './teams'
 
 interface RawQualifier {
   id: string
@@ -132,5 +132,5 @@ export const QUALIFIER_TEAMS: Team[] = RAW_QUALIFIERS.map((raw) => ({
   pot: 4, // 예선 전용(본선 포트와 무관, 형식상 값)
   fifaRankApprox: raw.rank,
   isHost: false,
-  baseRatings: ratingsFromRank(raw.rank, raw.styleBias),
+  baseRatings: ratingsFromRank(raw.rank, resolveStyleBias(raw.id, raw.confederation, raw.styleBias)),
 }))

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { simulateConmebol } from '../src/engine/qualification/conmebol'
 import { simulateAllQualification, simulateConfederation } from '../src/engine/qualification'
 import { nationsByConfederation, baseRatingsMap, ALL_NATIONS, ALL_NATIONS_BY_ID } from '../src/data/nations'
+import { resolveStyleBias } from '../src/data/teams'
 import { SLOT_ALLOCATION } from '../src/data/confederations'
 import { createSeededRandom } from '../src/engine/rng'
 import { computePots, runSeededDraw } from '../src/engine/drawEngine'
@@ -135,6 +136,30 @@ describe('진출 확률 신뢰구간 (개선 G2)', () => {
     expect(probMarginPct(50, 1200)).toBeLessThan(probMarginPct(50, 300))
     // n<=0 방어
     expect(probMarginPct(50, 0)).toBe(0)
+  })
+})
+
+describe('전력 세분화 styleBias (개선 C3)', () => {
+  it('명시값이 있으면 그대로 쓰고, 없으면 결정적으로 -6~+6 범위를 만든다', () => {
+    expect(resolveStyleBias('XXX', 'UEFA', 4)).toBe(4)
+    const a = resolveStyleBias('KEN', 'CAF')
+    const b = resolveStyleBias('KEN', 'CAF')
+    expect(a).toBe(b) // 결정적(재현)
+    expect(a).toBeGreaterThanOrEqual(-6)
+    expect(a).toBeLessThanOrEqual(6)
+  })
+
+  it('styleBias 미지정 팀들도 공격/수비가 균형만 있지 않고 다양해진다', () => {
+    // 비본선 참가국 중 다수가 attack≠defense(성향 반영)이어야 한다
+    const quals = ALL_NATIONS.filter((t) => !['ARG', 'BRA', 'ESP', 'FRA'].includes(t.id))
+    const varied = quals.filter((t) => t.baseRatings.attack !== t.baseRatings.defense)
+    expect(varied.length).toBeGreaterThan(quals.length / 2)
+    // overall(종합 전력)은 성향과 무관하게 유지된다(공수 배분만 이동, 클램프 예외 제외)
+    const balanced = ALL_NATIONS.filter((t) => {
+      const mid = (t.baseRatings.attack + t.baseRatings.defense) / 2
+      return Math.abs(mid - t.baseRatings.overall) <= 1
+    })
+    expect(balanced.length).toBeGreaterThan(ALL_NATIONS.length * 0.8)
   })
 })
 

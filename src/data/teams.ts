@@ -82,6 +82,23 @@ const RAW_TEAMS: RawTeam[] = [
   { id: 'CUW', nameKo: '퀴라소', nameEn: 'Curaçao', code: 'CUW', iso2: 'CW', confederation: 'CONCACAF', pot: 4, rank: 48, styleBias: -1 },
 ]
 
+/**
+ * 팀의 공수 성향(styleBias)을 정한다 (C3 전력 세분화). 명시값이 있으면 그대로,
+ * 없으면 대륙 평균 성향에 팀 ID 기반 결정적 편차를 더해 -6~+6으로 근사한다.
+ * overall(종합 전력)은 바뀌지 않고 공격/수비 배분에만 성향이 반영된다.
+ */
+export function resolveStyleBias(id: string, confederation: Confederation, explicit?: number): number {
+  if (explicit !== undefined) return explicit
+  // 대륙별 평균 공격 성향 근사(+ 공격적, - 수비적)
+  const lean: Record<Confederation, number> = {
+    CONMEBOL: 2, OFC: 2, CAF: 1, CONCACAF: 1, UEFA: 0, AFC: 0,
+  }
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0
+  const variation = (Math.abs(h) % 7) - 3 // -3~+3 결정적 편차
+  return Math.max(-6, Math.min(6, (lean[confederation] ?? 0) + variation))
+}
+
 export function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
   // 거듭제곱 곡선: 상위권은 밀집, 하위로 갈수록 격차 확대 (C1)
   const t = (rank - 1) / (R.totalRanks - 1)
