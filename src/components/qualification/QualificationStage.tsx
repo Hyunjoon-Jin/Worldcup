@@ -124,6 +124,34 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
   )
 }
 
+/** 예선 결과 공유 (E5). 시드가 결과를 완전 재현하므로 요약+시드를 클립보드에 복사한다. */
+function QualShareButton({ seed, result, myTeamId }: { seed: string | null; result: AllQualificationResult; myTeamId: string | null }) {
+  const [copied, setCopied] = useState(false)
+  const summary = useMemo(() => {
+    const lines = ['🌍 2026 북중미 월드컵 지역예선 시뮬레이션', `예선 시드: ${seed ?? '(무작위)'}`, '본선 진출 48개국 확정!']
+    if (myTeamId && ALL_NATIONS_BY_ID[myTeamId]) {
+      const inFinals = result.qualified48.includes(myTeamId)
+      lines.push(`내 팀 ${ALL_NATIONS_BY_ID[myTeamId].nameKo}: ${inFinals ? '✅ 본선 진출' : '💔 본선 진출 실패'}`)
+    }
+    lines.push('같은 시드로 같은 결과를 재현할 수 있어요.')
+    return lines.join('\n')
+  }, [seed, result, myTeamId])
+
+  const share = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(summary).catch(() => {})
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <GlassButton variant="ghost" onClick={share} title="예선 시드와 요약을 복사합니다">
+      {copied ? '✅ 복사됨!' : '🔗 예선 공유'}
+    </GlassButton>
+  )
+}
+
 /** What-if 진출 분석 (G3). 내 팀 전력을 가정해 진출 확률 변화를 몬테카를로로 추정. */
 function QualWhatIfCard({ teamId, seedBase }: { teamId: string; seedBase: string }) {
   const [scenarios, setScenarios] = useState<WhatIfScenario[] | null>(null)
@@ -745,14 +773,17 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               <h3 className="text-sm font-bold text-emerald-300">
                 🏆 본선 진출 48개국 <span className="text-gray-500">({result.qualified48.length})</span>
               </h3>
-              <GlassButton
-                onClick={() => {
-                  startFinalsFromQualification(result.qualified48, seed ?? undefined)
-                  onStartFinals?.()
-                }}
-              >
-                이 결과로 본선 조추첨 시작 →
-              </GlassButton>
+              <div className="flex flex-wrap items-center gap-2">
+                <QualShareButton seed={seed} result={result} myTeamId={myTeamId} />
+                <GlassButton
+                  onClick={() => {
+                    startFinalsFromQualification(result.qualified48, seed ?? undefined)
+                    onStartFinals?.()
+                  }}
+                >
+                  이 결과로 본선 조추첨 시작 →
+                </GlassButton>
+              </div>
             </div>
             {/* 대륙별로 묶어 표시 (H4) */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
