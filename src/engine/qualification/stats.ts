@@ -1,31 +1,33 @@
 import { nationsByConfederation, ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
-import { HOST_SLOTS } from '../../data/hostSlots'
+import { getCurrentHostIds } from '../hostContext'
 import type { AllQualificationResult } from './index'
 import type { QualMatch } from '../../types/qualification'
 import type { Confederation } from '../../types/team'
 
-const HOST_IDS = Object.keys(HOST_SLOTS)
 const CONFEDS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']
 
 /** 대륙 예선 난이도(G4): 진출 자리 하나당 몇 팀이 경쟁하는가. */
 export interface ConfedDifficulty {
   confederation: Confederation
-  /** 예선에 참가하는 팀 수(개최국은 CONCACAF에서 제외) */
+  /** 예선에 참가하는 팀 수(현재 대회 개최국은 소속 대륙에서 제외) */
   participants: number
-  /** 경쟁으로 얻는 자리 수(직행 + 대륙간 PO행, CONCACAF는 개최 3국 제외) */
+  /** 경쟁으로 얻는 자리 수(직행 + 대륙간 PO행, 개최국 수만큼 직행 감소) */
   spots: number
   /** 자리당 경쟁 팀 수(높을수록 치열) */
   ratio: number
 }
 
-/** 대륙별 예선 난이도 지수를 계산한다(정적 등록·슬롯 기반, G4). ratio 내림차순. */
+/** 대륙별 예선 난이도 지수를 계산한다(현재 대회 개최국 반영, G4). ratio 내림차순.
+ *  커리어 모드로 개최국이 바뀌면 그 개최국 소속 대륙의 참가 팀·자리 수가 반영된다. */
 export function computeConfedDifficulty(): ConfedDifficulty[] {
+  const hostSet = new Set(getCurrentHostIds())
   return CONFEDS.map((c) => {
-    const isConcacaf = c === 'CONCACAF'
-    const participants = nationsByConfederation(c).filter((t) => !(isConcacaf && HOST_IDS.includes(t.id))).length
+    const confedTeams = nationsByConfederation(c)
+    const hostsInConfed = confedTeams.filter((t) => hostSet.has(t.id)).length
+    const participants = confedTeams.filter((t) => !hostSet.has(t.id)).length
     const slots = SLOT_ALLOCATION[c]
-    const spots = (isConcacaf ? slots.direct - HOST_IDS.length : slots.direct) + slots.playoff
+    const spots = Math.max(0, slots.direct - hostsInConfed) + slots.playoff
     return { confederation: c, participants, spots, ratio: spots > 0 ? participants / spots : participants }
   }).sort((a, b) => b.ratio - a.ratio)
 }

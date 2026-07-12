@@ -29,11 +29,16 @@ function shuffle<T>(arr: T[], rand: RandomFn = Math.random): T[] {
  * 실제 규정대로 포트1 = 개최 3국 + 최상위 9국, 이후 12국씩. 개최국은 슬롯에 사전 고정되므로
  * 반환 풀에는 포함하지 않는다(비개최 45국을 9·12·12·12로 분배).
  */
-export function computePots(teamIds48: string[], hostIds: string[] = getCurrentHostIds()): PotPools {
+export function computePots(
+  teamIds48: string[],
+  hostIds: string[] = getCurrentHostIds(),
+  rankPoints?: Record<string, number>,
+): PotPools {
   const hostSet = new Set(hostIds)
-  const nonHost = teamIds48
-    .filter((id) => !hostSet.has(id))
-    .sort((a, b) => (TEAMS_BY_ID[a]?.fifaRankApprox ?? 999) - (TEAMS_BY_ID[b]?.fifaRankApprox ?? 999))
+  // 정렬 키: 현재 FIFA 점수(rankPoints)가 있으면 점수 높은 순(상위 포트), 없으면 정적 근사 랭킹.
+  const sortKey = (id: string) =>
+    rankPoints && rankPoints[id] != null ? -rankPoints[id] : (TEAMS_BY_ID[id]?.fifaRankApprox ?? 999)
+  const nonHost = teamIds48.filter((id) => !hostSet.has(id)).sort((a, b) => sortKey(a) - sortKey(b))
   // 개최국은 각 조 1번 시드로 고정되므로 포트1 비개최 인원 = 12 − 개최국 수, 나머지 포트는 12씩.
   const pot1 = Math.max(0, 12 - hostIds.length)
   return {
