@@ -3,6 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { useQualificationStore } from '../../store/useQualificationStore'
+import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
@@ -66,6 +67,32 @@ function NationLabel({ teamId, className = '' }: { teamId: string; className?: s
       <FlagIcon iso2={nation.iso2} className="h-3 w-4 shrink-0" />
       <span className="font-medium text-gray-100">{nation.nameKo}</span>
     </span>
+  )
+}
+
+/** 내 팀 예선 결과 배너 (E1). 본선 진출/탈락과 대륙·경로를 강조 표시한다. */
+function MyTeamQualBanner({ teamId, qualified48, hosts }: { teamId: string; qualified48: string[]; hosts: string[] }) {
+  const nation = ALL_NATIONS_BY_ID[teamId]
+  if (!nation) return null
+  const isIn = qualified48.includes(teamId)
+  const isHost = hosts.includes(teamId)
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-xl border p-3 ${
+        isIn ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-red-400/30 bg-red-500/10'
+      }`}
+    >
+      <FlagIcon iso2={nation.iso2} className="h-6 w-9 shrink-0 rounded-sm" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-400">
+          내 팀 · {CONFEDERATION_LABEL_KO[nation.confederation]} · FIFA {nation.fifaRankApprox}위
+        </p>
+        <p className={`text-sm font-bold ${isIn ? 'text-emerald-200' : 'text-red-200'}`}>
+          {nation.nameKo}{' '}
+          {isHost ? '🏟️ 개최국 자동 진출!' : isIn ? '✅ 본선 진출!' : '💔 본선 진출 실패'}
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -159,9 +186,11 @@ function InterConfedBracket({ result }: { result: InterConfedResult }) {
 function ConfederationStandings({
   confed,
   onSelectMatch,
+  myTeamId,
 }: {
   confed: Confederation
   onSelectMatch: (m: MatchResult) => void
+  myTeamId: string | null
 }) {
   const result = useQualificationStore((s) => s.result)
   const probabilities = useQualificationStore((s) => s.probabilities)
@@ -240,10 +269,15 @@ function ConfederationStandings({
                   {rows.map(({ teamId, idx, s, gd, direct, po }) => (
                     <tr
                       key={teamId}
-                      className={`border-t border-white/5 ${direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
+                      className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
                     >
                       <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
-                      <th scope="row" className="py-1.5 font-normal"><NationLabel teamId={teamId} /></th>
+                      <th scope="row" className="py-1.5 font-normal">
+                        <span className="inline-flex items-center gap-1.5">
+                          <NationLabel teamId={teamId} />
+                          {teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+                        </span>
+                      </th>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
@@ -262,12 +296,15 @@ function ConfederationStandings({
                 <li
                   key={teamId}
                   className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
-                    direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : 'bg-white/5'
+                    teamId === myTeamId ? 'bg-sky-500/15 ring-1 ring-sky-400/40' : direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : 'bg-white/5'
                   }`}
                 >
                   <span className="w-4 shrink-0 text-center text-[11px] text-gray-500 tabular-nums">{idx + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <NationLabel teamId={teamId} />
+                    <span className="inline-flex items-center gap-1.5">
+                      <NationLabel teamId={teamId} />
+                      {teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+                    </span>
                     <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400 tabular-nums">
                       <span>{s.played}경기</span>
                       <span className="font-bold text-white">{s.points}점</span>
@@ -303,8 +340,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const probabilities = useQualificationStore((s) => s.probabilities)
   const probLoading = useQualificationStore((s) => s.probLoading)
   const computeProbabilities = useQualificationStore((s) => s.computeProbabilities)
+  const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const [seedInput, setSeedInput] = useState('')
-  const [confed, setConfed] = useState<Confederation>('UEFA')
+  // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
+  const [confed, setConfed] = useState<Confederation>(
+    () => (myTeamId && ALL_NATIONS_BY_ID[myTeamId]?.confederation) || 'UEFA',
+  )
   const [selMatch, setSelMatch] = useState<MatchResult | null>(null)
 
   const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
@@ -380,7 +421,11 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </GlassButton>
           </div>
 
-          <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} />
+          {myTeamId && (
+            <MyTeamQualBanner teamId={myTeamId} qualified48={result.qualified48} hosts={result.hosts} />
+          )}
+
+          <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />
 
           <GlassCard className="p-4">
             <h3 className="mb-3 text-sm font-bold text-amber-300">🎯 대륙간 플레이오프 (6팀 → 2장)</h3>
