@@ -4,6 +4,9 @@ import { TeamLink } from '../common/TeamLink'
 import { useProgressStore } from '../../store/useProgressStore'
 import { computeTournamentStats, toStatMatches } from '../../engine/tournamentStats'
 import { computeHighlights, highlightSummary } from '../../engine/highlights'
+import { evaluateAchievements } from '../../engine/achievements'
+import { collectTeamResults } from '../../engine/momentum'
+import { useMyTeamStore } from '../../store/useMyTeamStore'
 import type { KnockoutMatch } from '../../types/match'
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -20,14 +23,27 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
 export function TournamentSummary() {
   const groupMatches = useProgressStore((s) => s.groupMatches)
   const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
+  const champion = useProgressStore((s) => s.champion)
+  const myTeamId = useMyTeamStore((s) => s.myTeamId)
 
-  const { stats, highlights } = useMemo(() => {
+  const { stats, highlights, achievements } = useMemo(() => {
     const koMatches = Object.values(knockoutSlots)
       .map((s) => s.result)
       .filter((r): r is KnockoutMatch => r != null)
     const statMatches = toStatMatches(groupMatches, koMatches)
-    return { stats: computeTournamentStats(statMatches), highlights: computeHighlights(statMatches) }
-  }, [groupMatches, knockoutSlots])
+    const stats = computeTournamentStats(statMatches)
+    const highlights = computeHighlights(statMatches)
+    const championResults = champion ? collectTeamResults(groupMatches, koMatches)[champion] ?? [] : []
+    const achievements = evaluateAchievements({
+      stats,
+      highlights,
+      matches: statMatches,
+      champion,
+      myTeamId,
+      championResults,
+    })
+    return { stats, highlights, achievements }
+  }, [groupMatches, knockoutSlots, champion, myTeamId])
 
   if (stats.totalMatches === 0) return null
 
@@ -89,6 +105,26 @@ export function TournamentSummary() {
                 </div>
               )
             })}
+          </div>
+        </GlassCard>
+      )}
+
+      {achievements.some((a) => a.earned) && (
+        <GlassCard className="p-4">
+          <h3 className="mb-3 text-sm font-bold text-purple-300">
+            🏆 업적 <span className="text-gray-500">({achievements.filter((a) => a.earned).length}/{achievements.length})</span>
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {achievements.map((a) => (
+              <div
+                key={a.id}
+                title={a.desc}
+                className={`rounded-lg p-2.5 text-center ${a.earned ? 'bg-purple-500/15' : 'bg-white/5 opacity-40'}`}
+              >
+                <div className="text-xl">{a.earned ? a.icon : '🔒'}</div>
+                <div className="mt-1 text-[10px] font-medium text-gray-200">{a.title}</div>
+              </div>
+            ))}
           </div>
         </GlassCard>
       )}

@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
 import { getRatings, classifyMatchUpset, forecastMatch, type MatchForecast } from '../../engine/matchEngine'
 import { generateUpsetArticle, type UpsetArticle } from '../../engine/upsetArticle'
-import { generateGoalTimeline, formatGoalMinute } from '../../engine/goalTimeline'
+import { generateGoalTimeline, formatGoalMinute, type GoalEvent } from '../../engine/goalTimeline'
 import { formatDecimalOdds } from '../../engine/odds'
 import { venueForMatchId } from '../../data/venues'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
@@ -101,6 +101,72 @@ function ArticleCard({ article }: { article: UpsetArticle }) {
           <p key={i} className="text-[11px] leading-relaxed text-gray-300">
             {p}
           </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** 득점 타임라인 표시 + 재생(골을 순서대로 드러내며 스코어를 갱신) (v2 #35). */
+function GoalTimelineSection({
+  timeline,
+  homeTeamId,
+  awayTeamId,
+}: {
+  timeline: GoalEvent[]
+  homeTeamId: string
+  awayTeamId: string
+}) {
+  const [playing, setPlaying] = useState(false)
+  const [revealed, setRevealed] = useState(timeline.length)
+
+  useEffect(() => {
+    setRevealed(timeline.length)
+    setPlaying(false)
+  }, [timeline])
+
+  useEffect(() => {
+    if (!playing) return
+    if (revealed >= timeline.length) {
+      setPlaying(false)
+      return
+    }
+    const t = setTimeout(() => setRevealed((r) => r + 1), 650)
+    return () => clearTimeout(t)
+  }, [playing, revealed, timeline.length])
+
+  const shown = timeline.slice(0, revealed)
+  const homeScore = shown.filter((g) => g.teamId === homeTeamId).length
+  const awayScore = shown.filter((g) => g.teamId === awayTeamId).length
+
+  return (
+    <div className="mb-4 rounded-lg bg-white/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-bold text-gray-400">⚽ 득점 타임라인</span>
+        <div className="flex items-center gap-2">
+          {playing && <span className="text-[11px] font-bold tabular-nums text-white">{homeScore} - {awayScore}</span>}
+          <button
+            onClick={() => {
+              setRevealed(0)
+              setPlaying(true)
+            }}
+            className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 hover:bg-white/20"
+          >
+            {playing ? '재생 중…' : '▶ 재생'}
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {timeline.map((g, i) => (
+          <span
+            key={i}
+            className={`inline-flex items-center gap-1 text-[11px] transition-opacity ${
+              i < revealed ? 'text-gray-300 opacity-100' : 'text-gray-500 opacity-30'
+            }`}
+          >
+            <FlagIcon iso2={TEAMS_BY_ID[g.teamId].iso2} className="h-2.5 w-3.5" />
+            <span className="tabular-nums">{formatGoalMinute(g)}</span>
+          </span>
         ))}
       </div>
     </div>
@@ -307,17 +373,7 @@ export function MatchDetailModal() {
         )}
 
         {goalTimeline.length > 0 && (
-          <div className="mb-4 rounded-lg bg-white/5 p-3">
-            <p className="mb-2 text-center text-[11px] font-bold text-gray-400">⚽ 득점 타임라인</p>
-            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
-              {goalTimeline.map((g, i) => (
-                <span key={i} className="inline-flex items-center gap-1 text-[11px] text-gray-300">
-                  <FlagIcon iso2={TEAMS_BY_ID[g.teamId].iso2} className="h-2.5 w-3.5" />
-                  <span className="tabular-nums">{formatGoalMinute(g)}</span>
-                </span>
-              ))}
-            </div>
-          </div>
+          <GoalTimelineSection timeline={goalTimeline} homeTeamId={homeTeamId} awayTeamId={awayTeamId} />
         )}
 
         {article && (
