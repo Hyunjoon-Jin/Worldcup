@@ -190,12 +190,22 @@ function QualRankingMovers({ result }: { result: AllQualificationResult }) {
 function QualDailyProgress({ result, onSelectMatch }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void }) {
   const calendar = useMemo(() => buildQualCalendar(result), [result])
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
-  const [dayIdx, setDayIdx] = useState(calendar.length - 1)
-
-  // 새 시뮬레이션(캘린더 교체) 시 마지막 경기일(전체 소화)로 초기화.
-  useEffect(() => {
-    setDayIdx(calendar.length - 1)
+  const revealed = useQualificationStore((s) => s.revealed)
+  // 현재 공개 상태(revealed)와 정확히 일치하는 경기일을 찾는다(시뮬 직후엔 1일차). 없으면 1일차.
+  const initialIdx = useMemo(() => {
+    const i = calendar.findIndex((d) =>
+      Object.keys(d.revealedByConfed).every((c) => (revealed[c] ?? -1) === d.revealedByConfed[c]),
+    )
+    return i >= 0 ? i : 0
+    // revealed는 시뮬/네비게이션 시점의 값만 필요 → calendar 변경에만 재계산
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendar])
+  const [dayIdx, setDayIdx] = useState(initialIdx)
+
+  // 새 시뮬레이션(캘린더 교체) 시 해당 경기일로 초기화(기본 1일차부터 진행).
+  useEffect(() => {
+    setDayIdx(initialIdx)
+  }, [initialIdx])
 
   if (calendar.length === 0) return null
   const day = calendar[Math.max(0, Math.min(dayIdx, calendar.length - 1))]
@@ -835,6 +845,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const [selMatch, setSelMatch] = useState<MatchResult | null>(null)
 
   const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
+  // 예선이 전부 끝났는지(부분 진행이면 최종 결과 카드는 스포일러 방지로 숨긴다).
+  const fullyRevealed = result ? !isPartialProgress(result, revealed) : false
 
   // 내 팀 본선 진출 순간 효과음·햅틱 (E2). 결과가 새로 나올 때 한 번만 재생.
   const playedFor = useRef<AllQualificationResult | null>(null)
@@ -972,10 +984,19 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
           <QualRankingMovers result={result} />
 
-          <QualOverviewCard result={result} onSelect={setConfed} />
+          {fullyRevealed && <QualOverviewCard result={result} onSelect={setConfed} />}
 
           <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />
 
+          {!fullyRevealed && (
+            <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+              🗓️ 예선 진행 중 — 위 <strong>📅 일별 진행</strong>에서 <strong>다음 경기일 ▶</strong>로 날짜를 넘기며 관전하세요.
+              최종 순위·대륙간 PO·본선 진출국·통계는 예선을 모두 마치면(⏭ 끝) 표시됩니다.
+            </p>
+          )}
+
+          {fullyRevealed && (
+          <>
           <GlassCard className="p-4">
             <h3 className="mb-3 text-sm font-bold text-amber-300">🎯 대륙간 플레이오프 (6팀 → 2장)</h3>
             {result.interConfed.matches.length > 0 ? (
@@ -1077,12 +1098,14 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               })()}
             </details>
           </GlassCard>
+          </>
+          )}
 
-          <QualStatsCard result={result} />
+          {fullyRevealed && <QualStatsCard result={result} />}
 
-          <QualHighlightsCard result={result} onSelectMatch={setSelMatch} />
+          {fullyRevealed && <QualHighlightsCard result={result} onSelectMatch={setSelMatch} />}
 
-          <QualUpsetArticleCard result={result} />
+          {fullyRevealed && <QualUpsetArticleCard result={result} />}
 
           {probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
 
@@ -1092,7 +1115,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
           <QualDifficultyCard />
 
-          {drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
+          {fullyRevealed && drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
             <GlassCard className="p-4">
               <h3 className="mb-3 text-sm font-bold text-amber-300">🎭 예선 이변</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

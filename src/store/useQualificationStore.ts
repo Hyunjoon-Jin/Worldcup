@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { simulateAllQualification, type AllQualificationResult } from '../engine/qualification'
+import { buildQualCalendar } from '../engine/qualification/calendar'
 import { createQualProbAccumulator } from '../engine/qualification/probability'
 import {
   collectPlayedByConfed,
@@ -107,8 +108,13 @@ export const useQualificationStore = create<QualificationStore>()(
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
         const result = simulateAllQualification(usedSeed, buildQualRatings())
-        // 기본은 전체 라운드 공개(기존 UX 유지). "처음부터 관전"으로 되돌릴 수 있다.
-        const revealed = Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
+        // 첫 경기일부터 날짜별로 진행(관전)하도록, 공개 라운드를 캘린더 1일차 상태로 시작한다.
+        // '⏭ 끝'으로 언제든 전체 결과로 건너뛸 수 있다.
+        const calendar = buildQualCalendar(result)
+        const revealed =
+          calendar.length > 0
+            ? calendar[0].revealedByConfed
+            : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
         set({ seed: usedSeed, result, probabilities: null, revealed })
       },
       setRevealed: (confed, matchday) => set({ revealed: { ...get().revealed, [confed]: matchday } }),
