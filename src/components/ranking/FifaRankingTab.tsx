@@ -3,6 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { ALL_NATIONS } from '../../data/nations'
 import { useQualificationStore } from '../../store/useQualificationStore'
+import { useProgressStore } from '../../store/useProgressStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { flattenPlayed, collectPlayedByConfed } from '../../engine/qualification/conditional'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
@@ -10,9 +11,11 @@ import {
   computeLiveRanking,
   computeRankingTrend,
   basePointsFromRank,
+  type FinalsResults,
   type LiveRankRow,
   type TeamTrend,
 } from '../../engine/qualification/ranking'
+import type { KnockoutMatch } from '../../types/match'
 
 const TREND_COLORS = ['#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee', '#fb923c']
 
@@ -65,14 +68,25 @@ function baseRanking(): LiveRankRow[] {
 export function FifaRankingTab() {
   const result = useQualificationStore((s) => s.result)
   const revealed = useQualificationStore((s) => s.revealed)
+  const groupMatches = useProgressStore((s) => s.groupMatches)
+  const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const [query, setQuery] = useState('')
   const [sortMode, setSortMode] = useState<'rank' | 'up' | 'down'>('rank')
 
+  // 진행된 본선 경기(조별리그 + 토너먼트 결과)를 모아 랭킹에 반영한다.
+  const finals = useMemo<FinalsResults>(() => {
+    const knockoutMatches = Object.values(knockoutSlots)
+      .map((s) => s.result)
+      .filter((m): m is KnockoutMatch => m != null)
+    return { groupMatches, knockoutMatches }
+  }, [groupMatches, knockoutSlots])
+  const hasFinals = finals.groupMatches.length > 0 || finals.knockoutMatches.length > 0
+
   const ranking = useMemo<LiveRankRow[]>(() => {
     if (!result) return baseRanking()
-    return computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)))
-  }, [result, revealed])
+    return computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals)
+  }, [result, revealed, finals])
 
   const calendar = useMemo(() => (result ? buildQualCalendar(result) : []), [result])
   const dayCount = useMemo(
@@ -105,8 +119,10 @@ export function FifaRankingTab() {
       <GlassCard strong className="p-5 text-center">
         <p className="mb-1 text-sm font-semibold text-white">🌐 FIFA 세계 랭킹</p>
         <p className="text-xs text-gray-400">
-          실제 FIFA 점수 산정 방식(P = P + I×(승점−기대승점), 예선 I=25)으로 지역예선 진행 결과를 실시간 반영합니다.
+          실제 FIFA 점수 산정 방식(P = P + I×(승점−기대승점))으로 경기 결과를 실시간 반영합니다. 중요도 I는
+          예선 25 · 본선 조별리그·16강 50 · 8강 이후 60.
           {!result && <span className="text-amber-300"> 지역예선을 진행하면 경기 결과가 랭킹에 누적 반영됩니다.</span>}
+          {hasFinals && <span className="text-amber-300"> 본선 진행 결과가 랭킹에 반영되고 있습니다.</span>}
         </p>
       </GlassCard>
 

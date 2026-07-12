@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { hostEditionAt, HOST_ROTATION } from '../src/data/hostRotation'
 import { finalsFormDeltas } from '../src/engine/finalsForm'
+import {
+  applyFinalsElo,
+  initRankingPoints,
+  wcKnockoutImportance,
+  IMPORTANCE_WC_GROUP,
+  IMPORTANCE_WC_KO,
+} from '../src/engine/qualification/ranking'
 import { ALL_NATIONS_BY_ID } from '../src/data/nations'
 import type { KnockoutSlotState } from '../src/engine/tournamentSimulation'
 import type { KnockoutMatch } from '../src/types/match'
@@ -73,5 +80,52 @@ describe('finalsFormDeltas — 본선 성적 → 커리어 폼', () => {
     // 결승 결과가 없으므로 준우승 판정 불가 — 두 팀은 FINAL 단계(=우승 자리) 기본 +6
     expect(deltas['A']).toBe(6)
     expect(deltas['B']).toBe(6)
+  })
+})
+
+describe('본선 결과 → FIFA 랭킹 반영', () => {
+  it('본선 승리는 점수를 올리고 패배는 내린다', () => {
+    const base = initRankingPoints(['BRA', 'ARG'])
+    const p = { ...base }
+    applyFinalsElo(p, {
+      groupMatches: [{ group: 'A', matchday: 1, homeTeamId: 'BRA', awayTeamId: 'ARG', homeGoals: 2, awayGoals: 0 }],
+      knockoutMatches: [],
+    })
+    expect(p['BRA']).toBeGreaterThan(base['BRA'])
+    expect(p['ARG']).toBeLessThan(base['ARG'])
+  })
+
+  it('같은 승리라도 8강 이후(I=60)가 조별리그(I=50)보다 점수 상승이 크다', () => {
+    const base = initRankingPoints(['BRA', 'ARG'])
+    const groupWin = { ...base }
+    applyFinalsElo(groupWin, {
+      groupMatches: [{ group: 'A', matchday: 1, homeTeamId: 'BRA', awayTeamId: 'ARG', homeGoals: 1, awayGoals: 0 }],
+      knockoutMatches: [],
+    })
+    const finalWin = { ...base }
+    applyFinalsElo(finalWin, {
+      groupMatches: [],
+      knockoutMatches: [
+        {
+          round: 'FINAL',
+          slotId: 'FINAL',
+          homeTeamId: 'BRA',
+          awayTeamId: 'ARG',
+          homeGoals: 1,
+          awayGoals: 0,
+          wentToPenalties: false,
+          winnerTeamId: 'BRA',
+        },
+      ],
+    })
+    expect(finalWin['BRA'] - base['BRA']).toBeGreaterThan(groupWin['BRA'] - base['BRA'])
+  })
+
+  it('wcKnockoutImportance: 32강·16강 50, 8강부터 60', () => {
+    expect(wcKnockoutImportance('R32')).toBe(IMPORTANCE_WC_GROUP)
+    expect(wcKnockoutImportance('R16')).toBe(IMPORTANCE_WC_GROUP)
+    expect(wcKnockoutImportance('QF')).toBe(IMPORTANCE_WC_KO)
+    expect(wcKnockoutImportance('SF')).toBe(IMPORTANCE_WC_KO)
+    expect(wcKnockoutImportance('FINAL')).toBe(IMPORTANCE_WC_KO)
   })
 })

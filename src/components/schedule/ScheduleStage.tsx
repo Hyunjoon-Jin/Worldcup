@@ -17,12 +17,13 @@ import { SaveSlotsPanel } from './SaveSlotsPanel'
 import { VenueMap } from './VenueMap'
 import { nextPendingGroupSlot, nextPendingKnockoutSlot, useProgressStore } from '../../store/useProgressStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
+import { useCareerStore } from '../../store/useCareerStore'
 import type { KnockoutRound } from '../../types/match'
 
 const ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL']
 const MEDALS = ['🥇', '🥈', '🥉']
 
-export function ScheduleStage() {
+export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void }) {
   const { schedule, phase, currentDay, groupMatches, knockoutSlots, initSchedule, advanceDay, advanceTimeSlot, advanceToEnd, champion } =
     useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
@@ -30,6 +31,8 @@ export function ScheduleStage() {
   const runSimulation = useSimulationStore((s) => s.run)
   const seed = useDrawStore((s) => s.seed)
   const soundEnabled = useSoundStore((s) => s.enabled)
+  const editionYear = useCareerStore((s) => s.year)
+  const editionHosts = useCareerStore((s) => s.hostIds)
   const [shared, setShared] = useState(false)
 
   // 우승팀이 결정되는 순간 팡파레 (v2 #49)
@@ -142,7 +145,17 @@ export function ScheduleStage() {
               )}
             </>
           ) : (
-            <p className="text-lg font-bold text-amber-300">🎉 우승팀이 결정되었습니다!</p>
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-lg font-bold text-amber-300">🎉 우승팀이 결정되었습니다!</p>
+              {onNextEdition && (
+                <GlassButton
+                  onClick={onNextEdition}
+                  title="이번 성적을 반영하고 새 개최국을 선정해, 다음 월드컵 지역예선을 바로 시작합니다"
+                >
+                  🔜 다음 월드컵 지역예선으로 →
+                </GlassButton>
+              )}
+            </div>
           )}
         </div>
       </GlassCard>
@@ -173,15 +186,33 @@ export function ScheduleStage() {
       <SaveSlotsPanel />
       {champion && (
         <GlassCard strong className="p-6 text-center">
-          <p className="text-sm text-gray-300">2026 북중미 월드컵 우승</p>
+          <p className="text-sm text-gray-300">
+            {editionYear} 월드컵 우승
+            <span className="ml-1 text-[11px] text-sky-300">
+              (개최: {editionHosts.map((id) => TEAMS_BY_ID[id]?.nameKo ?? id).join('·')})
+            </span>
+          </p>
           <p className="font-display mt-1 flex items-center justify-center gap-3 text-3xl font-semibold tracking-wide text-amber-300">
             🏆 <FlagIcon iso2={TEAMS_BY_ID[champion].iso2} className="h-6 w-9" /> {TEAMS_BY_ID[champion].nameKo}
           </p>
-          <div className="mt-4 flex justify-center">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <GlassButton variant="ghost" onClick={shareResult}>
               {shared ? '✓ 결과 복사됨' : '📋 결과 공유'}
             </GlassButton>
+            {onNextEdition && (
+              <GlassButton
+                onClick={onNextEdition}
+                title="이번 성적을 반영하고 새 개최국을 선정해, 다음 월드컵 지역예선을 바로 시작합니다"
+              >
+                🔜 다음 월드컵 지역예선으로 →
+              </GlassButton>
+            )}
           </div>
+          {onNextEdition && (
+            <p className="mt-3 text-[11px] text-gray-400">
+              다음 대회 개최국이 새로 선정되고, 이번 대회 성적이 각 팀의 전력에 반영되어 새 예선이 시작됩니다.
+            </p>
+          )}
         </GlassCard>
       )}
     </div>
