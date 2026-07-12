@@ -19,7 +19,9 @@ import {
 import type { LockedLookup } from '../engine/qualification/generic'
 import { generateSeed } from '../engine/rng'
 import { getRatings } from '../engine/matchEngine'
+import { getCurrentHostIds } from '../engine/hostContext'
 import { usePerformanceStore } from './usePerformanceStore'
+import { useCareerStore } from './useCareerStore'
 import { ALL_NATIONS } from '../data/nations'
 import type { TeamRatings } from '../types/team'
 import type { QualWorkerOut } from '../workers/qualWorker'
@@ -58,14 +60,22 @@ function buildProbInputs(): {
   return { ratings: buildQualRatings() }
 }
 
-/** 성적(진행 결과)에 따른 능력치 보정을 계산해 성적 보정 store에 반영한다. */
+/**
+ * 성적(진행 결과) + 커리어 폼(이전 대회 누적)에 따른 능력치 보정을 계산해 성적 보정 store에 반영한다.
+ */
 function syncPerformanceDeltas(result: AllQualificationResult | null, revealed: Record<string, number>): void {
   if (!result) {
     usePerformanceStore.getState().reset()
     return
   }
+  const carriedForm = useCareerStore.getState().carriedForm
   const played = flattenPlayed(collectPlayedByConfed(result, revealed))
-  usePerformanceStore.getState().setDeltas(overallDeltasFromResults(result, played))
+  const editionDeltas = overallDeltasFromResults(result, played)
+  const combined: Record<string, number> = {}
+  for (const id of new Set([...Object.keys(editionDeltas), ...Object.keys(carriedForm)])) {
+    combined[id] = Math.max(-8, Math.min(8, (editionDeltas[id] ?? 0) + (carriedForm[id] ?? 0)))
+  }
+  usePerformanceStore.getState().setDeltas(combined)
 }
 
 /** 워커 미지원/실패 시 메인스레드 비동기 청크 폴백 (D5). */
@@ -75,8 +85,9 @@ async function runProbOnMainThread(
   ratings: Record<string, TeamRatings>,
   set: (partial: Partial<QualificationStore>) => void,
   lockedByConfed?: Record<string, LockedLookup>,
+  hostIds?: string[],
 ): Promise<void> {
-  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed)
+  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed, hostIds)
   while (acc.done < PROB_ITERATIONS) {
     if (runId !== probRunId) return
     acc.runBatch(Math.min(PROB_BATCH, PROB_ITERATIONS - acc.done))
@@ -123,9 +134,9 @@ export const useQualificationStore = create<QualificationStore>()(
       revealed: {},
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
-        // 새 대회 시뮬은 이전 대회 성적 보정 없이 base(+컨디션/샌드박스)로 계산한다.
-        usePerformanceStore.getState().reset()
-        const result = simulateAllQualification(usedSeed, buildQualRatings())
+        // 커리어 폼(이전 대회 흐름)을 시작 전력에 반영한 뒤, 현재 대회 개최국으로 시뮬레이션한다.
+        usePerformanceStore.getState().setDeltas(useCareerStore.getState().carriedForm)
+        const result = simulateAllQualification(usedSeed, buildQualRatings(), undefined, getCurrentHostIds())
         // 첫 경기일부터 날짜별로 진행(관전)하도록, 공개 라운드를 캘린더 1일차 상태로 시작한다.
         // '⏭ 끝'으로 언제든 전체 결과로 건너뛸 수 있다.
         const calendar = buildQualCalendar(result)
@@ -147,6 +158,7 @@ export const useQualificationStore = create<QualificationStore>()(
       computeProbabilities: () => {
         const runId = ++probRunId
         const seedBase = get().seed ?? 'PROB'
+        const hostIds = getCurrentHostIds()
         // 진행 상황(실황)을 반영: 부분 진행이면 치른 경기 고정 + 갱신 전력으로 조건부 계산.
         const { ratings, locked, lockedByConfed } = buildProbInputs()
         set({ probLoading: true, probabilities: null })
@@ -171,15 +183,15 @@ export const useQualificationStore = create<QualificationStore>()(
             worker.onerror = () => {
               worker.terminate()
               if (probWorker === worker) probWorker = null
-              void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed)
+              void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds)
             }
-            worker.postMessage({ seedBase, ratings, iterations: PROB_ITERATIONS, locked })
+            worker.postMessage({ seedBase, ratings, iterations: PROB_ITERATIONS, locked, hostIds })
             return
           } catch {
             /* 워커 생성 실패 → 메인스레드 폴백 */
           }
         }
-        void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed)
+        void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds)
       },
       reset: () => {
         probRunId++

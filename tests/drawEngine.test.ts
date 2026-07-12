@@ -6,9 +6,10 @@ import { GROUP_LETTERS } from '../src/data/hostSlots'
 describe('drawEngine — 초기 상태', () => {
   it('개최국 3팀이 각 조 1번 시드에 사전 고정된다', () => {
     const s = createInitialDrawState()
+    // 개최국을 앞쪽 조부터 1번 시드로 고정(MEX→A, CAN→B, USA→C)
     expect(s.groups.A[0]).toBe('MEX')
     expect(s.groups.B[0]).toBe('CAN')
-    expect(s.groups.D[0]).toBe('USA')
+    expect(s.groups.C[0]).toBe('USA')
   })
 
   it('포트1 풀에는 개최국을 제외한 9팀, 나머지 포트는 12팀씩 들어간다', () => {

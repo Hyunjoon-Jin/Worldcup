@@ -567,6 +567,34 @@ describe('포맷 데이터 주도화 (개선 C4)', () => {
   })
 })
 
+describe('동적 개최국 (커리어 모드)', () => {
+  it('다른 대륙 개최국이면 그 대륙 직행이 줄고 48은 유효하다', () => {
+    // ESP·POR(UEFA 2) + MAR(CAF 1) 공동 개최
+    const all = simulateAllQualification('HOSTS-A', undefined, undefined, ['ESP', 'POR', 'MAR'])
+    expect(all.qualified48).toHaveLength(48)
+    expect(new Set(all.qualified48).size).toBe(48)
+    for (const h of ['ESP', 'POR', 'MAR']) expect(all.qualified48).toContain(h)
+    // UEFA 직행 = 16 − 2(개최), CAF 직행 = 9 − 1
+    expect(all.byConfederation.UEFA.qualified).toHaveLength(SLOT_ALLOCATION.UEFA.direct - 2)
+    expect(all.byConfederation.CAF.qualified).toHaveLength(SLOT_ALLOCATION.CAF.direct - 1)
+    // 개최국은 자기 대륙 예선 진출국에 포함되지 않는다
+    expect(all.byConfederation.UEFA.qualified).not.toContain('ESP')
+    expect(all.byConfederation.CAF.qualified).not.toContain('MAR')
+  })
+
+  it('아시아 단독 개최(사우디)면 AFC 직행이 7로 줄고 48 유효', () => {
+    const all = simulateAllQualification('HOSTS-B', undefined, undefined, ['KSA'])
+    expect(all.qualified48).toHaveLength(48)
+    expect(new Set(all.qualified48).size).toBe(48)
+    expect(all.qualified48).toContain('KSA')
+    expect(all.byConfederation.AFC.qualified).toHaveLength(SLOT_ALLOCATION.AFC.direct - 1)
+    expect(all.byConfederation.AFC.qualified).not.toContain('KSA')
+    // 개최국이 없는 CONCACAF는 원래대로 직행 3 + PO 2(비개최 풀)... 이 경우 개최국이 CONCACAF에
+    // 없으므로 CONCACAF 직행 = 6 - 0 = 6.
+    expect(all.byConfederation.CONCACAF.qualified).toHaveLength(SLOT_ALLOCATION.CONCACAF.direct)
+  })
+})
+
 describe('다단계 대륙 구조 (개선 A3·A4)', () => {
   const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
 

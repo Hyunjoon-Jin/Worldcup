@@ -7,7 +7,9 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSoundStore } from '../../store/useSoundStore'
 import { playVictory } from '../../engine/sound'
-import { startFinalsFromQualification } from '../../store/tournamentActions'
+import { startFinalsFromQualification, advanceToNextEdition } from '../../store/tournamentActions'
+import { useCareerStore } from '../../store/useCareerStore'
+import { useProgressStore } from '../../store/useProgressStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { rankAcrossGroups } from '../../engine/qualification/generic'
 import { extractQualDrama } from '../../engine/qualification/drama'
@@ -23,7 +25,7 @@ import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { computePots } from '../../engine/drawEngine'
-import { HOST_SLOTS } from '../../data/hostSlots'
+import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
@@ -878,11 +880,14 @@ function ConfederationStandings({
     }
   })()
 
+  // 이 대륙에 속한 현재 대회 개최국(예선 없이 자동 진출) — 커리어 모드로 매 대회 바뀔 수 있다.
+  const confedHosts = getCurrentHostIds().filter((id) => ALL_NATIONS_BY_ID[id]?.confederation === confed)
+
   return (
     <GlassCard className="p-4">
-      {confed === 'CONCACAF' && (
+      {confedHosts.length > 0 && (
         <p className="mb-3 text-[11px] text-gray-500">
-          개최국(멕시코·미국·캐나다)은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
+          개최국({confedHosts.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join('·')})은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
         </p>
       )}
 
@@ -1018,6 +1023,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const soundEnabled = useSoundStore((s) => s.enabled)
   const revealed = useQualificationStore((s) => s.revealed)
+  // 커리어 모드: 현재 대회 연도·개최국, 방금 끝난 본선(우승팀)이면 "다음 대회로" 진행 가능.
+  const editionYear = useCareerStore((s) => s.year)
+  const editionIndex = useCareerStore((s) => s.editionIndex)
+  const hostIds = useCareerStore((s) => s.hostIds)
+  const finalsComplete = useProgressStore((s) => s.phase === 'complete')
+  const champion = useProgressStore((s) => s.champion)
   const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
   const [confed, setConfed] = useState<Confederation>(
@@ -1056,10 +1067,37 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   return (
     <div className="flex flex-col gap-5">
       <GlassCard strong className="p-5 text-center">
-        <p className="mb-1 text-sm font-semibold text-white">🌍 월드컵 지역예선</p>
+        <p className="mb-1 text-sm font-semibold text-white">
+          🌍 {editionYear} 월드컵 지역예선
+          {editionIndex > 0 && <span className="ml-1.5 text-[11px] font-normal text-amber-300">· 커리어 {editionIndex + 1}번째 대회</span>}
+        </p>
+        <p className="mb-2 text-[11px] text-sky-300">
+          🏟️ 개최국:{' '}
+          {hostIds.map((id, i) => (
+            <span key={id}>
+              {i > 0 && ' · '}
+              {ALL_NATIONS_BY_ID[id]?.nameKo ?? id}
+            </span>
+          ))}
+        </p>
         <p className="mb-4 text-xs text-gray-400">
           6개 대륙 예선 + 대륙간 플레이오프를 시뮬레이션해 <strong className="text-emerald-300">본선 48개국</strong>을 가립니다.
         </p>
+        {finalsComplete && (
+          <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+            <p className="text-xs text-amber-200">
+              🏆 {champion ? `${ALL_NATIONS_BY_ID[champion]?.nameKo ?? champion} 우승으로 ` : ''}
+              {editionYear} 대회가 끝났습니다. 다음 대회로 흐름을 이어가면 개최국이 새로 선정되고, 이번 대회 성적이 각 팀의 전력에 반영됩니다.
+            </p>
+            <GlassButton
+              className="mt-2"
+              onClick={() => advanceToNextEdition()}
+              title="다음 대회 개최국을 새로 선정하고, 이번 성적을 반영해 새 예선을 시작합니다"
+            >
+              🔜 다음 대회로 →
+            </GlassButton>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-center gap-2">
           <input
             type="text"
@@ -1252,9 +1290,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               </summary>
               {(() => {
                 const pots = computePots(result.qualified48)
-                const hostIds = Object.keys(HOST_SLOTS)
+                const potHostIds = result.hosts
                 const potList: [string, string[]][] = [
-                  ['포트 1 (개최국 + 최상위 9)', [...hostIds, ...pots[1]]],
+                  ['포트 1 (개최국 + 최상위)', [...potHostIds, ...pots[1]]],
                   ['포트 2', pots[2]],
                   ['포트 3', pots[3]],
                   ['포트 4', pots[4]],
@@ -1268,7 +1306,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                           {ids.map((id) => (
                             <div key={id} className="flex items-center gap-1.5 text-[11px]">
                               <NationLabel teamId={id} />
-                              {hostIds.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
+                              {potHostIds.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
                             </div>
                           ))}
                         </div>
@@ -1338,7 +1376,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                   CONCACAF 6(개최 3국 포함) · OFC 1 = 46 직행. 여기에 대륙간 플레이오프 2장을 더해 총 48개국.
                 </p>
                 <p>
-                  <strong className="text-emerald-300">개최국:</strong> 미국·멕시코·캐나다는 예선 없이 자동 진출합니다.
+                  <strong className="text-emerald-300">개최국:</strong>{' '}
+                  {getCurrentHostIds().map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join('·')}는 예선 없이 자동
+                  진출합니다. (커리어 모드에서는 대회마다 개최국이 새로 선정됩니다.)
                 </p>
                 <p>
                   <strong className="text-emerald-300">대륙간 플레이오프:</strong> 각 대륙의 PO행 팀(총 6팀)이
