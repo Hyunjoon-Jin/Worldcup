@@ -1,5 +1,7 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
+import { FINAL_SLOT_ID, THIRD_SLOT_ID } from '../../data/bracketTemplate'
+import { useDrawStore } from '../../store/useDrawStore'
 import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassCard } from '../common/GlassCard'
@@ -20,6 +22,27 @@ export function ScheduleStage() {
     useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
   const runSimulation = useSimulationStore((s) => s.run)
+  const seed = useDrawStore((s) => s.seed)
+  const [shared, setShared] = useState(false)
+
+  const shareResult = () => {
+    const finalSlot = knockoutSlots[FINAL_SLOT_ID]?.result
+    const thirdSlot = knockoutSlots[THIRD_SLOT_ID]?.result
+    if (!finalSlot || !champion) return
+    const runnerUp = finalSlot.winnerTeamId === finalSlot.homeTeamId ? finalSlot.awayTeamId : finalSlot.homeTeamId
+    const name = (id?: string) => (id ? TEAMS_BY_ID[id]?.nameKo ?? id : '-')
+    const lines = [
+      '🏆 2026 북중미 월드컵 시뮬레이션 결과',
+      `🥇 우승: ${name(champion)}`,
+      `🥈 준우승: ${name(runnerUp)}`,
+      thirdSlot ? `🥉 3위: ${name(thirdSlot.winnerTeamId)}` : '',
+      seed ? `🎲 조추첨 시드: ${seed}` : '',
+    ].filter(Boolean)
+    void navigator.clipboard?.writeText(lines.join('\n')).then(() => {
+      setShared(true)
+      setTimeout(() => setShared(false), 1800)
+    })
+  }
 
   useEffect(() => {
     initSchedule()
@@ -127,6 +150,11 @@ export function ScheduleStage() {
           <p className="font-display mt-1 flex items-center justify-center gap-3 text-3xl font-semibold tracking-wide text-amber-300">
             🏆 <FlagIcon iso2={TEAMS_BY_ID[champion].iso2} className="h-6 w-9" /> {TEAMS_BY_ID[champion].nameKo}
           </p>
+          <div className="mt-4 flex justify-center">
+            <GlassButton variant="ghost" onClick={shareResult}>
+              {shared ? '✓ 결과 복사됨' : '📋 결과 공유'}
+            </GlassButton>
+          </div>
         </GlassCard>
       )}
     </div>

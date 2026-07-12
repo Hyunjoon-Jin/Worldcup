@@ -4,6 +4,8 @@ import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
 import { getRatings, classifyMatchUpset, forecastMatch, type MatchForecast } from '../../engine/matchEngine'
 import { generateUpsetArticle, type UpsetArticle } from '../../engine/upsetArticle'
+import { generateGoalTimeline, formatGoalMinute } from '../../engine/goalTimeline'
+import { venueForMatchId } from '../../data/venues'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
@@ -162,6 +164,19 @@ export function MatchDetailModal() {
   const played = selected.kind !== 'upcoming'
   const homeGoals = selected.kind !== 'upcoming' ? selected.match.homeGoals : undefined
   const awayGoals = selected.kind !== 'upcoming' ? selected.match.awayGoals : undefined
+
+  const venueKey =
+    selected.kind === 'knockout'
+      ? selected.match.slotId
+      : selected.kind === 'group'
+        ? `${selected.match.group}-${selected.match.matchday}-${homeTeamId}-${awayTeamId}`
+        : `${homeTeamId}-${awayTeamId}`
+  const venue = venueForMatchId(venueKey)
+
+  const goalTimeline =
+    played && (homeGoals! > 0 || awayGoals! > 0)
+      ? generateGoalTimeline(homeTeamId, awayTeamId, homeGoals!, awayGoals!)
+      : []
   const upsetInfo = played ? classifyMatchUpset(homeTeamId, awayTeamId, homeGoals!, awayGoals!) : null
   const wentToPenalties = selected.kind === 'knockout' ? selected.match.wentToPenalties : false
   const winnerTeamId = selected.kind === 'knockout' ? selected.match.winnerTeamId : upsetInfo?.winnerTeamId
@@ -225,11 +240,14 @@ export function MatchDetailModal() {
         </div>
 
         {selected.date && (
-          <p className="mb-3 text-center text-[11px] text-gray-500">
+          <p className="text-center text-[11px] text-gray-500">
             {formatKoreanDate(selected.date)}
             {selected.timeSlot ? ` ${selected.timeSlot}` : ''} 현지시간
           </p>
         )}
+        <p className="mb-3 text-center text-[11px] text-gray-500">
+          📍 {venue.cityKo} · {venue.stadium}
+        </p>
 
         <div className="mb-4 flex items-center justify-center gap-4">
           <button
@@ -274,6 +292,20 @@ export function MatchDetailModal() {
           <p className="mb-4 text-center text-xs text-emerald-300">
             {TEAMS_BY_ID[winnerTeamId].nameKo} 승리{wentToPenalties ? ' (승부차기)' : ''}
           </p>
+        )}
+
+        {goalTimeline.length > 0 && (
+          <div className="mb-4 rounded-lg bg-white/5 p-3">
+            <p className="mb-2 text-center text-[11px] font-bold text-gray-400">⚽ 득점 타임라인</p>
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+              {goalTimeline.map((g, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-[11px] text-gray-300">
+                  <FlagIcon iso2={TEAMS_BY_ID[g.teamId].iso2} className="h-2.5 w-3.5" />
+                  <span className="tabular-nums">{formatGoalMinute(g)}</span>
+                </span>
+              ))}
+            </div>
+          </div>
         )}
 
         {article && (
