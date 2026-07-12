@@ -1,6 +1,7 @@
 import { useThemeStore } from '../../store/useThemeStore'
 import { useA11yStore } from '../../store/useA11yStore'
 import { useOnboardingStore } from '../../store/useOnboardingStore'
+import { useSkinStore, SKIN_SWATCH, SKIN_LABEL, type Skin } from '../../store/useSkinStore'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -33,6 +34,8 @@ export function SettingsMenu() {
   const toggleReduceMotion = useA11yStore((s) => s.toggleReduceMotion)
   const fontScale = useA11yStore((s) => s.fontScale)
   const setFontScale = useA11yStore((s) => s.setFontScale)
+  const skin = useSkinStore((s) => s.skin)
+  const setSkin = useSkinStore((s) => s.setSkin)
   const reopenOnboarding = useOnboardingStore((s) => s.reopen)
 
   return (
@@ -58,6 +61,21 @@ export function SettingsMenu() {
               >
                 {s === 'normal' ? '보통' : '크게'}
               </button>
+            ))}
+          </div>
+        </Row>
+        <Row label="테마 색상">
+          <div className="flex gap-1.5">
+            {(Object.keys(SKIN_SWATCH) as Skin[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSkin(s)}
+                aria-label={SKIN_LABEL[s]}
+                aria-pressed={skin === s}
+                title={SKIN_LABEL[s]}
+                className={`h-5 w-5 rounded-full ring-offset-1 transition-all ${skin === s ? 'ring-2 ring-white' : ''}`}
+                style={{ background: SKIN_SWATCH[s] }}
+              />
             ))}
           </div>
         </Row>

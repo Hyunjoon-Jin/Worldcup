@@ -84,6 +84,21 @@ html[data-theme="light"] .scrollbar-thin::-webkit-scrollbar-thumb {
   background: rgba(15, 23, 42, 0.2);
 }
 
+/* ---------- 액센트 스킨 (v2 #50) ----------
+   에메랄드 액센트 스케일을 다른 색으로 재매핑한다. 위험(빨강)과 혼동되지 않는 색만 제공. */
+html[data-skin="sky"] {
+  --color-emerald-100: #e0f2fe; --color-emerald-200: #bae6fd; --color-emerald-300: #7dd3fc;
+  --color-emerald-400: #38bdf8; --color-emerald-500: #0ea5e9; --color-emerald-600: #0284c7; --color-emerald-900: #0c4a6e;
+}
+html[data-skin="violet"] {
+  --color-emerald-100: #ede9fe; --color-emerald-200: #ddd6fe; --color-emerald-300: #c4b5fd;
+  --color-emerald-400: #a78bfa; --color-emerald-500: #8b5cf6; --color-emerald-600: #7c3aed; --color-emerald-900: #4c1d95;
+}
+html[data-skin="amber"] {
+  --color-emerald-100: #fef3c7; --color-emerald-200: #fde68a; --color-emerald-300: #fcd34d;
+  --color-emerald-400: #fbbf24; --color-emerald-500: #f59e0b; --color-emerald-600: #d97706; --color-emerald-900: #78350f;
+}
+
 /* Glassmorphism primitives */
 .glass {
   background: rgba(255, 255, 255, 0.06);
