@@ -76,6 +76,16 @@ html[data-theme="light"] .text-gray-300 { color: #374151; }
 html[data-theme="light"] .text-gray-400 { color: #4b5563; }
 html[data-theme="light"] .text-gray-500 { color: #6b7280; }
 html[data-theme="light"] .text-gray-600 { color: #9ca3af; }
+/* 라이트 테마에서 옅은 파스텔 액센트 글자색이 흰 배경에 묻히지 않도록 더 진한 톤으로 (I5).
+   에메랄드는 스킨 리매핑(#50)을 존중하도록 변수(emerald-600)로 낮춘다. */
+html[data-theme="light"] .text-emerald-200,
+html[data-theme="light"] .text-emerald-300 { color: var(--color-emerald-600); }
+html[data-theme="light"] .text-amber-200,
+html[data-theme="light"] .text-amber-300 { color: #b45309; }
+html[data-theme="light"] .text-sky-200,
+html[data-theme="light"] .text-sky-300 { color: #0369a1; }
+html[data-theme="light"] .text-red-200,
+html[data-theme="light"] .text-red-300 { color: #b91c1c; }
 /* 반투명 흰색 표면은 라이트에서 보이도록 옅은 슬레이트로 */
 html[data-theme="light"] .bg-white\/5 { background-color: rgba(15, 23, 42, 0.05); }
 html[data-theme="light"] .bg-white\/10 { background-color: rgba(15, 23, 42, 0.08); }
