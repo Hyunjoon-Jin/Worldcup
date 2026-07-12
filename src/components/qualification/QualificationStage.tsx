@@ -13,6 +13,7 @@ import { HOST_SLOTS } from '../../data/hostSlots'
 import { QualMatchModal } from './QualMatchModal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
+import type { InterConfedResult } from '../../engine/qualification/interConfed'
 
 /** 한 조의 경기 목록(접이식). 클릭 시 상세 모달을 연다 (F1). */
 function MatchList({
@@ -65,6 +66,85 @@ function NationLabel({ teamId, className = '' }: { teamId: string; className?: s
       <FlagIcon iso2={nation.iso2} className="h-3 w-4 shrink-0" />
       <span className="font-medium text-gray-100">{nation.nameKo}</span>
     </span>
+  )
+}
+
+/** 대륙간 플레이오프 브래킷 (F4). 준결승 2경기 → 시드와의 결승 2경기 → 본선 2장. */
+function InterConfedBracket({ result }: { result: InterConfedResult }) {
+  const bySlot = new Map(result.matches.map((m) => [m.slotId, m] as const))
+  const winnerSet = new Set(result.winners)
+
+  function TeamRow({ teamId, goals, isWinner, bye }: { teamId: string; goals?: number; isWinner: boolean; bye?: boolean }) {
+    return (
+      <div
+        className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-[11px] ${
+          isWinner ? 'bg-emerald-500/15 text-emerald-100' : 'bg-white/5 text-gray-300'
+        }`}
+      >
+        <NationLabel teamId={teamId} className={isWinner ? 'font-bold' : ''} />
+        <span className="shrink-0 tabular-nums text-gray-400">{bye ? '부전승' : goals ?? '–'}</span>
+      </div>
+    )
+  }
+
+  function MatchBox({ slotId, label, byeSeed }: { slotId?: string; label: string; byeSeed?: string }) {
+    const m = slotId ? bySlot.get(slotId) : undefined
+    if (byeSeed && !m) {
+      return (
+        <div className="min-w-[150px] space-y-1">
+          <p className="text-[10px] font-bold text-gray-500">{label}</p>
+          <TeamRow teamId={byeSeed} isWinner bye />
+        </div>
+      )
+    }
+    if (!m) return null
+    const homeWin = m.winnerTeamId === m.homeTeamId
+    return (
+      <div className="min-w-[150px] space-y-1">
+        <p className="text-[10px] font-bold text-gray-500">
+          {label}
+          {m.wentToPenalties && <span className="ml-1 text-amber-300">(PK)</span>}
+        </p>
+        <TeamRow teamId={m.homeTeamId} goals={m.homeGoals} isWinner={homeWin} />
+        <TeamRow teamId={m.awayTeamId} goals={m.awayGoals} isWinner={!homeWin} />
+      </div>
+    )
+  }
+
+  // 브래킷 데이터가 없으면(엣지) 렌더 생략 → 상위에서 리스트로 폴백
+  if (!bySlot.has('ICP-F1') && !bySlot.has('ICP-F2')) return null
+  const f1 = bySlot.get('ICP-F1')
+  const f2 = bySlot.get('ICP-F2')
+  const seed1 = f1?.homeTeamId
+  const seed2 = f2?.homeTeamId
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {[
+        { sf: 'ICP-SF1', fin: 'ICP-F1', seed: seed1, pathNo: 1 },
+        { sf: 'ICP-SF2', fin: 'ICP-F2', seed: seed2, pathNo: 2 },
+      ].map(({ sf, fin, seed, pathNo }) => {
+        const fin_m = bySlot.get(fin)
+        const finWinner = fin_m?.winnerTeamId
+        return (
+          <div key={fin} className="rounded-lg border border-white/10 bg-black/20 p-3">
+            <p className="mb-2 text-[11px] font-bold text-amber-200">진출 경로 {pathNo}</p>
+            <div className="flex flex-wrap items-stretch gap-2">
+              <MatchBox slotId={sf} label="준결승" />
+              <div className="flex items-center text-gray-600" aria-hidden>→</div>
+              <MatchBox slotId={fin} label={seed ? '결승 (시드)' : '결승'} />
+            </div>
+            {finWinner && (
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-300">
+                <span aria-hidden>✅</span> 본선 진출:{' '}
+                <NationLabel teamId={finWinner} className="font-bold" />
+              </p>
+            )}
+          </div>
+        )
+      })}
+      <p className="sr-only">{[...winnerSet].map((id) => ALL_NATIONS_BY_ID[id]?.nameKo).join(', ')} 본선 진출</p>
+    </div>
   )
 }
 
@@ -121,15 +201,18 @@ function ConfederationStandings({
             {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{GROUP_LETTERS[gi]}조</p>}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[360px] text-left text-xs sm:text-sm">
+                <caption className="sr-only">
+                  {CONFEDERATION_LABEL_KO[confed]} {single ? '단일리그' : `${GROUP_LETTERS[gi]}조`} 순위표
+                </caption>
                 <thead>
                   <tr className="text-gray-400">
-                    <th className="w-6 py-1 text-center">#</th>
-                    <th className="py-1">국가</th>
-                    <th className="w-10 py-1 text-center">경기</th>
-                    <th className="w-10 py-1 text-center">승점</th>
-                    <th className="w-12 py-1 text-center">득실</th>
-                    {probabilities && <th className="w-14 py-1 text-right">진출</th>}
-                    <th className="py-1 text-right">결과</th>
+                    <th scope="col" className="w-6 py-1 text-center">#</th>
+                    <th scope="col" className="py-1">국가</th>
+                    <th scope="col" className="w-10 py-1 text-center">경기</th>
+                    <th scope="col" className="w-10 py-1 text-center">승점</th>
+                    <th scope="col" className="w-12 py-1 text-center">득실</th>
+                    {probabilities && <th scope="col" className="w-14 py-1 text-right">진출</th>}
+                    <th scope="col" className="py-1 text-right">결과</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -144,7 +227,7 @@ function ConfederationStandings({
                         className={`border-t border-white/5 ${direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
                       >
                         <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
-                        <td className="py-1.5"><NationLabel teamId={teamId} /></td>
+                        <th scope="row" className="py-1.5 font-normal"><NationLabel teamId={teamId} /></th>
                         <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                         <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                         <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
@@ -235,18 +318,34 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-1.5">
-              {CONFEDS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setConfed(c)}
-                  aria-pressed={confed === c}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    confed === c ? 'bg-emerald-500/25 text-emerald-200' : 'bg-white/5 text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {CONFEDERATION_LABEL_KO[c]}
-                </button>
-              ))}
+              {CONFEDS.map((c) => {
+                const cr = result.byConfederation[c]
+                const directN = cr?.qualified.length ?? 0
+                const poN = cr?.playoff.length ?? 0
+                return (
+                  <button
+                    key={c}
+                    onClick={() => setConfed(c)}
+                    aria-pressed={confed === c}
+                    aria-label={`${CONFEDERATION_LABEL_KO[c]} — 직행 ${directN}${poN ? `, 플레이오프 ${poN}` : ''}`}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                      confed === c ? 'bg-emerald-500/25 text-emerald-200' : 'bg-white/5 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <span>{CONFEDERATION_LABEL_KO[c]}</span>
+                    <span className="flex items-center gap-1" aria-hidden>
+                      <span className="rounded bg-emerald-500/20 px-1 text-[9px] font-bold tabular-nums text-emerald-300">
+                        {directN}
+                      </span>
+                      {poN > 0 && (
+                        <span className="rounded bg-amber-500/20 px-1 text-[9px] font-bold tabular-nums text-amber-300">
+                          PO{poN}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
             <GlassButton variant="ghost" onClick={computeProbabilities} disabled={probLoading}>
               {probLoading ? '진출 확률 계산 중…' : probabilities ? '🔄 진출 확률 재계산' : '📊 본선 진출 확률'}
@@ -257,20 +356,24 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
           <GlassCard className="p-4">
             <h3 className="mb-3 text-sm font-bold text-amber-300">🎯 대륙간 플레이오프 (6팀 → 2장)</h3>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {result.interConfed.participants.map((id) => (
-                <span
-                  key={id}
-                  className={`rounded-lg px-2 py-1 text-xs ${
-                    result.interConfed.winners.includes(id) ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/5 text-gray-400'
-                  }`}
-                >
-                  <NationLabel teamId={id} />
-                  {result.interConfed.winners.includes(id) && ' ✅'}
-                </span>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-500">
+            {result.interConfed.matches.length > 0 ? (
+              <InterConfedBracket result={result.interConfed} />
+            ) : (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {result.interConfed.participants.map((id) => (
+                  <span
+                    key={id}
+                    className={`rounded-lg px-2 py-1 text-xs ${
+                      result.interConfed.winners.includes(id) ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/5 text-gray-400'
+                    }`}
+                  >
+                    <NationLabel teamId={id} />
+                    {result.interConfed.winners.includes(id) && ' ✅'}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="mt-3 text-[11px] text-gray-500">
               최종 진출:{' '}
               {result.interConfed.winners.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(', ')}
             </p>
