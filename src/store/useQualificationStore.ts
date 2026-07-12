@@ -10,10 +10,16 @@ import {
   flattenPlayed,
   type LockedMatchData,
 } from '../engine/qualification/conditional'
-import { initRankingPoints, updateRankingPoints, updatedRatingsFromPoints } from '../engine/qualification/ranking'
+import {
+  initRankingPoints,
+  updateRankingPoints,
+  updatedRatingsFromPoints,
+  overallDeltasFromResults,
+} from '../engine/qualification/ranking'
 import type { LockedLookup } from '../engine/qualification/generic'
 import { generateSeed } from '../engine/rng'
 import { getRatings } from '../engine/matchEngine'
+import { usePerformanceStore } from './usePerformanceStore'
 import { ALL_NATIONS } from '../data/nations'
 import type { TeamRatings } from '../types/team'
 import type { QualWorkerOut } from '../workers/qualWorker'
@@ -50,6 +56,16 @@ function buildProbInputs(): {
     return { ratings: updatedRatingsFromPoints(points), locked, lockedByConfed: buildLockedLookups(locked) }
   }
   return { ratings: buildQualRatings() }
+}
+
+/** 성적(진행 결과)에 따른 능력치 보정을 계산해 성적 보정 store에 반영한다. */
+function syncPerformanceDeltas(result: AllQualificationResult | null, revealed: Record<string, number>): void {
+  if (!result) {
+    usePerformanceStore.getState().reset()
+    return
+  }
+  const played = flattenPlayed(collectPlayedByConfed(result, revealed))
+  usePerformanceStore.getState().setDeltas(overallDeltasFromResults(result, played))
 }
 
 /** 워커 미지원/실패 시 메인스레드 비동기 청크 폴백 (D5). */
@@ -107,6 +123,8 @@ export const useQualificationStore = create<QualificationStore>()(
       revealed: {},
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
+        // 새 대회 시뮬은 이전 대회 성적 보정 없이 base(+컨디션/샌드박스)로 계산한다.
+        usePerformanceStore.getState().reset()
         const result = simulateAllQualification(usedSeed, buildQualRatings())
         // 첫 경기일부터 날짜별로 진행(관전)하도록, 공개 라운드를 캘린더 1일차 상태로 시작한다.
         // '⏭ 끝'으로 언제든 전체 결과로 건너뛸 수 있다.
@@ -116,9 +134,16 @@ export const useQualificationStore = create<QualificationStore>()(
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
         set({ seed: usedSeed, result, probabilities: null, revealed })
+        syncPerformanceDeltas(result, revealed)
       },
-      setRevealed: (confed, matchday) => set({ revealed: { ...get().revealed, [confed]: matchday } }),
-      setRevealedMany: (map) => set({ revealed: { ...get().revealed, ...map } }),
+      setRevealed: (confed, matchday) => {
+        set({ revealed: { ...get().revealed, [confed]: matchday } })
+        syncPerformanceDeltas(get().result, get().revealed)
+      },
+      setRevealedMany: (map) => {
+        set({ revealed: { ...get().revealed, ...map } })
+        syncPerformanceDeltas(get().result, get().revealed)
+      },
       computeProbabilities: () => {
         const runId = ++probRunId
         const seedBase = get().seed ?? 'PROB'
@@ -162,6 +187,7 @@ export const useQualificationStore = create<QualificationStore>()(
           probWorker.terminate()
           probWorker = null
         }
+        usePerformanceStore.getState().reset()
         set({ seed: null, result: null, probabilities: null, probLoading: false, revealed: {} })
       },
     }),
@@ -169,6 +195,10 @@ export const useQualificationStore = create<QualificationStore>()(
       name: 'wc2026-qualification-store',
       version: 3,
       partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, revealed: s.revealed }),
+      onRehydrateStorage: () => (state) => {
+        // 새로고침 후 저장된 진행 상황으로 성적 반영 능력치 보정을 복원한다.
+        if (state?.result) syncPerformanceDeltas(state.result, state.revealed)
+      },
     },
   ),
 )

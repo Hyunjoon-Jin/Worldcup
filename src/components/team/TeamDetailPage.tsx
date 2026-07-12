@@ -28,6 +28,7 @@ import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { usePerformanceStore } from '../../store/usePerformanceStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useConditionStore } from '../../store/useConditionStore'
@@ -114,6 +115,7 @@ export function TeamDetailPage() {
   const clearTeam = useSelectionStore((s) => s.clearTeam)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const toggleMyTeam = useMyTeamStore((s) => s.toggleMyTeam)
+  const perfDeltas = usePerformanceStore((s) => s.deltas)
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
@@ -377,6 +379,16 @@ export function TeamDetailPage() {
             </div>
           ))}
         </div>
+        {(() => {
+          const perfDelta = teamId ? (perfDeltas[teamId] ?? 0) : 0
+          if (perfDelta === 0) return null
+          const up = perfDelta > 0
+          return (
+            <p className={`mt-2 text-[11px] font-medium ${up ? 'text-emerald-300' : 'text-red-300'}`}>
+              {up ? '📈' : '📉'} 예선 성적 반영: 공격·수비·종합 {up ? '+' : ''}{perfDelta} (기본 능력치에서 {up ? '상승' : '하락'})
+            </p>
+          )
+        })()}
       </GlassCard>
 
       <GlassCard className="p-4">

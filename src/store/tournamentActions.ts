@@ -6,6 +6,7 @@ import { useSimulationStore } from './useSimulationStore'
 import { useQualificationStore } from './useQualificationStore'
 import { useSaveSlotsStore } from './useSaveSlotsStore'
 import { useSandboxStore } from './useSandboxStore'
+import { usePerformanceStore } from './usePerformanceStore'
 
 /**
  * 새 대회를 시작할 때 관련된 모든 store를 한 번에 원자적으로 초기화한다 (A4).
@@ -58,5 +59,6 @@ export function clearAllHistory(): void {
   useSelectionStore.getState().clearTeam()
   useSaveSlotsStore.getState().clearAll()
   useSandboxStore.getState().resetAll()
+  usePerformanceStore.getState().reset()
   useConditionStore.getState().reroll()
 }

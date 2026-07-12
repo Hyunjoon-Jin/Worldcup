@@ -202,6 +202,30 @@ export function computeLiveRanking(all: AllQualificationResult, played: QualMatc
     .sort((a, b) => a.rank - b.rank)
 }
 
+/**
+ * 성적(진행 결과)에 따른 팀별 종합 능력치 가감치(±maxDelta로 소폭). Elo 점수 변동을 능력치 곡선의
+ * 종합 능력치 차이로 환산해, 잘 나가면 살짝 오르고 부진하면 살짝 내려가게 한다.
+ * played를 진행된 경기까지만 넘기면 실황(일별 진행)까지 반영된다.
+ */
+export function overallDeltasFromResults(
+  all: AllQualificationResult,
+  played: QualMatch[],
+  maxDelta = 5,
+): Record<string, number> {
+  const ids = qualParticipantIds(all)
+  const base = initRankingPoints(ids)
+  const now = updateRankingPoints(base, played)
+  const out: Record<string, number> = {}
+  for (const id of ids) {
+    const nation = ALL_NATIONS_BY_ID[id]
+    if (!nation) continue
+    const newOverall = ratingsFromRank(effectiveRankFromPoints(now[id])).overall
+    const delta = Math.round(newOverall - nation.baseRatings.overall)
+    out[id] = Math.max(-maxDelta, Math.min(maxDelta, delta))
+  }
+  return out
+}
+
 export interface TrendPoint {
   date: string
   label: string

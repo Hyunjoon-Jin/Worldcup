@@ -25,6 +25,7 @@ import {
   expectedResult,
   computeLiveRanking,
   computeRankingTrend,
+  overallDeltasFromResults,
   IMPORTANCE_QUALIFIER,
 } from '../src/engine/qualification/ranking'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
@@ -301,6 +302,25 @@ describe('FIFA 랭킹 Elo 갱신 (월 단위 반영)', () => {
     const topFaller = movers.find((m) => m.delta < 0)
     if (topRiser) expect(offsets[topRiser.teamId]).toBeGreaterThanOrEqual(0)
     if (topFaller) expect(offsets[topFaller.teamId]).toBeLessThanOrEqual(0)
+  })
+})
+
+describe('성적 반영 능력치 보정 (overallDeltasFromResults)', () => {
+  it('경기 전에는 보정이 0이고, 진행 후에는 ±maxDelta 범위 안에서 부호가 갈린다', () => {
+    const all = simulateAllQualification('PERF')
+    // 경기 전(빈 배열) → 전부 0
+    const none = overallDeltasFromResults(all, [], 5)
+    expect(Object.values(none).every((v) => v === 0)).toBe(true)
+    // 전체 진행 → 범위 내, 상승·하락 모두 존재
+    const played = Object.values(all.byConfederation).flatMap((r) => r.matches)
+    const deltas = overallDeltasFromResults(all, played, 5)
+    for (const v of Object.values(deltas)) {
+      expect(v).toBeGreaterThanOrEqual(-5)
+      expect(v).toBeLessThanOrEqual(5)
+    }
+    const vals = Object.values(deltas)
+    expect(vals.some((v) => v > 0)).toBe(true)
+    expect(vals.some((v) => v < 0)).toBe(true)
   })
 })
 
