@@ -8,6 +8,8 @@ import { computeStandings } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { computePots } from '../../engine/drawEngine'
+import { HOST_SLOTS } from '../../data/hostSlots'
 import { QualMatchModal } from './QualMatchModal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
@@ -260,6 +262,40 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 </div>
               ))}
             </div>
+
+            <details className="group mt-4 border-t border-white/10 pt-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-gray-300">
+                <span>🎩 본선 포트 배정 미리보기 (랭킹 기준)</span>
+                <span className="text-gray-500 transition-transform group-open:rotate-180">▾</span>
+              </summary>
+              {(() => {
+                const pots = computePots(result.qualified48)
+                const hostIds = Object.keys(HOST_SLOTS)
+                const potList: [string, string[]][] = [
+                  ['포트 1 (개최국 + 최상위 9)', [...hostIds, ...pots[1]]],
+                  ['포트 2', pots[2]],
+                  ['포트 3', pots[3]],
+                  ['포트 4', pots[4]],
+                ]
+                return (
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {potList.map(([label, ids]) => (
+                      <div key={label}>
+                        <p className="mb-1.5 text-[11px] font-bold text-emerald-300">{label}</p>
+                        <div className="space-y-0.5">
+                          {ids.map((id) => (
+                            <div key={id} className="flex items-center gap-1.5 text-[11px]">
+                              <NationLabel teamId={id} />
+                              {hostIds.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </details>
           </GlassCard>
 
           {drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (

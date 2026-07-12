@@ -1,11 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { TEAMS } from '../data/teams'
+import { ALL_NATIONS } from '../data/nations'
 import { CONDITION_RANGE } from '../engine/config'
 
+// 본선 48국뿐 아니라 예선 참가국까지 컨디션을 뽑아, 예선/본선 어디서든 팀별 컨디션이 반영되게 한다 (J2).
 function rollConditions(): Record<string, number> {
   const offsets: Record<string, number> = {}
-  for (const team of TEAMS) {
+  for (const team of ALL_NATIONS) {
     offsets[team.id] = Math.round((Math.random() * 2 - 1) * CONDITION_RANGE)
   }
   return offsets
