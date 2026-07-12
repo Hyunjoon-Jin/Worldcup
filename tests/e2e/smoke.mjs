@@ -26,6 +26,10 @@ try {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
   assert(await page.getByText('2026 북중미 월드컵 시뮬레이터').isVisible(), '앱이 로드된다')
 
+  // 첫 방문 온보딩 오버레이가 있으면 건너뛴다 (v2 #48)
+  const skip = page.getByText('건너뛰기')
+  if (await skip.isVisible().catch(() => false)) await skip.click()
+
   // 시드로 즉시 조추첨(결정론적)
   await page.getByRole('textbox', { name: '조추첨 시드' }).fill('SMOKE-TEST')
   await page.getByText('시드로 즉시 조추첨').click()

@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header'
 import { TabNav } from './components/layout/TabNav'
 import { MatchDetailModal } from './components/common/MatchDetailModal'
 import { DebugPanel } from './components/common/DebugPanel'
+import { OnboardingOverlay } from './components/common/OnboardingOverlay'
 
 // 탭별 화면은 지연 로딩해 초기 번들 크기를 줄인다 (B5).
 const DrawStage = lazy(() => import('./components/draw/DrawStage').then((m) => ({ default: m.DrawStage })))
@@ -130,6 +131,7 @@ function App() {
       </Suspense>
       <MatchDetailModal />
       <DebugPanel />
+      <OnboardingOverlay />
     </AppShell>
   )
 }

@@ -5,6 +5,7 @@ import { formatKoreanDate } from '../../data/calendar'
 import { getRatings, classifyMatchUpset, forecastMatch, type MatchForecast } from '../../engine/matchEngine'
 import { generateUpsetArticle, type UpsetArticle } from '../../engine/upsetArticle'
 import { generateGoalTimeline, formatGoalMinute } from '../../engine/goalTimeline'
+import { formatDecimalOdds } from '../../engine/odds'
 import { venueForMatchId } from '../../data/venues'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
@@ -56,6 +57,12 @@ function ForecastBar({ forecast }: { forecast: MatchForecast }) {
         <span>홈 {forecast.homeWinPct.toFixed(0)}%</span>
         <span>무 {forecast.drawPct.toFixed(0)}%</span>
         <span>원정 {forecast.awayWinPct.toFixed(0)}%</span>
+      </div>
+      {/* 배당률(유럽식 소수) 병기 (v2 #29) */}
+      <div className="mt-0.5 flex justify-between text-[10px] text-gray-500">
+        <span>{formatDecimalOdds(forecast.homeWinPct)}</span>
+        <span>{formatDecimalOdds(forecast.drawPct)}</span>
+        <span>{formatDecimalOdds(forecast.awayWinPct)}</span>
       </div>
     </div>
   )

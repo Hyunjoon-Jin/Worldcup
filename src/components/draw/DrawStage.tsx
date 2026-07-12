@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDrawStore } from '../../store/useDrawStore'
 import { resetTournament } from '../../store/tournamentActions'
+import { dailySeedForDate, dailyChallengeLabel } from '../../engine/dailyChallenge'
 import { TEAMS_BY_ID, CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { findNextSlot } from '../../engine/drawEngine'
 import { GlassCard } from '../common/GlassCard'
@@ -95,6 +96,13 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
             />
             <GlassButton variant="ghost" onClick={() => drawFromSeed(seedInput)}>
               ⚡ 시드로 즉시 조추첨
+            </GlassButton>
+            <GlassButton
+              variant="ghost"
+              onClick={() => drawFromSeed(dailySeedForDate())}
+              title={dailyChallengeLabel()}
+            >
+              🗓 오늘의 도전
             </GlassButton>
           </div>
           {seed && (
