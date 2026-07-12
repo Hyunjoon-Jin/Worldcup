@@ -1,15 +1,57 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
-import { useMemo } from 'react'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { QualMatchModal } from './QualMatchModal'
 import type { Confederation } from '../../types/team'
+import type { MatchResult } from '../../types/match'
+
+/** 한 조의 경기 목록(접이식). 클릭 시 상세 모달을 연다 (F1). */
+function MatchList({
+  teams,
+  matches,
+  onSelectMatch,
+}: {
+  teams: string[]
+  matches: MatchResult[]
+  onSelectMatch: (m: MatchResult) => void
+}) {
+  const teamSet = new Set(teams)
+  const groupMatches = matches.filter((m) => teamSet.has(m.homeTeamId) && teamSet.has(m.awayTeamId))
+  if (groupMatches.length === 0) return null
+  return (
+    <details className="group mt-1.5">
+      <summary className="cursor-pointer list-none text-[11px] text-gray-500 hover:text-gray-300">
+        ⚽ 경기 결과 {groupMatches.length}경기 ▾
+      </summary>
+      <div className="mt-1.5 grid grid-cols-1 gap-1 sm:grid-cols-2">
+        {groupMatches.map((m, i) => (
+          <button
+            key={i}
+            onClick={() => onSelectMatch(m)}
+            className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1 text-[11px] hover:bg-white/10"
+          >
+            <span className="min-w-0 flex-1 truncate text-right text-gray-300">
+              {ALL_NATIONS_BY_ID[m.homeTeamId]?.nameKo ?? m.homeTeamId}
+            </span>
+            <span className="shrink-0 font-bold tabular-nums text-white">
+              {m.homeGoals}-{m.awayGoals}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-gray-300">
+              {ALL_NATIONS_BY_ID[m.awayTeamId]?.nameKo ?? m.awayTeamId}
+            </span>
+          </button>
+        ))}
+      </div>
+    </details>
+  )
+}
 
 const CONFEDS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']
 
@@ -24,7 +66,13 @@ function NationLabel({ teamId, className = '' }: { teamId: string; className?: s
   )
 }
 
-function ConfederationStandings({ confed }: { confed: Confederation }) {
+function ConfederationStandings({
+  confed,
+  onSelectMatch,
+}: {
+  confed: Confederation
+  onSelectMatch: (m: MatchResult) => void
+}) {
   const result = useQualificationStore((s) => s.result)
   const probabilities = useQualificationStore((s) => s.probabilities)
   const r = result?.byConfederation[confed]
@@ -93,6 +141,7 @@ function ConfederationStandings({ confed }: { confed: Confederation }) {
                 </tbody>
               </table>
             </div>
+            <MatchList teams={groupTeams} matches={r.matches} onSelectMatch={onSelectMatch} />
           </div>
         ))}
       </div>
@@ -115,6 +164,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const computeProbabilities = useQualificationStore((s) => s.computeProbabilities)
   const [seedInput, setSeedInput] = useState('')
   const [confed, setConfed] = useState<Confederation>('UEFA')
+  const [selMatch, setSelMatch] = useState<MatchResult | null>(null)
 
   const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
 
@@ -165,7 +215,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </GlassButton>
           </div>
 
-          <ConfederationStandings confed={confed} />
+          <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} />
 
           <GlassCard className="p-4">
             <h3 className="mb-3 text-sm font-bold text-amber-300">🎯 대륙간 플레이오프 (6팀 → 2장)</h3>
@@ -266,6 +316,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </GlassCard>
         </>
       )}
+
+      {selMatch && <QualMatchModal match={selMatch} onClose={() => setSelMatch(null)} />}
     </div>
   )
 }
