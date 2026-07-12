@@ -4,6 +4,7 @@ import { simulateAllQualification, simulateConfederation } from '../src/engine/q
 import { nationsByConfederation, baseRatingsMap, ALL_NATIONS, ALL_NATIONS_BY_ID } from '../src/data/nations'
 import { SLOT_ALLOCATION } from '../src/data/confederations'
 import { createSeededRandom } from '../src/engine/rng'
+import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -108,5 +109,35 @@ describe('simulateAllQualification — 본선 48 확정', () => {
   it('모든 진출국은 실존 등록국이다', () => {
     const all = simulateAllQualification('CHECK')
     for (const id of all.qualified48) expect(ALL_NATIONS_BY_ID[id]).toBeTruthy()
+  })
+})
+
+describe('computePots — 예선 결과 → 본선 동적 포트 (지역예선 Q4)', () => {
+  const field = simulateAllQualification('POT-TEST').qualified48
+
+  it('개최 3국을 제외한 45국을 9·12·12·12로 나눈다', () => {
+    const pots = computePots(field)
+    expect(pots[1]).toHaveLength(9)
+    expect(pots[2]).toHaveLength(12)
+    expect(pots[3]).toHaveLength(12)
+    expect(pots[4]).toHaveLength(12)
+    // 개최국은 포트 풀에 없음(슬롯 고정)
+    for (const host of ['MEX', 'USA', 'CAN']) {
+      expect([...pots[1], ...pots[2], ...pots[3], ...pots[4]]).not.toContain(host)
+    }
+  })
+
+  it('포트1이 포트4보다 평균 랭킹이 높다(숫자가 작다)', () => {
+    const pots = computePots(field)
+    const avg = (ids: string[]) => ids.reduce((s, id) => s + ALL_NATIONS_BY_ID[id].fifaRankApprox, 0) / ids.length
+    expect(avg(pots[1])).toBeLessThan(avg(pots[4]))
+  })
+
+  it('전체 예선으로 뽑은 필드는 유효한 조추첨을 구성할 수 있다', () => {
+    const { state } = runSeededDraw('DRAWFROMFIELD', computePots(field))
+    // 12개 조가 4팀씩
+    for (const g of Object.values(state.groups) as (string | null)[][]) {
+      expect(g.filter(Boolean)).toHaveLength(4)
+    }
   })
 })

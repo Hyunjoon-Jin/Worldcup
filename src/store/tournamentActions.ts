@@ -21,3 +21,15 @@ export function resetTournament(): void {
   useSelectionStore.getState().clearTeam()
   useConditionStore.getState().reroll()
 }
+
+/**
+ * 예선 통과 48개국으로 본선을 시작한다 (지역예선 Q4). 랭킹 기반 동적 포트로 조추첨을 즉시
+ * 실행하고, 진행/확률/선택을 초기화한 뒤 팀 컨디션을 새로 뽑는다.
+ */
+export function startFinalsFromQualification(teamIds48: string[], seed?: string): void {
+  useDrawStore.getState().drawFromField(teamIds48, seed)
+  useProgressStore.getState().reset()
+  useSimulationStore.getState().reset()
+  useSelectionStore.getState().clearTeam()
+  useConditionStore.getState().reroll()
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TEAMS_BY_ID } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'

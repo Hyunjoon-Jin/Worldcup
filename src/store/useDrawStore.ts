@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { createInitialDrawState, drawNext, isDrawComplete, runSeededDraw, type DrawLogEntry, type DrawState } from '../engine/drawEngine'
+import { computePots, createInitialDrawState, drawNext, isDrawComplete, runSeededDraw, type DrawLogEntry, type DrawState } from '../engine/drawEngine'
 import { generateSeed } from '../engine/rng'
 
 interface DrawStore {
@@ -13,6 +13,8 @@ interface DrawStore {
   drawOne: () => void
   /** 시드로 조추첨을 처음부터 끝까지 한 번에 실행한다(미지정 시 무작위 시드 생성). */
   drawFromSeed: (seed?: string) => void
+  /** 예선 통과 48개국으로 포트를 동적 계산해 조추첨을 즉시 실행한다 (지역예선 Q4). */
+  drawFromField: (teamIds48: string[], seed?: string) => void
   reset: () => void
   undoLast: () => void
 }
@@ -40,6 +42,11 @@ export const useDrawStore = create<DrawStore>()(
       drawFromSeed: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
         const { state, log } = runSeededDraw(usedSeed)
+        set({ state, log, history: [], isComplete: isDrawComplete(state), seed: usedSeed })
+      },
+      drawFromField: (teamIds48, seed) => {
+        const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
+        const { state, log } = runSeededDraw(usedSeed, computePots(teamIds48))
         set({ state, log, history: [], isComplete: isDrawComplete(state), seed: usedSeed })
       },
       reset: () => {

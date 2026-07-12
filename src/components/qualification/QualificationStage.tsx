@@ -3,6 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { useQualificationStore } from '../../store/useQualificationStore'
+import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings } from '../../engine/tiebreakers'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
@@ -83,8 +84,8 @@ function ConfederationStandings({ confed }: { confed: Confederation }) {
   )
 }
 
-/** 지역예선 화면 (Q3). 6개 대륙 예선 + 대륙간 PO + 본선 48 확정. */
-export function QualificationStage() {
+/** 지역예선 화면 (Q3/Q4). 6개 대륙 예선 + 대륙간 PO + 본선 48 확정 + 본선 조추첨 연결. */
+export function QualificationStage({ onStartFinals }: { onStartFinals?: () => void }) {
   const seed = useQualificationStore((s) => s.seed)
   const result = useQualificationStore((s) => s.result)
   const simulate = useQualificationStore((s) => s.simulate)
@@ -157,9 +158,19 @@ export function QualificationStage() {
           </GlassCard>
 
           <GlassCard className="p-4">
-            <h3 className="mb-3 text-sm font-bold text-emerald-300">
-              🏆 본선 진출 48개국 <span className="text-gray-500">({result.qualified48.length})</span>
-            </h3>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-emerald-300">
+                🏆 본선 진출 48개국 <span className="text-gray-500">({result.qualified48.length})</span>
+              </h3>
+              <GlassButton
+                onClick={() => {
+                  startFinalsFromQualification(result.qualified48, seed ?? undefined)
+                  onStartFinals?.()
+                }}
+              >
+                이 결과로 본선 조추첨 시작 →
+              </GlassButton>
+            </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
               {result.qualified48.map((id) => (
                 <div key={id} className="flex items-center gap-1.5 text-xs">

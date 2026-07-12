@@ -1,4 +1,4 @@
-import { TEAMS_BY_ID } from '../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
 import type { StatMatch, TournamentStats } from './tournamentStats'
 import type { Highlight } from './highlights'
 

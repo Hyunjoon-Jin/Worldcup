@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CONFEDERATION_LABEL_KO, TEAMS_BY_ID } from '../../data/teams'
+import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { titlesFor } from '../../data/history'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'

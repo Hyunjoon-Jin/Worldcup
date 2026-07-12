@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { TEAMS_BY_ID } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
 import { GlassCard } from '../common/GlassCard'

@@ -164,7 +164,7 @@ function App() {
           <TeamDetailPage />
         ) : (
           <>
-            {tab === 'qualifiers' && <QualificationStage />}
+            {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
             {tab === 'schedule' && <ScheduleStage />}
             {tab === 'groups' && <GroupStageView />}

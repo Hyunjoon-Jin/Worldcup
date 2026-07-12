@@ -1,5 +1,5 @@
 import { GROUP_LETTERS } from '../data/hostSlots'
-import { TEAMS_BY_ID } from '../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
 import { computeStandings, rankGroupTeams } from './tiebreakers'
 import type { GroupLetter, GroupStanding } from '../types/group'
 import type { GroupMatch } from '../types/match'

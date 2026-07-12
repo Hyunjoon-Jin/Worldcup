@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { TEAMS_BY_ID } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { FINAL_SLOT_ID, THIRD_SLOT_ID } from '../../data/bracketTemplate'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useSoundStore } from '../../store/useSoundStore'

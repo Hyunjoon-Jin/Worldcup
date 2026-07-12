@@ -1,5 +1,5 @@
 import { getRatings } from './matchEngine'
-import { TEAMS_BY_ID } from '../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
 import { UPSET_RATING_GAP } from './config'
 import type { StatMatch } from './tournamentStats'
 

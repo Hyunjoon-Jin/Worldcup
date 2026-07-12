@@ -1,5 +1,4 @@
 import { GROUP_LETTERS } from '../data/hostSlots'
-import { TEAMS } from '../data/teams'
 import {
   FINAL_SLOT_ID,
   QF_SLOT_IDS,
@@ -195,10 +194,15 @@ function simulateOneRun(snap: SimSnapshot, rand: RandomFn, forced?: ForcedOutcom
 
 /** 몬테카를로 누적기(배치 실행 가능). rand 미지정 시 Math.random. */
 export function createSimulationAccumulator(snap: SimSnapshot, rand: RandomFn = Math.random) {
+  // 확률 집계 대상은 "실제 이번 대회에 편성된 48팀"(스냅샷의 조 편성)이다. 예선으로 편성이
+  // 달라져도(비본선 국가 진출 등) 항상 실제 참가팀 기준으로 집계한다.
+  const fieldTeams = Object.values(snap.drawGroups)
+    .flat()
+    .filter((id): id is string => Boolean(id))
   const counts: Record<string, TeamProbabilities> = Object.fromEntries(
-    TEAMS.map((t) => [
-      t.id,
-      { teamId: t.id, groupStagePct: 0, r16Pct: 0, qfPct: 0, sfPct: 0, finalPct: 0, championPct: 0 },
+    fieldTeams.map((id) => [
+      id,
+      { teamId: id, groupStagePct: 0, r16Pct: 0, qfPct: 0, sfPct: 0, finalPct: 0, championPct: 0 },
     ]),
   )
   let done = 0

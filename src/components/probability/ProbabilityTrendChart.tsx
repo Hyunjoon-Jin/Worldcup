@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { GlassCard } from '../common/GlassCard'
-import { TEAMS_BY_ID } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { STAGES } from './probabilityStages'
 

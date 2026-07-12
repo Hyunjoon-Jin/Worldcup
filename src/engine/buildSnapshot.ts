@@ -1,4 +1,3 @@
-import { TEAMS } from '../data/teams'
 import { getRatings } from './matchEngine'
 import { useDrawStore } from '../store/useDrawStore'
 import { useProgressStore } from '../store/useProgressStore'
@@ -14,7 +13,11 @@ export function buildSnapshot(): SimSnapshot {
   const drawGroups = useDrawStore.getState().state.groups
   const progress = useProgressStore.getState()
 
-  const ratings = Object.fromEntries(TEAMS.map((t) => [t.id, getRatings(t.id)]))
+  // 이번 대회에 실제 편성된 팀들의 유효 능력치만 담는다(예선으로 편성이 달라져도 대응).
+  const fieldTeams = Object.values(drawGroups)
+    .flat()
+    .filter((id): id is string => Boolean(id))
+  const ratings = Object.fromEntries(fieldTeams.map((id) => [id, getRatings(id)]))
 
   const lockedKnockoutResults: Record<string, KnockoutMatch | null> = {}
   for (const [id, slot] of Object.entries(progress.knockoutSlots)) lockedKnockoutResults[id] = slot.result
