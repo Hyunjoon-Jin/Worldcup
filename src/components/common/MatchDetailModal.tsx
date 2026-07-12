@@ -42,15 +42,20 @@ function RatingRow({ label, homeValue, awayValue }: { label: string; homeValue: 
 function ForecastBar({ forecast }: { forecast: MatchForecast }) {
   return (
     <div>
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-white/10">
+      <div
+        className="flex h-2.5 overflow-hidden rounded-full bg-white/10"
+        role="img"
+        aria-label={`홈 승 ${forecast.homeWinPct.toFixed(0)}%, 무 ${forecast.drawPct.toFixed(0)}%, 원정 승 ${forecast.awayWinPct.toFixed(0)}%`}
+      >
         <div className="h-full bg-sky-400" style={{ width: `${forecast.homeWinPct}%` }} />
         <div className="h-full bg-gray-500" style={{ width: `${forecast.drawPct}%` }} />
         <div className="h-full bg-rose-400" style={{ width: `${forecast.awayWinPct}%` }} />
       </div>
+      {/* 색만으로 구분하지 않도록 승/무/패를 텍스트로도 표기 (E2) */}
       <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-        <span>{forecast.homeWinPct.toFixed(0)}%</span>
+        <span>홈 {forecast.homeWinPct.toFixed(0)}%</span>
         <span>무 {forecast.drawPct.toFixed(0)}%</span>
-        <span>{forecast.awayWinPct.toFixed(0)}%</span>
+        <span>원정 {forecast.awayWinPct.toFixed(0)}%</span>
       </div>
     </div>
   )

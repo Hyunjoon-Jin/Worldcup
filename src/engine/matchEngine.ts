@@ -12,11 +12,30 @@ import {
   hostAdvantageFor,
 } from './config'
 
+// getRatings는 몬테카를로에서 수백만 번 호출되므로, 입력(컨디션·모멘텀·샌드박스)이 바뀌지 않는
+// 동안에는 결과를 캐시해 재계산을 피한다 (B4). 세 store 중 하나라도 바뀌면 버전을 올려 캐시를 비운다.
+let ratingsCache: Record<string, TeamRatings> = {}
+let cacheVersion = -1
+let storeVersion = 0
+const bump = () => {
+  storeVersion++
+}
+useConditionStore.subscribe(bump)
+useSandboxStore.subscribe(bump)
+useMomentumStore.subscribe(bump)
+
 /**
  * 이번 대회의 팀별 컨디션(useConditionStore)과 진행 중 모멘텀(useMomentumStore, C4)을 폼 능력치에
- * 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다.
+ * 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다. 결과는 store가 바뀌기 전까지 캐시된다(불변으로 취급).
  */
 export function getRatings(teamId: string): TeamRatings {
+  if (cacheVersion !== storeVersion) {
+    ratingsCache = {}
+    cacheVersion = storeVersion
+  }
+  const cached = ratingsCache[teamId]
+  if (cached) return cached
+
   const team = TEAMS_BY_ID[teamId]
   const conditionOffset = useConditionStore.getState().offsets[teamId] ?? 0
   const momentumOffset = useMomentumStore.getState().offsets[teamId] ?? 0
@@ -25,7 +44,9 @@ export function getRatings(teamId: string): TeamRatings {
     form: clamp(team.baseRatings.form + conditionOffset + momentumOffset, 30, 99),
   }
   const override = useSandboxStore.getState().overrides[teamId]
-  return override ? { ...conditioned, ...override } : conditioned
+  const result = override ? { ...conditioned, ...override } : conditioned
+  ratingsCache[teamId] = result
+  return result
 }
 
 // 실제 축구 경기의 평균 득점(팀당 약 1.3골)에 가깝게 보정하고, 극단적인 능력치 차이에서도
