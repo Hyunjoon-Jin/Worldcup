@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TEAMS_BY_ID } from '../../data/teams'
 import { FINAL_SLOT_ID, THIRD_SLOT_ID } from '../../data/bracketTemplate'
 import { useDrawStore } from '../../store/useDrawStore'
+import { useSoundStore } from '../../store/useSoundStore'
+import { marginOfError95 } from '../../engine/confidence'
+import { playClick, playVictory } from '../../engine/sound'
 import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassCard } from '../common/GlassCard'
@@ -23,9 +26,24 @@ export function ScheduleStage() {
   const { schedule, phase, currentDay, groupMatches, knockoutSlots, initSchedule, advanceDay, advanceTimeSlot, advanceToEnd, champion } =
     useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
+  const simIterations = useSimulationStore((s) => s.iterations)
   const runSimulation = useSimulationStore((s) => s.run)
   const seed = useDrawStore((s) => s.seed)
+  const soundEnabled = useSoundStore((s) => s.enabled)
   const [shared, setShared] = useState(false)
+
+  // 우승팀이 결정되는 순간 팡파레 (v2 #49)
+  const prevChampion = useRef<string | null>(null)
+  useEffect(() => {
+    if (champion && champion !== prevChampion.current && soundEnabled) playVictory()
+    prevChampion.current = champion
+  }, [champion, soundEnabled])
+
+  // 경기 진행 버튼에 클릭음을 덧입힌다.
+  const withClick = (fn: () => void) => () => {
+    if (soundEnabled) playClick()
+    fn()
+  }
 
   const shareResult = () => {
     const finalSlot = knockoutSlots[FINAL_SLOT_ID]?.result
@@ -106,13 +124,13 @@ export function ScheduleStage() {
           {phase !== 'complete' ? (
             <>
               <div className="flex flex-wrap items-center justify-center gap-3">
-                <GlassButton onClick={advanceTimeSlot} disabled={!nextSlotPreview}>
+                <GlassButton onClick={withClick(advanceTimeSlot)} disabled={!nextSlotPreview}>
                   ⏱ 다음 시간대 진행{nextSlotPreview && ` (${nextSlotPreview.timeSlot})`}
                 </GlassButton>
-                <GlassButton variant="ghost" onClick={advanceDay}>
+                <GlassButton variant="ghost" onClick={withClick(advanceDay)}>
                   ▶ 다음 날 전체 진행
                 </GlassButton>
-                <GlassButton variant="ghost" onClick={advanceToEnd} disabled={!nextSlotPreview}>
+                <GlassButton variant="ghost" onClick={withClick(advanceToEnd)} disabled={!nextSlotPreview}>
                   ⏭ 결승까지 자동 진행
                 </GlassButton>
               </div>
@@ -137,7 +155,12 @@ export function ScheduleStage() {
               <div key={row.teamId} className="flex items-center gap-1.5">
                 <span className="text-sm">{MEDALS[idx]}</span>
                 <TeamLink teamId={row.teamId} className="text-xs font-medium text-gray-100" />
-                <span className="text-xs font-bold tabular-nums text-amber-300">{row.championPct.toFixed(1)}%</span>
+                <span className="text-xs font-bold tabular-nums text-amber-300">
+                  {row.championPct.toFixed(1)}%
+                  <span className="ml-0.5 font-normal text-[10px] text-gray-500">
+                    ±{marginOfError95(row.championPct, simIterations).toFixed(1)}
+                  </span>
+                </span>
               </div>
             ))}
           </div>

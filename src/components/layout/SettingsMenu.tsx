@@ -2,6 +2,7 @@ import { useThemeStore } from '../../store/useThemeStore'
 import { useA11yStore } from '../../store/useA11yStore'
 import { useOnboardingStore } from '../../store/useOnboardingStore'
 import { useSkinStore, SKIN_SWATCH, SKIN_LABEL, type Skin } from '../../store/useSkinStore'
+import { useSoundStore } from '../../store/useSoundStore'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -36,6 +37,8 @@ export function SettingsMenu() {
   const setFontScale = useA11yStore((s) => s.setFontScale)
   const skin = useSkinStore((s) => s.skin)
   const setSkin = useSkinStore((s) => s.setSkin)
+  const soundEnabled = useSoundStore((s) => s.enabled)
+  const toggleSound = useSoundStore((s) => s.toggle)
   const reopenOnboarding = useOnboardingStore((s) => s.reopen)
 
   return (
@@ -49,6 +52,9 @@ export function SettingsMenu() {
         </Row>
         <Row label="모션 줄이기">
           <Toggle on={reduceMotion} onClick={toggleReduceMotion} label="모션 줄이기" />
+        </Row>
+        <Row label="효과음·진동">
+          <Toggle on={soundEnabled} onClick={toggleSound} label="효과음" />
         </Row>
         <Row label="글자 크기">
           <div className="flex rounded-lg bg-white/10 p-0.5">
