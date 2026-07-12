@@ -127,6 +127,21 @@ html[data-skin="amber"] {
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+/* 다른 콘텐츠 위에 겹쳐 뜨는 팝오버·드롭다운은 반드시 불투명해야 읽힌다.
+   backdrop-filter(blur)가 렌더되지 않는 모바일 브라우저에서도 배경이 비치지 않도록 solid 배경. */
+.popover-solid {
+  background: rgba(17, 24, 39, 0.98);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+html[data-theme="light"] .popover-solid {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+}
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;

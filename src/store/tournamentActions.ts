@@ -3,6 +3,9 @@ import { useDrawStore } from './useDrawStore'
 import { useProgressStore } from './useProgressStore'
 import { useSelectionStore } from './useSelectionStore'
 import { useSimulationStore } from './useSimulationStore'
+import { useQualificationStore } from './useQualificationStore'
+import { useSaveSlotsStore } from './useSaveSlotsStore'
+import { useSandboxStore } from './useSandboxStore'
 
 /**
  * 새 대회를 시작할 때 관련된 모든 store를 한 번에 원자적으로 초기화한다 (A4).
@@ -40,4 +43,20 @@ export function startFinalsFromQualification(
   useSelectionStore.getState().clearTeam()
   useConditionStore.getState().reroll()
   if (formOffsets) useConditionStore.getState().applyFormOffsets(formOffsets)
+}
+
+/**
+ * 진행했던 모든 이력을 삭제한다 — 예선·조추첨·일정/토너먼트 진행·확률·저장 슬롯·샌드박스
+ * 조정을 전부 초기화하고 컨디션을 새로 뽑는다. 테마·효과음·글자 크기·내 팀 같은 개인 환경설정은
+ * 유지한다(진행 이력만 삭제). 각 store의 reset을 호출하므로 persist(localStorage)도 함께 비워진다.
+ */
+export function clearAllHistory(): void {
+  useQualificationStore.getState().reset()
+  useDrawStore.getState().reset()
+  useProgressStore.getState().reset()
+  useSimulationStore.getState().reset()
+  useSelectionStore.getState().clearTeam()
+  useSaveSlotsStore.getState().clearAll()
+  useSandboxStore.getState().resetAll()
+  useConditionStore.getState().reroll()
 }

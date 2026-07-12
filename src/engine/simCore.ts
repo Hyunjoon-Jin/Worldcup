@@ -211,14 +211,20 @@ export function createSimulationAccumulator(snap: SimSnapshot, rand: RandomFn = 
       return done
     },
     runBatch(n: number): void {
+      // 스냅샷의 참가팀 기준으로 counts를 초기화하므로 이론상 모든 outcome id가 존재하지만,
+      // 조추첨 초기화 중 스냅샷/추첨 불일치 같은 경계 상황에서도 크래시하지 않도록 방어적으로 집계한다.
+      const bump = (id: string, key: keyof TeamProbabilities): void => {
+        const c = counts[id]
+        if (c) (c[key] as number) += 1
+      }
       for (let i = 0; i < n; i++) {
         const outcome = simulateOneRun(snap, rand)
-        for (const id of outcome.throughGroup) counts[id].groupStagePct += 1
-        for (const id of outcome.r16) counts[id].r16Pct += 1
-        for (const id of outcome.qf) counts[id].qfPct += 1
-        for (const id of outcome.sf) counts[id].sfPct += 1
-        for (const id of outcome.final) counts[id].finalPct += 1
-        if (outcome.champion) counts[outcome.champion].championPct += 1
+        for (const id of outcome.throughGroup) bump(id, 'groupStagePct')
+        for (const id of outcome.r16) bump(id, 'r16Pct')
+        for (const id of outcome.qf) bump(id, 'qfPct')
+        for (const id of outcome.sf) bump(id, 'sfPct')
+        for (const id of outcome.final) bump(id, 'finalPct')
+        if (outcome.champion) bump(outcome.champion, 'championPct')
       }
       done += n
     },

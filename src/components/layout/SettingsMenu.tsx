@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useThemeStore } from '../../store/useThemeStore'
 import { useA11yStore } from '../../store/useA11yStore'
 import { useOnboardingStore } from '../../store/useOnboardingStore'
 import { useSkinStore, SKIN_SWATCH, SKIN_LABEL, type Skin } from '../../store/useSkinStore'
 import { useSoundStore } from '../../store/useSoundStore'
+import { clearAllHistory } from '../../store/tournamentActions'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -40,13 +42,15 @@ export function SettingsMenu() {
   const soundEnabled = useSoundStore((s) => s.enabled)
   const toggleSound = useSoundStore((s) => s.toggle)
   const reopenOnboarding = useOnboardingStore((s) => s.reopen)
+  const [confirming, setConfirming] = useState(false)
+  const [cleared, setCleared] = useState(false)
 
   return (
     <details className="group relative">
       <summary className="glass flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-xl text-gray-100 hover:bg-white/15" aria-label="설정 열기">
         ⚙️
       </summary>
-      <div className="glass-strong absolute right-0 z-30 mt-2 w-56 rounded-xl p-3 text-left">
+      <div className="popover-solid absolute right-0 z-30 mt-2 w-56 rounded-xl p-3 text-left">
         <Row label="다크/라이트">
           <Toggle on={theme === 'light'} onClick={toggleTheme} label="라이트 모드" />
         </Row>
@@ -91,6 +95,42 @@ export function SettingsMenu() {
         >
           📖 앱 소개 다시 보기
         </button>
+
+        {/* 진행 이력 전체 삭제 (되돌릴 수 없으므로 2단계 확인) */}
+        <div className="mt-2 border-t border-white/10 pt-2">
+          {cleared ? (
+            <p className="py-1.5 text-center text-[11px] text-emerald-300">✅ 진행 이력을 삭제했어요</p>
+          ) : confirming ? (
+            <div className="flex items-center gap-1.5">
+              <span className="flex-1 text-[11px] leading-tight text-amber-300">예선·본선·저장 슬롯을 모두 삭제할까요?</span>
+              <button
+                onClick={() => {
+                  clearAllHistory()
+                  setConfirming(false)
+                  setCleared(true)
+                  setTimeout(() => setCleared(false), 2500)
+                }}
+                className="shrink-0 rounded bg-red-500/25 px-2 py-1 text-[11px] font-bold text-red-200 hover:bg-red-500/35"
+              >
+                삭제
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                className="shrink-0 rounded bg-white/10 px-2 py-1 text-[11px] text-gray-300 hover:bg-white/20"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              className="w-full rounded-lg bg-red-500/10 py-1.5 text-[11px] text-red-300 hover:bg-red-500/20"
+            >
+              🗑️ 진행 이력 전체 삭제
+            </button>
+          )}
+          <p className="mt-1 text-[10px] leading-tight text-gray-500">테마·효과음·내 팀 등 환경설정은 유지됩니다.</p>
+        </div>
       </div>
     </details>
   )

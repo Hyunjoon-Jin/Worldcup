@@ -14,6 +14,8 @@ interface SaveSlotsStore {
   saveCurrent: (label: string) => void
   load: (id: string) => void
   remove: (id: string) => void
+  /** 모든 저장 슬롯을 비운다(진행 이력 전체 삭제). */
+  clearAll: () => void
 }
 
 const MAX_SLOTS = 6
@@ -40,6 +42,7 @@ export const useSaveSlotsStore = create<SaveSlotsStore>()(
         if (slot) restoreSnapshot(slot.snapshot)
       },
       remove: (id) => set({ slots: get().slots.filter((s) => s.id !== id) }),
+      clearAll: () => set({ slots: [] }),
     }),
     { name: 'wc2026-saveslots-store', version: 1 },
   ),
