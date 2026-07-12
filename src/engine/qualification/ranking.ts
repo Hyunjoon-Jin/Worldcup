@@ -3,6 +3,7 @@ import { ratingsFromRank } from '../../data/teams'
 import { clamp } from '../config'
 import type { AllQualificationResult } from './index'
 import type { QualMatch } from '../../types/qualification'
+import type { GroupMatch, KnockoutMatch, KnockoutRound } from '../../types/match'
 import type { TeamRatings } from '../../types/team'
 
 /**
@@ -19,6 +20,15 @@ import type { TeamRatings } from '../../types/team'
 
 /** 경기 중요도 계수 I (월드컵 예선). */
 export const IMPORTANCE_QUALIFIER = 25
+/** 월드컵 본선 조별리그·16강까지의 중요도(실제 FIFA 규정값). */
+export const IMPORTANCE_WC_GROUP = 50
+/** 월드컵 본선 8강 이후(준결승·결승 등)의 중요도(실제 FIFA 규정값). */
+export const IMPORTANCE_WC_KO = 60
+
+/** 본선 토너먼트 라운드별 중요도. 8강(QF)부터 60, 그 전(32강·16강)은 50. */
+export function wcKnockoutImportance(round: KnockoutRound): number {
+  return round === 'QF' || round === 'SF' || round === 'THIRD' || round === 'FINAL' ? IMPORTANCE_WC_KO : IMPORTANCE_WC_GROUP
+}
 /** 기대 승점 산정 분모(FIFA 규정값). */
 const FIFA_DIVISOR = 600
 /** 랭킹 1위 근사 점수와 랭킹당 하락폭(시작 점수 근사). */
@@ -79,6 +89,21 @@ export function updateRankingPoints(basePoints: Record<string, number>, matches:
   const p = { ...basePoints }
   for (const m of matches) applyMatchElo(p, m)
   return p
+}
+
+/** 본선 진행 결과(조별리그 + 토너먼트)를 담는다. FIFA 랭킹에 본선 성적을 반영할 때 쓴다. */
+export interface FinalsResults {
+  groupMatches: GroupMatch[]
+  knockoutMatches: KnockoutMatch[]
+}
+
+/**
+ * 월드컵 본선 경기(조별리그 I=50, 8강 이후 I=60)를 점수 맵에 제자리로 누적 적용한다.
+ * 예선과 동일한 SUM 공식을 쓰되 본선 중요도를 적용해, 본선 성적이 FIFA 랭킹에 반영되게 한다.
+ */
+export function applyFinalsElo(points: Record<string, number>, finals: FinalsResults): void {
+  for (const m of finals.groupMatches) applyMatchElo(points, m, IMPORTANCE_WC_GROUP)
+  for (const m of finals.knockoutMatches) applyMatchElo(points, m, wcKnockoutImportance(m.round))
 }
 
 /** Elo 점수 → 갱신 전력(overall은 점수 곡선, 공수 성향은 기존 팀 배분 유지). */
@@ -181,12 +206,26 @@ export interface LiveRankRow {
 }
 
 /**
- * 실시간 FIFA 랭킹 점수 현황. 이미 치른 경기(played)를 반영한 전체 참가국 순위표를 점수순으로 반환한다.
+ * 실시간 FIFA 랭킹 점수 현황. 이미 치른 예선 경기(played)에 더해, 진행된 본선 경기(finals)까지
+ * 반영한 전체 참가국 순위표를 점수순으로 반환한다. 본선 경기는 개최국(예선 미참가)도 포함하므로
+ * 개최국이 랭킹에 함께 나타난다.
  */
-export function computeLiveRanking(all: AllQualificationResult, played: QualMatch[]): LiveRankRow[] {
-  const ids = qualParticipantIds(all)
+export function computeLiveRanking(all: AllQualificationResult, played: QualMatch[], finals?: FinalsResults): LiveRankRow[] {
+  const idSet = new Set(qualParticipantIds(all))
+  if (finals) {
+    for (const m of finals.groupMatches) {
+      idSet.add(m.homeTeamId)
+      idSet.add(m.awayTeamId)
+    }
+    for (const m of finals.knockoutMatches) {
+      idSet.add(m.homeTeamId)
+      idSet.add(m.awayTeamId)
+    }
+  }
+  const ids = [...idSet]
   const base = initRankingPoints(ids)
   const now = updateRankingPoints(base, played)
+  if (finals) applyFinalsElo(now, finals)
   const baseRanks = rankMap(ids, base)
   const nowRanks = rankMap(ids, now)
   return ids

@@ -28,7 +28,7 @@ import { useSelectionStore } from './store/useSelectionStore'
 import { useSimulationStore } from './store/useSimulationStore'
 import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
-import { resetTournament } from './store/tournamentActions'
+import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
 
 type TabId = 'qualifiers' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
@@ -169,7 +169,14 @@ function App() {
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
             {tab === 'ranking' && <FifaRankingTab />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
-            {tab === 'schedule' && <ScheduleStage />}
+            {tab === 'schedule' && (
+              <ScheduleStage
+                onNextEdition={() => {
+                  advanceToNextEdition()
+                  setTab('qualifiers')
+                }}
+              />
+            )}
             {tab === 'groups' && <GroupStageView />}
             {tab === 'knockout' && <BracketView />}
             {tab === 'probability' && <ProbabilityDashboard />}
