@@ -7,6 +7,8 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
+import { computeQualStats, type QualTeamStat } from '../../engine/qualification/stats'
+import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { computePots } from '../../engine/drawEngine'
@@ -67,6 +69,52 @@ function NationLabel({ teamId, className = '' }: { teamId: string; className?: s
       <FlagIcon iso2={nation.iso2} className="h-3 w-4 shrink-0" />
       <span className="font-medium text-gray-100">{nation.nameKo}</span>
     </span>
+  )
+}
+
+/** 예선 통계 리더보드 (F5). 다득점·최소실점·최다승·최다 점수차 경기. */
+function QualStatsCard({ result }: { result: AllQualificationResult }) {
+  const stats = useMemo(() => computeQualStats(result), [result])
+
+  function Leader({ title, rows, metric, unit }: { title: string; rows: QualTeamStat[]; metric: (s: QualTeamStat) => number; unit: string }) {
+    return (
+      <div>
+        <p className="mb-1.5 text-[11px] font-bold text-emerald-300">{title}</p>
+        <ol className="space-y-1">
+          {rows.map((s, i) => (
+            <li key={s.teamId} className="flex items-center gap-2 text-xs">
+              <span className="w-3 shrink-0 text-center text-[10px] text-gray-500 tabular-nums">{i + 1}</span>
+              <span className="min-w-0 flex-1"><NationLabel teamId={s.teamId} /></span>
+              <span className="shrink-0 font-bold tabular-nums text-white">
+                {metric(s)}
+                <span className="ml-0.5 text-[9px] font-normal text-gray-500">{unit}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    )
+  }
+
+  const bw = stats.biggestWin
+  return (
+    <GlassCard className="p-4">
+      <h3 className="mb-3 text-sm font-bold text-sky-300">📊 예선 통계</h3>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Leader title="🎯 다득점" rows={stats.topScorers} metric={(s) => s.goalsFor} unit="골" />
+        <Leader title="🛡️ 최소 실점" rows={stats.bestDefense} metric={(s) => s.goalsAgainst} unit="실점" />
+        <Leader title="🏅 최다 승" rows={stats.mostWins} metric={(s) => s.wins} unit="승" />
+      </div>
+      {bw && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3 text-xs text-gray-300">
+          <span className="text-[11px] font-bold text-amber-300">💥 최다 점수차</span>
+          <NationLabel teamId={bw.match.homeTeamId} />
+          <span className="font-bold tabular-nums text-white">{bw.match.homeGoals}-{bw.match.awayGoals}</span>
+          <NationLabel teamId={bw.match.awayTeamId} />
+          <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
+        </div>
+      )}
+    </GlassCard>
   )
 }
 
@@ -468,13 +516,28 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 이 결과로 본선 조추첨 시작 →
               </GlassButton>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
-              {result.qualified48.map((id) => (
-                <div key={id} className="flex items-center gap-1.5 text-xs">
-                  <NationLabel teamId={id} />
-                  {result.hosts.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
-                </div>
-              ))}
+            {/* 대륙별로 묶어 표시 (H4) */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {CONFEDS.map((c) => {
+                const members = result.qualified48.filter((id) => ALL_NATIONS_BY_ID[id]?.confederation === c)
+                if (members.length === 0) return null
+                return (
+                  <div key={c}>
+                    <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-gray-300">
+                      {CONFEDERATION_LABEL_KO[c]}
+                      <span className="rounded bg-white/10 px-1 text-[9px] tabular-nums text-gray-400">{members.length}</span>
+                    </p>
+                    <div className="space-y-1">
+                      {members.map((id) => (
+                        <div key={id} className="flex items-center gap-1.5 text-xs">
+                          <NationLabel teamId={id} />
+                          {result.hosts.includes(id) && <span className="text-[9px] text-sky-300">개최</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
             <details className="group mt-4 border-t border-white/10 pt-3">
@@ -511,6 +574,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               })()}
             </details>
           </GlassCard>
+
+          <QualStatsCard result={result} />
 
           {drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
             <GlassCard className="p-4">

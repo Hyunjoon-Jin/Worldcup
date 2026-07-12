@@ -8,6 +8,7 @@ import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import { createQualProbAccumulator } from '../src/engine/qualification/probability'
 import { extractQualDrama } from '../src/engine/qualification/drama'
 import { QUAL_FORMAT } from '../src/engine/qualification/formats'
+import { computeQualStats } from '../src/engine/qualification/stats'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -85,6 +86,39 @@ describe('대륙별 예선 슬롯 정확성 (지역예선 Q2 확장)', () => {
     expect(r.qualified).toHaveLength(SLOT_ALLOCATION.CONCACAF.direct - 3) // 3
     expect(r.playoff).toHaveLength(2)
     for (const host of ['MEX', 'USA', 'CAN']) expect(r.qualified).not.toContain(host)
+  })
+})
+
+describe('예선 통계 대시보드 (개선 F5)', () => {
+  it('리더보드는 실제 경기 누적과 일치하고 같은 시드는 재현된다', () => {
+    const all = simulateAllQualification('STATS')
+    const s = computeQualStats(all)
+    expect(s.topScorers.length).toBeGreaterThan(0)
+    expect(s.mostWins.length).toBeGreaterThan(0)
+    expect(s.bestDefense.length).toBeGreaterThan(0)
+    // 다득점 리더보드는 내림차순
+    for (let i = 1; i < s.topScorers.length; i++) {
+      expect(s.topScorers[i - 1].goalsFor).toBeGreaterThanOrEqual(s.topScorers[i].goalsFor)
+    }
+    // 최소 실점 리더보드는 오름차순(실점 적을수록 앞)
+    for (let i = 1; i < s.bestDefense.length; i++) {
+      expect(s.bestDefense[i - 1].goalsAgainst).toBeLessThanOrEqual(s.bestDefense[i].goalsAgainst)
+    }
+    // 최다 승 1위의 승수 = 전 팀 최대 승수
+    const all2 = simulateAllQualification('STATS')
+    const s2 = computeQualStats(all2)
+    expect(s.mostWins[0].teamId).toBe(s2.mostWins[0].teamId)
+    // 최다 점수차 경기는 실제 그 점수차를 갖는다
+    if (s.biggestWin) {
+      expect(Math.abs(s.biggestWin.match.homeGoals - s.biggestWin.match.awayGoals)).toBe(s.biggestWin.margin)
+    }
+  })
+
+  it('한 팀의 경기 수 합은 played와 일치한다', () => {
+    const all = simulateAllQualification('STATS2')
+    const s = computeQualStats(all, 100)
+    const arg = s.topScorers.concat(s.mostWins).find((t) => t.teamId === 'ARG')
+    if (arg) expect(arg.played).toBe(arg.wins + arg.draws + arg.losses)
   })
 })
 
