@@ -8,7 +8,7 @@ import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import { createQualProbAccumulator } from '../src/engine/qualification/probability'
 import { extractQualDrama } from '../src/engine/qualification/drama'
 import { QUAL_FORMAT } from '../src/engine/qualification/formats'
-import { computeQualStats } from '../src/engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty } from '../src/engine/qualification/stats'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -119,6 +119,25 @@ describe('예선 통계 대시보드 (개선 F5)', () => {
     const s = computeQualStats(all, 100)
     const arg = s.topScorers.concat(s.mostWins).find((t) => t.teamId === 'ARG')
     if (arg) expect(arg.played).toBe(arg.wins + arg.draws + arg.losses)
+  })
+})
+
+describe('대륙 난이도 지수 (개선 G4)', () => {
+  it('자리당 경쟁 팀 수를 대륙별로 계산하고 내림차순 정렬한다', () => {
+    const d = computeConfedDifficulty()
+    expect(d).toHaveLength(6)
+    // 내림차순
+    for (let i = 1; i < d.length; i++) {
+      expect(d[i - 1].ratio).toBeGreaterThanOrEqual(d[i].ratio)
+    }
+    // CONCACAF는 개최 3국을 참가/자리에서 제외한다
+    const ccf = d.find((x) => x.confederation === 'CONCACAF')!
+    expect(ccf.spots).toBe(SLOT_ALLOCATION.CONCACAF.direct - 3 + SLOT_ALLOCATION.CONCACAF.playoff) // 3 + 2
+    // 모든 대륙의 participants·spots는 양수
+    for (const x of d) {
+      expect(x.participants).toBeGreaterThan(0)
+      expect(x.spots).toBeGreaterThan(0)
+    }
   })
 })
 

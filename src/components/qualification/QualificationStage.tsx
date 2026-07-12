@@ -7,7 +7,7 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
-import { computeQualStats, type QualTeamStat } from '../../engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, type QualTeamStat } from '../../engine/qualification/stats'
 import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
@@ -118,8 +118,52 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
   )
 }
 
-/** 내 팀 예선 결과 배너 (E1). 본선 진출/탈락과 대륙·경로를 강조 표시한다. */
-function MyTeamQualBanner({ teamId, qualified48, hosts }: { teamId: string; qualified48: string[]; hosts: string[] }) {
+/** 대륙 난이도 지수 (G4). 진출 자리 하나당 경쟁 팀 수를 대륙별로 비교한다. */
+function QualDifficultyCard() {
+  const diff = useMemo(() => computeConfedDifficulty(), [])
+  const maxRatio = Math.max(...diff.map((d) => d.ratio))
+  return (
+    <GlassCard className="p-4">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-gray-200">
+          <span>🌡️ 대륙 예선 난이도 (자리당 경쟁 팀 수)</span>
+          <span className="text-xs text-gray-500 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="mt-3 space-y-2">
+          {diff.map((d) => (
+            <div key={d.confederation} className="flex items-center gap-2 text-xs">
+              <span className="w-28 shrink-0 text-gray-300">{CONFEDERATION_LABEL_KO[d.confederation]}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500/60 to-red-500/70"
+                  style={{ width: `${(d.ratio / maxRatio) * 100}%` }}
+                />
+              </div>
+              <span className="w-24 shrink-0 text-right tabular-nums text-gray-400">
+                <span className="font-bold text-white">{d.ratio.toFixed(1)}</span>
+                <span className="ml-1 text-[10px]">({d.participants}팀/{d.spots}자리)</span>
+              </span>
+            </div>
+          ))}
+          <p className="pt-1 text-[10px] text-gray-500">※ 숫자가 높을수록 자리 하나를 두고 더 많은 팀이 경쟁 — 진출이 치열합니다.</p>
+        </div>
+      </details>
+    </GlassCard>
+  )
+}
+
+/** 내 팀 예선 결과 배너 (E1·E3). 본선 진출/탈락·경로 + 진출 확률을 강조 표시한다. */
+function MyTeamQualBanner({
+  teamId,
+  qualified48,
+  hosts,
+  probability,
+}: {
+  teamId: string
+  qualified48: string[]
+  hosts: string[]
+  probability?: number
+}) {
   const nation = ALL_NATIONS_BY_ID[teamId]
   if (!nation) return null
   const isIn = qualified48.includes(teamId)
@@ -140,6 +184,12 @@ function MyTeamQualBanner({ teamId, qualified48, hosts }: { teamId: string; qual
           {isHost ? '🏟️ 개최국 자동 진출!' : isIn ? '✅ 본선 진출!' : '💔 본선 진출 실패'}
         </p>
       </div>
+      {probability != null && !isHost && (
+        <div className="shrink-0 text-right">
+          <p className="text-[10px] text-gray-400">진출 확률</p>
+          <p className="text-lg font-bold tabular-nums text-sky-300">{probability.toFixed(0)}%</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -472,7 +522,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </div>
 
           {myTeamId && (
-            <MyTeamQualBanner teamId={myTeamId} qualified48={result.qualified48} hosts={result.hosts} />
+            <MyTeamQualBanner
+              teamId={myTeamId}
+              qualified48={result.qualified48}
+              hosts={result.hosts}
+              probability={probabilities ? probabilities[myTeamId] : undefined}
+            />
           )}
 
           <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />
@@ -576,6 +631,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </GlassCard>
 
           <QualStatsCard result={result} />
+
+          <QualDifficultyCard />
 
           {drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
             <GlassCard className="p-4">
