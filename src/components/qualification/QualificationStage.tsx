@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
@@ -7,7 +7,7 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
-import { computeQualStats, computeConfedDifficulty, type QualTeamStat } from '../../engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, type QualTeamStat } from '../../engine/qualification/stats'
 import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
@@ -114,6 +114,43 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
           <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
         </div>
       )}
+    </GlassCard>
+  )
+}
+
+/** 행운/불운 분석 (G5). 진출 확률 대비 실제 결과 — 확률 계산 후에만 노출. */
+function QualLuckCard({ result, probabilities }: { result: AllQualificationResult; probabilities: Record<string, number> }) {
+  const luck = useMemo(() => computeLuckAnalysis(result, probabilities), [result, probabilities])
+  if (luck.lucky.length === 0 && luck.unlucky.length === 0) return null
+  return (
+    <GlassCard className="p-4">
+      <h3 className="mb-3 text-sm font-bold text-sky-300">🎲 행운 · 불운 (확률 대비 결과)</h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <p className="mb-1.5 text-[11px] font-bold text-emerald-300">🍀 행운의 진출 (낮은 확률로 뚫음)</p>
+          <div className="space-y-1">
+            {luck.lucky.length === 0 && <p className="text-[11px] text-gray-600">해당 없음</p>}
+            {luck.lucky.map((e) => (
+              <div key={e.teamId} className="flex items-center justify-between text-xs">
+                <NationLabel teamId={e.teamId} />
+                <span className="text-[10px] text-gray-500">진출 확률 {e.probability.toFixed(0)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] font-bold text-red-300">😢 아쉬운 탈락 (높은 확률인데 미끄러짐)</p>
+          <div className="space-y-1">
+            {luck.unlucky.length === 0 && <p className="text-[11px] text-gray-600">해당 없음</p>}
+            {luck.unlucky.map((e) => (
+              <div key={e.teamId} className="flex items-center justify-between text-xs">
+                <NationLabel teamId={e.teamId} />
+                <span className="text-[10px] text-gray-500">진출 확률 {e.probability.toFixed(0)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </GlassCard>
   )
 }
@@ -450,6 +487,19 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
   const drama = useMemo(() => (result ? extractQualDrama(result) : null), [result])
 
+  // 대륙 탭 키보드 이동 (I3): ←/→(또는 ↑/↓)로 대륙 전환, Home/End로 처음/끝.
+  const onConfedKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const idx = CONFEDS.indexOf(confed)
+    let next = idx
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % CONFEDS.length
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + CONFEDS.length) % CONFEDS.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = CONFEDS.length - 1
+    else return
+    e.preventDefault()
+    setConfed(CONFEDS[next])
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <GlassCard strong className="p-5 text-center">
@@ -486,7 +536,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-1.5">
+            <div
+              role="tablist"
+              aria-label="대륙 선택 (좌우 화살표로 이동)"
+              onKeyDown={onConfedKey}
+              className="flex flex-wrap gap-1.5"
+            >
               {CONFEDS.map((c) => {
                 const cr = result.byConfederation[c]
                 const directN = cr?.qualified.length ?? 0
@@ -494,8 +549,10 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 return (
                   <button
                     key={c}
+                    role="tab"
                     onClick={() => setConfed(c)}
-                    aria-pressed={confed === c}
+                    aria-selected={confed === c}
+                    tabIndex={confed === c ? 0 : -1}
                     aria-label={`${CONFEDERATION_LABEL_KO[c]} — 직행 ${directN}${poN ? `, 플레이오프 ${poN}` : ''}`}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                       confed === c ? 'bg-emerald-500/25 text-emerald-200' : 'bg-white/5 text-gray-400 hover:text-white'
@@ -631,6 +688,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </GlassCard>
 
           <QualStatsCard result={result} />
+
+          {probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
 
           <QualDifficultyCard />
 

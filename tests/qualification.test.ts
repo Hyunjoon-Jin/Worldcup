@@ -8,7 +8,7 @@ import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import { createQualProbAccumulator } from '../src/engine/qualification/probability'
 import { extractQualDrama } from '../src/engine/qualification/drama'
 import { QUAL_FORMAT } from '../src/engine/qualification/formats'
-import { computeQualStats, computeConfedDifficulty } from '../src/engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis } from '../src/engine/qualification/stats'
 import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
@@ -119,6 +119,33 @@ describe('예선 통계 대시보드 (개선 F5)', () => {
     const s = computeQualStats(all, 100)
     const arg = s.topScorers.concat(s.mostWins).find((t) => t.teamId === 'ARG')
     if (arg) expect(arg.played).toBe(arg.wins + arg.draws + arg.losses)
+  })
+})
+
+describe('행운/불운 분석 (개선 G5)', () => {
+  it('행운=진출·저확률, 불운=탈락·고확률로 분류한다', () => {
+    const all = simulateAllQualification('LUCK')
+    // 인위적 확률: BOL 저확률 진출(행운), 임의 고확률 탈락 팀 구성
+    const probs: Record<string, number> = {}
+    for (const id of all.qualified48) probs[id] = 90
+    // 진출국 하나를 저확률로
+    const luckyId = all.qualified48.find((id) => !all.hosts.includes(id))!
+    probs[luckyId] = 20
+    // 탈락국 하나를 고확률로
+    const someEliminated = 'BOL'
+    if (!all.qualified48.includes(someEliminated)) probs[someEliminated] = 80
+
+    const luck = computeLuckAnalysis(all, probs)
+    for (const e of luck.lucky) expect(all.qualified48).toContain(e.teamId)
+    for (const e of luck.unlucky) expect(all.qualified48).not.toContain(e.teamId)
+    expect(luck.lucky.some((e) => e.teamId === luckyId)).toBe(true)
+    if (!all.qualified48.includes(someEliminated)) {
+      expect(luck.unlucky.some((e) => e.teamId === someEliminated)).toBe(true)
+    }
+    // 개최국은 제외
+    for (const host of all.hosts) {
+      expect(luck.lucky.some((e) => e.teamId === host)).toBe(false)
+    }
   })
 })
 

@@ -49,6 +49,52 @@ export interface QualStats {
   biggestWin: { match: QualMatch; margin: number } | null
 }
 
+/** 행운/불운 분석 항목(G5). */
+export interface LuckEntry {
+  teamId: string
+  probability: number
+}
+
+/** 진출 확률 대비 실제 결과(G5): 낮은 확률로 진출(행운) vs 높은 확률로 탈락(불운). */
+export interface LuckAnalysis {
+  lucky: LuckEntry[]
+  unlucky: LuckEntry[]
+}
+
+/**
+ * 진출 확률과 실제 결과를 대조해 "행운의 진출 / 아쉬운 탈락"을 뽑는다 (G5).
+ * lucky = 진출했지만 확률이 luckyMax 미만(낮은 확률로 뚫음, 확률 오름차순).
+ * unlucky = 탈락했지만 확률이 unluckyMin 초과(높은 확률인데 미끄러짐, 확률 내림차순).
+ * 개최국은 항상 100%라 제외한다.
+ */
+export function computeLuckAnalysis(
+  all: AllQualificationResult,
+  probabilities: Record<string, number>,
+  topN = 4,
+  luckyMax = 70,
+  unluckyMin = 30,
+): LuckAnalysis {
+  const qualified = new Set(all.qualified48)
+  const hosts = new Set(all.hosts)
+  const entries = Object.keys(probabilities)
+    .filter((id) => !hosts.has(id))
+    .map((id) => ({ teamId: id, probability: probabilities[id], qualified: qualified.has(id) }))
+
+  const lucky = entries
+    .filter((e) => e.qualified && e.probability < luckyMax)
+    .sort((a, b) => a.probability - b.probability)
+    .slice(0, topN)
+    .map(({ teamId, probability }) => ({ teamId, probability }))
+
+  const unlucky = entries
+    .filter((e) => !e.qualified && e.probability > unluckyMin)
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, topN)
+    .map(({ teamId, probability }) => ({ teamId, probability }))
+
+  return { lucky, unlucky }
+}
+
 function tallyMatch(map: Map<string, QualTeamStat>, teamId: string): QualTeamStat {
   let s = map.get(teamId)
   if (!s) {
