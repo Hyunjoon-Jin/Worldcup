@@ -25,11 +25,19 @@ export function resetTournament(): void {
 /**
  * 예선 통과 48개국으로 본선을 시작한다 (지역예선 Q4). 랭킹 기반 동적 포트로 조추첨을 즉시
  * 실행하고, 진행/확률/선택을 초기화한 뒤 팀 컨디션을 새로 뽑는다.
+ *
+ * formOffsets(예선 폼)를 넘기면 새 컨디션 위에 예선 성적을 추가로 반영한다 → 본선 전력·
+ * 우승 확률이 예선 실황(잘 나간 팀은 폼↑, 부진한 팀은 폼↓)을 반영한다.
  */
-export function startFinalsFromQualification(teamIds48: string[], seed?: string): void {
+export function startFinalsFromQualification(
+  teamIds48: string[],
+  seed?: string,
+  formOffsets?: Record<string, number>,
+): void {
   useDrawStore.getState().drawFromField(teamIds48, seed)
   useProgressStore.getState().reset()
   useSimulationStore.getState().reset()
   useSelectionStore.getState().clearTeam()
   useConditionStore.getState().reroll()
+  if (formOffsets) useConditionStore.getState().applyFormOffsets(formOffsets)
 }

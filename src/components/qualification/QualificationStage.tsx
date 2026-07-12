@@ -13,6 +13,8 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
+import { computeRankingMovers, formOffsetsFromResults } from '../../engine/qualification/ranking'
+import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
 import { PROB_ITERATIONS } from '../../store/useQualificationStore'
 import type { AllQualificationResult } from '../../engine/qualification'
@@ -121,6 +123,64 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
           <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
         </div>
       )}
+    </GlassCard>
+  )
+}
+
+/** FIFA 랭킹 변동 (월 단위 반영). 현재까지 치른 경기 결과를 Elo로 누적해 순위 상승/하락을 보여준다. */
+function QualRankingMovers({ result }: { result: AllQualificationResult }) {
+  const revealed = useQualificationStore((s) => s.revealed)
+  const movers = useMemo(() => {
+    const played = flattenPlayed(collectPlayedByConfed(result, revealed))
+    if (played.length === 0) return { risers: [], fallers: [] }
+    const all = computeRankingMovers(result, played)
+    return {
+      risers: all.filter((m) => m.delta > 0).slice(0, 6),
+      fallers: all.filter((m) => m.delta < 0).slice(0, 6),
+    }
+  }, [result, revealed])
+
+  if (movers.risers.length === 0 && movers.fallers.length === 0) return null
+
+  const Row = ({ teamId, delta, up }: { teamId: string; delta: number; up: boolean }) => (
+    <div className="flex items-center justify-between text-xs">
+      <NationLabel teamId={teamId} />
+      <span className={`shrink-0 font-bold tabular-nums ${up ? 'text-emerald-300' : 'text-red-300'}`}>
+        {up ? '▲' : '▼'}
+        {Math.abs(delta)}
+      </span>
+    </div>
+  )
+
+  return (
+    <GlassCard className="p-4">
+      <details className="group" open>
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-sky-300">
+          <span>📈 FIFA 랭킹 변동 (진행 결과 반영)</span>
+          <span className="text-xs text-gray-500 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-1.5 text-[11px] font-bold text-emerald-300">▲ 상승 (선전으로 랭킹 상승)</p>
+            <div className="space-y-1">
+              {movers.risers.length === 0 && <p className="text-[11px] text-gray-600">없음</p>}
+              {movers.risers.map((m) => (
+                <Row key={m.teamId} teamId={m.teamId} delta={m.delta} up />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-[11px] font-bold text-red-300">▼ 하락 (부진으로 랭킹 하락)</p>
+            <div className="space-y-1">
+              {movers.fallers.length === 0 && <p className="text-[11px] text-gray-600">없음</p>}
+              {movers.fallers.map((m) => (
+                <Row key={m.teamId} teamId={m.teamId} delta={m.delta} up={false} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <p className="mt-2 text-[10px] text-gray-500">※ 경기일을 넘길수록 결과가 누적 반영됩니다. 갱신된 전력은 남은 경기·본선 확률 계산에도 반영됩니다.</p>
+      </details>
     </GlassCard>
   )
 }
@@ -766,6 +826,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const computeProbabilities = useQualificationStore((s) => s.computeProbabilities)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const soundEnabled = useSoundStore((s) => s.enabled)
+  const revealed = useQualificationStore((s) => s.revealed)
   const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
   const [confed, setConfed] = useState<Confederation>(
@@ -898,11 +959,18 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
           {probabilities && (
             <p className="-mt-2 text-[10px] text-gray-500">
-              ※ 진출 확률은 {PROB_ITERATIONS}회 시뮬레이션 표본 추정치이며 ±오차범위(95% 신뢰구간)를 갖습니다 (G2).
+              {isPartialProgress(result, revealed) ? (
+                <span className="text-amber-300">※ 진행 중 — 현재까지 치른 경기 결과를 고정하고 남은 경기만 시뮬레이션한 <strong>조건부 확률</strong>입니다(갱신된 전력 반영). </span>
+              ) : (
+                '※ '
+              )}
+              진출 확률은 {PROB_ITERATIONS}회 시뮬레이션 표본 추정치이며 ±오차범위(95% 신뢰구간)를 갖습니다.
             </p>
           )}
 
           <QualDailyProgress result={result} onSelectMatch={setSelMatch} />
+
+          <QualRankingMovers result={result} />
 
           <QualOverviewCard result={result} onSelect={setConfed} />
 
@@ -942,7 +1010,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 <QualShareButton seed={seed} result={result} myTeamId={myTeamId} />
                 <GlassButton
                   onClick={() => {
-                    startFinalsFromQualification(result.qualified48, seed ?? undefined)
+                    // 예선 폼(Elo 변동)을 본선 컨디션에 반영 → 우승 확률이 예선 실황을 반영.
+                    startFinalsFromQualification(result.qualified48, seed ?? undefined, formOffsetsFromResults(result))
                     onStartFinals?.()
                   }}
                 >

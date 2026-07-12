@@ -2,6 +2,15 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { simulateAllQualification, type AllQualificationResult } from '../engine/qualification'
 import { createQualProbAccumulator } from '../engine/qualification/probability'
+import {
+  collectPlayedByConfed,
+  buildLockedLookups,
+  isPartialProgress,
+  flattenPlayed,
+  type LockedMatchData,
+} from '../engine/qualification/conditional'
+import { initRankingPoints, updateRankingPoints, updatedRatingsFromPoints } from '../engine/qualification/ranking'
+import type { LockedLookup } from '../engine/qualification/generic'
 import { generateSeed } from '../engine/rng'
 import { getRatings } from '../engine/matchEngine'
 import { ALL_NATIONS } from '../data/nations'
@@ -16,14 +25,41 @@ function buildQualRatings(): Record<string, TeamRatings> {
   return Object.fromEntries(ALL_NATIONS.map((t) => [t.id, getRatings(t.id)]))
 }
 
+/**
+ * 예선 진행 상황(실황)을 반영한 확률 계산 입력을 만든다.
+ * 부분 진행이면: 이미 치른 경기를 고정(locked)하고, 그 결과로 갱신된 Elo 전력으로 남은 경기를
+ * 시뮬레이션한다(조건부 확률). 전체 완료/미진행이면 무조건 확률(D1 능력치)로 계산한다.
+ */
+function buildProbInputs(): {
+  ratings: Record<string, TeamRatings>
+  locked?: Record<string, LockedMatchData[]>
+  lockedByConfed?: Record<string, LockedLookup>
+} {
+  const result = useQualificationStore.getState().result
+  const revealed = useQualificationStore.getState().revealed
+  if (result && isPartialProgress(result, revealed)) {
+    const locked = collectPlayedByConfed(result, revealed)
+    const played = flattenPlayed(locked)
+    const fieldIds = [
+      ...new Set(
+        Object.values(result.byConfederation).flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])),
+      ),
+    ]
+    const points = updateRankingPoints(initRankingPoints(fieldIds), played)
+    return { ratings: updatedRatingsFromPoints(points), locked, lockedByConfed: buildLockedLookups(locked) }
+  }
+  return { ratings: buildQualRatings() }
+}
+
 /** 워커 미지원/실패 시 메인스레드 비동기 청크 폴백 (D5). */
 async function runProbOnMainThread(
   runId: number,
   seedBase: string,
   ratings: Record<string, TeamRatings>,
   set: (partial: Partial<QualificationStore>) => void,
+  lockedByConfed?: Record<string, LockedLookup>,
 ): Promise<void> {
-  const acc = createQualProbAccumulator(seedBase, ratings)
+  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed)
   while (acc.done < PROB_ITERATIONS) {
     if (runId !== probRunId) return
     acc.runBatch(Math.min(PROB_BATCH, PROB_ITERATIONS - acc.done))
@@ -80,7 +116,8 @@ export const useQualificationStore = create<QualificationStore>()(
       computeProbabilities: () => {
         const runId = ++probRunId
         const seedBase = get().seed ?? 'PROB'
-        const ratings = buildQualRatings()
+        // 진행 상황(실황)을 반영: 부분 진행이면 치른 경기 고정 + 갱신 전력으로 조건부 계산.
+        const { ratings, locked, lockedByConfed } = buildProbInputs()
         set({ probLoading: true, probabilities: null })
         if (probWorker) {
           probWorker.terminate()
@@ -103,15 +140,15 @@ export const useQualificationStore = create<QualificationStore>()(
             worker.onerror = () => {
               worker.terminate()
               if (probWorker === worker) probWorker = null
-              void runProbOnMainThread(runId, seedBase, ratings, set)
+              void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed)
             }
-            worker.postMessage({ seedBase, ratings, iterations: PROB_ITERATIONS })
+            worker.postMessage({ seedBase, ratings, iterations: PROB_ITERATIONS, locked })
             return
           } catch {
             /* 워커 생성 실패 → 메인스레드 폴백 */
           }
         }
-        void runProbOnMainThread(runId, seedBase, ratings, set)
+        void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed)
       },
       reset: () => {
         probRunId++

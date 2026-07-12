@@ -1,7 +1,7 @@
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
-import { playSingleGroup, snakeSeed } from './generic'
+import { playSingleGroup, snakeSeed, type LockedLookup } from './generic'
 import { QUAL_FORMAT, GROUP_LETTERS, type AfcFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
@@ -20,6 +20,7 @@ export function simulateAfc(
   teams: string[],
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
+  locked?: LockedLookup,
 ): QualificationResult {
   const fmt = QUAL_FORMAT.AFC as AfcFormat
   const directSlots = SLOT_ALLOCATION.AFC.direct // 8
@@ -40,6 +41,7 @@ export function simulateAfc(
       doubleRound: fmt.doubleRound,
       groupIndex: groupRankings.length,
       matchdayOffset: r3Base,
+      locked,
     })
     allMatches.push(...matches)
     groupRankings.push(ranking)
@@ -59,6 +61,7 @@ export function simulateAfc(
       doubleRound: fmt.doubleRound,
       groupIndex: groupRankings.length,
       matchdayOffset: r4Base,
+      locked,
     })
     allMatches.push(...matches)
     groupRankings.push(ranking)
@@ -72,10 +75,11 @@ export function simulateAfc(
   const playoff: string[] = []
   if (round5Pool.length >= 2) {
     const [a, b] = [...round5Pool].sort(byRank)
-    const s = simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand)
+    md += 1
+    const lk = locked?.(a, b, md, groupRankings.length)
+    const s = lk ?? simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand)
     // 단판: 무승부면 시드(랭킹 상위 a)가 진출
     const winner = s.homeGoals >= s.awayGoals ? a : b
-    md += 1
     allMatches.push({ homeTeamId: a, awayTeamId: b, homeGoals: s.homeGoals, awayGoals: s.awayGoals, matchday: md, group: groupRankings.length })
     groupRankings.push([winner, winner === a ? b : a])
     groupLabels.push('5차 PO')

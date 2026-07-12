@@ -3,7 +3,7 @@ import { SLOT_ALLOCATION } from '../../data/confederations'
 import { HOST_SLOTS } from '../../data/hostSlots'
 import { computeStandings } from '../tiebreakers'
 import { type RandomFn } from '../matchCore'
-import { playSingleGroup, snakeSeed } from './generic'
+import { playSingleGroup, snakeSeed, type LockedLookup } from './generic'
 import { QUAL_FORMAT, GROUP_LETTERS, type ConcacafFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
@@ -22,6 +22,7 @@ export function simulateConcacaf(
   teams: string[],
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
+  locked?: LockedLookup,
 ): QualificationResult {
   const fmt = QUAL_FORMAT.CONCACAF as ConcacafFormat
   const pool = teams.filter((id) => !HOST_IDS.includes(id))
@@ -50,6 +51,7 @@ export function simulateConcacaf(
       doubleRound: false,
       groupIndex: 0,
       matchdayOffset: md,
+      locked,
     })
     allMatches.push(...matches)
     groupRankings.push(ranking)
@@ -69,6 +71,7 @@ export function simulateConcacaf(
       doubleRound: true,
       groupIndex: groupRankings.length,
       matchdayOffset: finalBase,
+      locked,
     })
     allMatches.push(...matches)
     finalGroupMatches.push(...matches)

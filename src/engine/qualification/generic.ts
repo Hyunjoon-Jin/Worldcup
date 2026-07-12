@@ -66,11 +66,22 @@ export function snakeSeed(sorted: string[], numGroups: number): string[][] {
  * 한 조를 라운드로빈(선택적 홈&어웨이)으로 치르고 매치데이·조 태그가 붙은 경기와 조 순위를 반환한다.
  * 다단계 대륙(A3 AFC·A4 CONCACAF)에서 스테이지별로 조를 이어붙일 수 있도록 matchdayOffset·groupIndex를 받는다.
  */
+/**
+ * 이미 치른 경기 결과 조회(조건부 확률용). (home, away, 최종 matchday, group)로 고정 스코어를
+ * 돌려주면 그 경기는 재시뮬레이션하지 않고 그 결과를 그대로 쓴다. null이면 새로 시뮬레이션한다.
+ */
+export type LockedLookup = (
+  home: string,
+  away: string,
+  matchday: number,
+  group: number,
+) => { homeGoals: number; awayGoals: number } | null
+
 export function playSingleGroup(
   teams: string[],
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
-  opts: { doubleRound?: boolean; groupIndex: number; matchdayOffset?: number },
+  opts: { doubleRound?: boolean; groupIndex: number; matchdayOffset?: number; locked?: LockedLookup },
 ): { matches: QualMatch[]; ranking: string[]; lastMatchday: number } {
   const off = opts.matchdayOffset ?? 0
   const schedule = roundRobinRounds(teams)
@@ -85,8 +96,10 @@ export function playSingleGroup(
         ]
       : [{ home, away, matchday }]
     for (const leg of legs) {
-      const s = simulateScoreRaw(ratings[leg.home], ratings[leg.away], QUALIFIER_HOME_ADVANTAGE, 0, rand)
       const md = leg.matchday + off
+      // 이미 치른 경기면 고정 결과 사용(조건부 확률), 아니면 새로 시뮬레이션.
+      const lk = opts.locked?.(leg.home, leg.away, md, opts.groupIndex)
+      const s = lk ?? simulateScoreRaw(ratings[leg.home], ratings[leg.away], QUALIFIER_HOME_ADVANTAGE, 0, rand)
       gm.push({
         homeTeamId: leg.home,
         awayTeamId: leg.away,
@@ -111,6 +124,7 @@ export function simulateGroupQualification(
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
   cfg: QualConfig,
+  locked?: LockedLookup,
 ): QualificationResult {
   const sorted = [...teams].sort(
     (a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox,
@@ -124,6 +138,7 @@ export function simulateGroupQualification(
     const { matches: gm, ranking, lastMatchday } = playSingleGroup(g, ratings, rand, {
       doubleRound: cfg.doubleRound,
       groupIndex: gi,
+      locked,
     })
     matches.push(...gm)
     matchdays = Math.max(matchdays, lastMatchday)

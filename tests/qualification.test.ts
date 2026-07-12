@@ -13,6 +13,16 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../src/engine/qualification/upset'
 import { runWhatIfScenarios } from '../src/engine/qualification/whatif'
 import { buildQualCalendar } from '../src/engine/qualification/calendar'
+import { collectPlayedByConfed, buildLockedLookups, isPartialProgress } from '../src/engine/qualification/conditional'
+import {
+  basePointsFromRank,
+  effectiveRankFromPoints,
+  applyMatchElo,
+  initRankingPoints,
+  updateRankingPoints,
+  computeRankingMovers,
+  formOffsetsFromResults,
+} from '../src/engine/qualification/ranking'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
 import type { Confederation } from '../src/types/team'
 
@@ -137,6 +147,134 @@ describe('진출 확률 신뢰구간 (개선 G2)', () => {
     expect(probMarginPct(50, 1200)).toBeLessThan(probMarginPct(50, 300))
     // n<=0 방어
     expect(probMarginPct(50, 0)).toBe(0)
+  })
+})
+
+describe('조건부 확률 — 예선 실황 반영 (locked results)', () => {
+  it('모든 조별 경기를 고정하면 대륙별 직행·PO가 그대로 재현된다(대륙간 PO만 재추첨)', () => {
+    const all = simulateAllQualification('COND')
+    // 전체 공개(=모든 조별 경기 치름)로 locked 구성
+    const revealed = Object.fromEntries(
+      Object.entries(all.byConfederation).map(([c, r]) => [c, r.matchdays]),
+    )
+    const played = collectPlayedByConfed(all, revealed)
+    const lockedByConfed = buildLockedLookups(played)
+    // 완전히 다른 시드로 돌려도 조별 경기는 고정이라 대륙별 결과가 동일해야 한다
+    const redo = simulateAllQualification('DIFFERENT-SEED', undefined, lockedByConfed)
+    for (const c of Object.keys(all.byConfederation)) {
+      expect(redo.byConfederation[c].qualified).toEqual(all.byConfederation[c].qualified)
+      expect(redo.byConfederation[c].playoff).toEqual(all.byConfederation[c].playoff)
+    }
+    // 대륙간 PO 참가 6팀도 동일(조별 결과가 고정이므로)
+    expect(redo.interConfed.participants.sort()).toEqual(all.interConfed.participants.sort())
+    // 개최국 + 대륙 직행(=대륙간 PO 승자 제외)은 동일
+    const directOnly = (r: typeof all) =>
+      r.qualified48.filter((id) => !r.interConfed.winners.includes(id)).sort()
+    expect(directOnly(redo)).toEqual(directOnly(all))
+  })
+
+  it('부분 진행 판정과 치른 경기 수집이 공개 라운드를 따른다', () => {
+    const all = simulateAllQualification('COND2')
+    // UEFA만 절반 공개, 나머지는 전체
+    const revealed: Record<string, number> = {}
+    for (const c of Object.keys(all.byConfederation)) revealed[c] = all.byConfederation[c].matchdays
+    revealed.UEFA = Math.floor(all.byConfederation.UEFA.matchdays / 2)
+    expect(isPartialProgress(all, revealed)).toBe(true)
+    const played = collectPlayedByConfed(all, revealed)
+    // UEFA는 절반 이하 매치데이만
+    expect(played.UEFA.every((m) => m.matchday <= revealed.UEFA)).toBe(true)
+    // 전체 공개면 부분 진행 아님
+    const full = Object.fromEntries(Object.entries(all.byConfederation).map(([c, r]) => [c, r.matchdays]))
+    expect(isPartialProgress(all, full)).toBe(false)
+  })
+
+  it('부분 고정 + 남은 경기 시뮬: 고정된 경기 결과는 항상 보존된다', () => {
+    const all = simulateAllQualification('COND3')
+    const revealed: Record<string, number> = {}
+    for (const c of Object.keys(all.byConfederation)) revealed[c] = Math.ceil(all.byConfederation[c].matchdays / 2)
+    const played = collectPlayedByConfed(all, revealed)
+    const lockedByConfed = buildLockedLookups(played)
+    const redo = simulateAllQualification('OTHER', undefined, lockedByConfed)
+    // 고정한 경기는 재시뮬 결과에서도 같은 스코어여야 한다
+    for (const c of Object.keys(played)) {
+      const redoMap = new Map(
+        redo.byConfederation[c].matches.map((m) => [`${m.group}|${m.matchday}|${m.homeTeamId}|${m.awayTeamId}`, m]),
+      )
+      for (const lm of played[c]) {
+        const rm = redoMap.get(`${lm.group}|${lm.matchday}|${lm.homeTeamId}|${lm.awayTeamId}`)
+        expect(rm).toBeTruthy()
+        expect(rm!.homeGoals).toBe(lm.homeGoals)
+        expect(rm!.awayGoals).toBe(lm.awayGoals)
+      }
+    }
+  })
+})
+
+describe('FIFA 랭킹 Elo 갱신 (월 단위 반영)', () => {
+  it('랭킹↔점수 변환은 역함수 관계이고, 강팀이 더 높은 점수를 받는다', () => {
+    expect(basePointsFromRank(1)).toBeGreaterThan(basePointsFromRank(50))
+    // 역변환 근사
+    expect(effectiveRankFromPoints(basePointsFromRank(20))).toBeCloseTo(20, 5)
+  })
+
+  it('승리 팀은 점수가 오르고 패배 팀은 내린다(합은 보존)', () => {
+    const p = { A: 1500, B: 1500 }
+    const before = p.A + p.B
+    applyMatchElo(p, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 2, awayGoals: 0 })
+    expect(p.A).toBeGreaterThan(1500)
+    expect(p.B).toBeLessThan(1500)
+    expect(p.A + p.B).toBeCloseTo(before, 6) // 제로섬
+  })
+
+  it('이변(약체 승)은 강팀 승보다 점수 변동이 크다', () => {
+    const upset = { S: 1800, W: 1400 }
+    applyMatchElo(upset, { homeTeamId: 'W', awayTeamId: 'S', homeGoals: 1, awayGoals: 0 }) // 약체 W 승
+    const expected = { S: 1800, W: 1400 }
+    applyMatchElo(expected, { homeTeamId: 'S', awayTeamId: 'W', homeGoals: 1, awayGoals: 0 }) // 강체 S 승
+    expect(upset.W - 1400).toBeGreaterThan(expected.S - 1800)
+  })
+
+  it('진행된 경기로 랭킹 무버를 계산한다(승승승 팀은 상승)', () => {
+    const all = simulateAllQualification('RANK')
+    // CONMEBOL 단일리그에서 ARG의 승리 경기만 골라 적용 → 상승해야
+    const argWins = all.byConfederation.CONMEBOL.matches.filter(
+      (m) => (m.homeTeamId === 'ARG' && m.homeGoals > m.awayGoals) || (m.awayTeamId === 'ARG' && m.awayGoals > m.homeGoals),
+    )
+    const movers = computeRankingMovers(all, argWins)
+    const arg = movers.find((x) => x.teamId === 'ARG')
+    expect(arg).toBeTruthy()
+    if (arg) expect(arg.delta).toBeGreaterThanOrEqual(0) // 순위 유지 또는 상승
+    // 아무 경기도 없으면 변동 0
+    const none = computeRankingMovers(all, [])
+    expect(none.every((m) => m.delta === 0)).toBe(true)
+  })
+
+  it('갱신 함수는 원본 점수 맵을 변경하지 않는다', () => {
+    const base = initRankingPoints(['ARG', 'BRA'])
+    const snapshot = { ...base }
+    updateRankingPoints(base, [{ homeTeamId: 'ARG', awayTeamId: 'BRA', homeGoals: 3, awayGoals: 0, matchday: 1, group: 0 }])
+    expect(base).toEqual(snapshot)
+  })
+
+  it('예선 폼 → 본선 컨디션 가감치: 범위 내이고 기대 이상/이하가 부호로 갈린다', () => {
+    const all = simulateAllQualification('FORM')
+    const offsets = formOffsetsFromResults(all, 6)
+    // 모든 값이 -6~+6
+    for (const v of Object.values(offsets)) {
+      expect(v).toBeGreaterThanOrEqual(-6)
+      expect(v).toBeLessThanOrEqual(6)
+    }
+    // 폼은 기대 대비 성적이라 상승·하락이 모두 존재(균일하게 0이 아님)
+    const vals = Object.values(offsets)
+    expect(vals.some((v) => v > 0)).toBe(true)
+    expect(vals.some((v) => v < 0)).toBe(true)
+    // 랭킹 무버(최대 상승/하락)와 부호가 일치한다
+    const played = Object.values(all.byConfederation).flatMap((r) => r.matches)
+    const movers = computeRankingMovers(all, played)
+    const topRiser = movers.find((m) => m.delta > 0)
+    const topFaller = movers.find((m) => m.delta < 0)
+    if (topRiser) expect(offsets[topRiser.teamId]).toBeGreaterThanOrEqual(0)
+    if (topFaller) expect(offsets[topFaller.teamId]).toBeLessThanOrEqual(0)
   })
 })
 

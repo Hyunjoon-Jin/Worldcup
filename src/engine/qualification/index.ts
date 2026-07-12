@@ -2,7 +2,7 @@ import { ALL_NATIONS, baseRatingsMap, nationsByConfederation } from '../../data/
 import { HOST_SLOTS } from '../../data/hostSlots'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { createSeededRandom, type RandomFn } from '../rng'
-import { simulateGroupQualification } from './generic'
+import { simulateGroupQualification, type LockedLookup } from './generic'
 import { simulateAfc } from './afc'
 import { simulateConcacaf } from './concacaf'
 import { QUAL_FORMAT } from './formats'
@@ -28,11 +28,12 @@ export function simulateConfederation(
   confed: Confederation,
   ratings: Record<string, TeamRatings>,
   rand: RandomFn,
+  locked?: LockedLookup,
 ): QualificationResult {
   const teams = nationsByConfederation(confed).map((t) => t.id)
   // 다단계 구조 대륙은 전용 엔진으로 실제 라운드 구성을 근사한다 (A3·A4).
-  if (confed === 'AFC') return simulateAfc(teams, ratings, rand)
-  if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand) // 개최국 필터는 내부 처리
+  if (confed === 'AFC') return simulateAfc(teams, ratings, rand, locked)
+  if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand, locked) // 개최국 필터는 내부 처리
   // 단일 조별 스테이지 대륙: 포맷(조 수·홈&어웨이)은 QUAL_FORMAT, 슬롯은 SLOT_ALLOCATION에서 (C4).
   const fmt = QUAL_FORMAT[confed]
   if (fmt.kind !== 'groups') throw new Error(`조별 포맷이 아닌 대륙: ${confed}`)
@@ -43,7 +44,7 @@ export function simulateConfederation(
     direct: slots.direct,
     playoff: slots.playoff,
     doubleRound: fmt.doubleRound,
-  })
+  }, locked)
 }
 
 /**
@@ -56,6 +57,7 @@ export function simulateConfederation(
 export function simulateAllQualification(
   seed: string,
   ratings: Record<string, TeamRatings> = baseRatingsMap(ALL_NATIONS.map((t) => t.id)),
+  lockedByConfed?: Record<string, LockedLookup>,
 ): AllQualificationResult {
   const byConfederation: Record<string, QualificationResult> = {}
   const directQualified: string[] = []
@@ -63,7 +65,7 @@ export function simulateAllQualification(
 
   for (const confed of CONFEDERATIONS) {
     const rand = createSeededRandom(`${seed}-${confed}`)
-    const r = simulateConfederation(confed, ratings, rand)
+    const r = simulateConfederation(confed, ratings, rand, lockedByConfed?.[confed])
     byConfederation[confed] = r
     directQualified.push(...r.qualified)
     playoffTeams.push(...r.playoff)

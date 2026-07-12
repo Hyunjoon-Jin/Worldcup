@@ -17,6 +17,8 @@ interface ConditionStore {
   offsets: Record<string, number>
   /** 새 대회(조추첨)를 시작할 때 모든 팀의 컨디션을 다시 뽑는다. */
   reroll: () => void
+  /** 예선 폼(Elo 변동)을 컨디션에 추가로 반영한다 → 본선 전력·우승 확률에 예선 실황 반영. */
+  applyFormOffsets: (form: Record<string, number>) => void
 }
 
 /**
@@ -30,6 +32,15 @@ export const useConditionStore = create<ConditionStore>()(
     (set) => ({
       offsets: rollConditions(),
       reroll: () => set({ offsets: rollConditions() }),
+      applyFormOffsets: (form) =>
+        set((s) => {
+          const next = { ...s.offsets }
+          const cap = CONDITION_RANGE * 2
+          for (const id of Object.keys(form)) {
+            next[id] = Math.max(-cap, Math.min(cap, (next[id] ?? 0) + form[id]))
+          }
+          return { offsets: next }
+        }),
     }),
     { name: 'wc2026-condition-store', version: 1 },
   ),
