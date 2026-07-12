@@ -12,6 +12,7 @@ import { QUAL_FORMAT } from '../src/engine/qualification/formats'
 import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, computeQualHighlights } from '../src/engine/qualification/stats'
 import { pickQualUpset } from '../src/engine/qualification/upset'
 import { runWhatIfScenarios } from '../src/engine/qualification/whatif'
+import { buildQualCalendar } from '../src/engine/qualification/calendar'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
 import type { Confederation } from '../src/types/team'
 
@@ -136,6 +137,43 @@ describe('진출 확률 신뢰구간 (개선 G2)', () => {
     expect(probMarginPct(50, 1200)).toBeLessThan(probMarginPct(50, 300))
     // n<=0 방어
     expect(probMarginPct(50, 0)).toBe(0)
+  })
+})
+
+describe('예선 경기 일정 캘린더 (B2 일별 진행)', () => {
+  it('모든 경기가 정확히 하루에 배정되고, 날짜는 오름차순이다', () => {
+    const all = simulateAllQualification('CAL')
+    const cal = buildQualCalendar(all)
+    expect(cal.length).toBeGreaterThan(0)
+    // 날짜 오름차순
+    for (let i = 1; i < cal.length; i++) {
+      expect(cal[i - 1].date <= cal[i].date).toBe(true)
+    }
+    // 전체 경기 수 = 캘린더에 배정된 경기 수(누락·중복 없음)
+    const totalMatches = Object.values(all.byConfederation).reduce((s, r) => s + r.matches.length, 0)
+    const scheduled = cal.reduce((s, d) => s + d.matches.length, 0)
+    expect(scheduled).toBe(totalMatches)
+  })
+
+  it('마지막 경기일에는 모든 대륙이 전체 라운드를 소화한다(누적 공개 = 총 라운드)', () => {
+    const all = simulateAllQualification('CAL2')
+    const cal = buildQualCalendar(all)
+    const last = cal[cal.length - 1]
+    for (const c of Object.keys(all.byConfederation)) {
+      expect(last.revealedByConfed[c]).toBe(all.byConfederation[c].matchdays)
+    }
+    // 누적 공개는 경기일이 갈수록 단조 증가
+    for (let i = 1; i < cal.length; i++) {
+      for (const c of Object.keys(all.byConfederation)) {
+        expect(cal[i].revealedByConfed[c]).toBeGreaterThanOrEqual(cal[i - 1].revealedByConfed[c])
+      }
+    }
+  })
+
+  it('같은 시드는 같은 일정을 재현한다', () => {
+    const a = buildQualCalendar(simulateAllQualification('CAL-SAME'))
+    const b = buildQualCalendar(simulateAllQualification('CAL-SAME'))
+    expect(a.map((d) => d.date + ':' + d.matches.length)).toEqual(b.map((d) => d.date + ':' + d.matches.length))
   })
 })
 

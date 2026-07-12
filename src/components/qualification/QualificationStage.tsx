@@ -12,6 +12,7 @@ import { extractQualDrama } from '../../engine/qualification/drama'
 import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, computeQualHighlights, type QualTeamStat } from '../../engine/qualification/stats'
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
+import { buildQualCalendar } from '../../engine/qualification/calendar'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
 import { PROB_ITERATIONS } from '../../store/useQualificationStore'
 import type { AllQualificationResult } from '../../engine/qualification'
@@ -120,6 +121,86 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
           <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
         </div>
       )}
+    </GlassCard>
+  )
+}
+
+/** 일별 진행 (B2). 경기 일정(캘린더)을 날짜별로 넘기며 그날의 경기·결과를 보고,
+ *  모든 대륙 순위표를 해당 날짜 기준으로 동기화한다. */
+function QualDailyProgress({ result, onSelectMatch }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void }) {
+  const calendar = useMemo(() => buildQualCalendar(result), [result])
+  const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
+  const [dayIdx, setDayIdx] = useState(calendar.length - 1)
+
+  // 새 시뮬레이션(캘린더 교체) 시 마지막 경기일(전체 소화)로 초기화.
+  useEffect(() => {
+    setDayIdx(calendar.length - 1)
+  }, [calendar])
+
+  if (calendar.length === 0) return null
+  const day = calendar[Math.max(0, Math.min(dayIdx, calendar.length - 1))]
+
+  const goTo = (i: number) => {
+    const clamped = Math.max(0, Math.min(calendar.length - 1, i))
+    setDayIdx(clamped)
+    setRevealedMany(calendar[clamped].revealedByConfed)
+  }
+
+  // 그날 경기를 대륙별로 묶기
+  const byConfed = new Map<string, typeof day.matches>()
+  for (const cm of day.matches) {
+    const arr = byConfed.get(cm.confederation)
+    if (arr) arr.push(cm)
+    else byConfed.set(cm.confederation, [cm])
+  }
+  const confedOrder = CONFEDS.filter((c) => byConfed.has(c))
+  const atEnd = dayIdx >= calendar.length - 1
+  const atStart = dayIdx <= 0
+
+  return (
+    <GlassCard className="p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-emerald-300">📅 일별 진행</h3>
+        <span className="text-xs text-gray-400">
+          경기일 <span className="font-bold text-emerald-300">{dayIdx + 1}</span> / {calendar.length}
+        </span>
+      </div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="font-display text-base font-bold text-white">{day.label}</span>
+        <div className="flex items-center gap-1">
+          <button onClick={() => goTo(0)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
+          <button onClick={() => goTo(dayIdx - 1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀ 이전</button>
+          <button onClick={() => goTo(dayIdx + 1)} disabled={atEnd} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">다음 경기일 ▶</button>
+          <button onClick={() => goTo(calendar.length - 1)} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
+        </div>
+      </div>
+      <p className="mb-2 text-[11px] text-gray-500">{confedOrder.length}개 대륙 · {day.matches.length}경기</p>
+      <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+        {confedOrder.map((c) => {
+          const list = byConfed.get(c)!
+          return (
+            <div key={c}>
+              <p className="mb-1 text-[11px] font-bold text-gray-300">
+                {CONFEDERATION_LABEL_KO[c as Confederation] ?? c} <span className="text-gray-500">({list.length})</span>
+              </p>
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                {list.map((cm, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onSelectMatch(cm.match)}
+                    className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1 text-[11px] hover:bg-white/10"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-right text-gray-300">{ALL_NATIONS_BY_ID[cm.match.homeTeamId]?.nameKo ?? cm.match.homeTeamId}</span>
+                    <span className="shrink-0 font-bold tabular-nums text-white">{cm.match.homeGoals}-{cm.match.awayGoals}</span>
+                    <span className="min-w-0 flex-1 truncate text-gray-300">{ALL_NATIONS_BY_ID[cm.match.awayTeamId]?.nameKo ?? cm.match.awayTeamId}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-2 text-[10px] text-gray-500">※ 경기일을 넘기면 아래 대륙별 순위표가 그 날짜 기준으로 함께 갱신됩니다.</p>
     </GlassCard>
   )
 }
@@ -820,6 +901,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               ※ 진출 확률은 {PROB_ITERATIONS}회 시뮬레이션 표본 추정치이며 ±오차범위(95% 신뢰구간)를 갖습니다 (G2).
             </p>
           )}
+
+          <QualDailyProgress result={result} onSelectMatch={setSelMatch} />
 
           <QualOverviewCard result={result} onSelect={setConfed} />
 

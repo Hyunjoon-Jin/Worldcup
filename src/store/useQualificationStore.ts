@@ -45,6 +45,8 @@ interface QualificationStore {
   computeProbabilities: () => void
   /** 특정 대륙의 공개 라운드를 설정한다. */
   setRevealed: (confed: string, matchday: number) => void
+  /** 여러 대륙의 공개 라운드를 한 번에 설정한다(일별 진행 B2). */
+  setRevealedMany: (map: Record<string, number>) => void
   reset: () => void
 }
 
@@ -74,6 +76,7 @@ export const useQualificationStore = create<QualificationStore>()(
         set({ seed: usedSeed, result, probabilities: null, revealed })
       },
       setRevealed: (confed, matchday) => set({ revealed: { ...get().revealed, [confed]: matchday } }),
+      setRevealedMany: (map) => set({ revealed: { ...get().revealed, ...map } }),
       computeProbabilities: () => {
         const runId = ++probRunId
         const seedBase = get().seed ?? 'PROB'
