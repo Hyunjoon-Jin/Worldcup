@@ -179,7 +179,7 @@ describe('매치데이 구조 (개선 B1)', () => {
   })
   it('groups 구조가 노출된다(H1)', () => {
     const all = simulateAllQualification('MD')
-    expect(all.byConfederation.UEFA.groups.length).toBe(8)
+    expect(all.byConfederation.UEFA.groups.length).toBe(12)
     expect(all.byConfederation.CONMEBOL.groups.length).toBe(1)
   })
 })

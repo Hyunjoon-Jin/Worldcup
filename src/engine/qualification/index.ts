@@ -15,8 +15,8 @@ const HOST_IDS = Object.keys(HOST_SLOTS) // ['MEX','CAN','USA']
  */
 // 실제 예선처럼 모든 대륙을 조 내 홈&어웨이(doubleRound)로 치른다 (A5).
 const CONFED_CONFIGS: Record<Confederation, Omit<QualConfig, 'confederation'>> = {
-  UEFA: { numGroups: 8, direct: SLOT_ALLOCATION.UEFA.direct, playoff: SLOT_ALLOCATION.UEFA.playoff, doubleRound: true },
-  CAF: { numGroups: 6, direct: SLOT_ALLOCATION.CAF.direct, playoff: SLOT_ALLOCATION.CAF.playoff, doubleRound: true },
+  UEFA: { numGroups: 12, direct: SLOT_ALLOCATION.UEFA.direct, playoff: SLOT_ALLOCATION.UEFA.playoff, doubleRound: true },
+  CAF: { numGroups: 9, direct: SLOT_ALLOCATION.CAF.direct, playoff: SLOT_ALLOCATION.CAF.playoff, doubleRound: true },
   AFC: { numGroups: 4, direct: SLOT_ALLOCATION.AFC.direct, playoff: SLOT_ALLOCATION.AFC.playoff, doubleRound: true },
   CONMEBOL: { numGroups: 1, direct: SLOT_ALLOCATION.CONMEBOL.direct, playoff: SLOT_ALLOCATION.CONMEBOL.playoff, doubleRound: true },
   // CONCACAF direct는 개최 3국 포함 → 비개최국 대상 시뮬은 (direct-3)장
