@@ -3,6 +3,7 @@ import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { titlesFor } from '../../data/history'
 import { GROUP_LETTERS } from '../../data/hostSlots'
+import { isCurrentHost } from '../../engine/hostContext'
 import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassButton } from '../common/GlassButton'
@@ -328,7 +329,7 @@ export function TeamDetailPage() {
               {team.nameEn} · FIFA 랭킹 {team.fifaRankApprox}위 · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트{' '}
               {team.pot}
               {group && ` · 조 ${group}`}
-              {team.isHost && ' · 개최국'}
+              {isCurrentHost(team.id) && ' · 개최국'}
             </p>
             {titleHistory && (
               <p className="mt-0.5 text-xs font-bold text-amber-300" title={`우승 연도: ${titleHistory.years.join(', ')}`}>

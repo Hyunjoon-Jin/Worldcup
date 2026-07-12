@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { getTeamsByPot } from '../../data/teams'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
+import { isCurrentHost } from '../../engine/hostContext'
 import { GlassCard } from '../common/GlassCard'
 import { FlagIcon } from '../common/FlagIcon'
 import type { PotPools } from '../../engine/drawEngine'
@@ -51,7 +52,7 @@ export function PotTray({ pots, currentPot, composition, hostIds, rankPoints }: 
               {teamIds.map((id) => {
                 const team = ALL_NATIONS_BY_ID[id]
                 if (!team) return null
-                const isHost = hostSet.has(id) || (!composition && getTeamsByPot(pot).find((t) => t.id === id)?.isHost)
+                const isHost = hostSet.has(id) || (!composition && isCurrentHost(id))
                 // 남아있으면(아직 안 뽑힘) 밝게, 개최국은 사전 배치(확정), 그 외 뽑힌 팀은 흐리게/취소선.
                 const remaining = remainingIds.has(id)
                 const placed = !remaining && !isHost

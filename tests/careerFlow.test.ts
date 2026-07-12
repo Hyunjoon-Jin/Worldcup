@@ -56,6 +56,14 @@ describe('advanceToNextEdition — 다음 대회로 흐름 이어가기', () => 
     expect(result).not.toBeNull()
     expect(result!.qualified48).toHaveLength(48)
     for (const h of ['ESP', 'POR', 'MAR']) expect(result!.qualified48).toContain(h)
+    // 개최국 자동 진출 대상이 새 개최국으로 바뀐다(이전 개최국은 자동 진출 아님).
+    expect([...result!.hosts].sort()).toEqual(['ESP', 'MAR', 'POR'])
+    // 이전 개최국(USA·MEX·CAN)은 이제 자동 진출이 아니라 소속 대륙(CONCACAF) 예선을 치른다.
+    const concacafPlayers = new Set(
+      result!.byConfederation.CONCACAF.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]),
+    )
+    for (const old of ['USA', 'MEX', 'CAN']) expect(result!.hosts).not.toContain(old)
+    expect([...concacafPlayers].some((id) => ['USA', 'MEX', 'CAN'].includes(id))).toBe(true)
 
     // 이전 본선 진행은 초기화된다
     expect(useProgressStore.getState().phase).not.toBe('complete')
