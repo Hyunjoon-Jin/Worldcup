@@ -8,6 +8,9 @@ import { DebugPanel } from './components/common/DebugPanel'
 import { OnboardingOverlay } from './components/common/OnboardingOverlay'
 
 // 탭별 화면은 지연 로딩해 초기 번들 크기를 줄인다 (B5).
+const QualificationStage = lazy(() =>
+  import('./components/qualification/QualificationStage').then((m) => ({ default: m.QualificationStage })),
+)
 const DrawStage = lazy(() => import('./components/draw/DrawStage').then((m) => ({ default: m.DrawStage })))
 const ScheduleStage = lazy(() => import('./components/schedule/ScheduleStage').then((m) => ({ default: m.ScheduleStage })))
 const GroupStageView = lazy(() => import('./components/groups/GroupStageView').then((m) => ({ default: m.GroupStageView })))
@@ -26,15 +29,19 @@ import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament } from './store/tournamentActions'
 
-type TabId = 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
+type TabId = 'qualifiers' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'qualifiers', label: '지역예선' },
   { id: 'draw', label: '조추첨' },
   { id: 'schedule', label: '일정 진행' },
   { id: 'groups', label: '조별리그' },
   { id: 'knockout', label: '토너먼트' },
   { id: 'probability', label: '확률 대시보드' },
 ]
+
+/** 조추첨 완료와 무관하게 언제나 접근 가능한 탭. */
+const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'draw']
 
 function App() {
   // 저장된 대회가 완료된 조추첨을 갖고 있으면(이어하기) 일정 탭에서 시작한다 (A3).
@@ -62,7 +69,7 @@ function App() {
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < TABS.length) {
         const t = TABS[idx]
-        if (t.id === 'draw' || isDrawComplete) {
+        if (ALWAYS_ENABLED.includes(t.id) || isDrawComplete) {
           clearTeam()
           setTab(t.id)
         }
@@ -142,7 +149,7 @@ function App() {
       )}
       <div className="sticky top-2 z-10 mb-6">
         <TabNav
-          tabs={TABS.map((t) => ({ ...t, disabled: t.id !== 'draw' && !isDrawComplete }))}
+          tabs={TABS.map((t) => ({ ...t, disabled: !ALWAYS_ENABLED.includes(t.id) && !isDrawComplete }))}
           active={tab}
           onChange={(id) => {
             clearTeam()
@@ -157,6 +164,7 @@ function App() {
           <TeamDetailPage />
         ) : (
           <>
+            {tab === 'qualifiers' && <QualificationStage />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
             {tab === 'schedule' && <ScheduleStage />}
             {tab === 'groups' && <GroupStageView />}

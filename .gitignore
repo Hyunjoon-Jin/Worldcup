@@ -28,3 +28,5 @@ dist-ssr
 /kb.mjs
 /verify.mjs
 /shot*.png
+/q*.mjs
+/*shot*.mjs
