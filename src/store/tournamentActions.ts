@@ -9,6 +9,7 @@ import { useSandboxStore } from './useSandboxStore'
 import { usePerformanceStore } from './usePerformanceStore'
 import { useCareerStore } from './useCareerStore'
 import { finalsFormDeltas } from '../engine/finalsForm'
+import { editionEndRankingPoints, type FinalsResults } from '../engine/qualification/ranking'
 
 /**
  * 새 대회를 시작할 때 관련된 모든 store를 한 번에 원자적으로 초기화한다 (A4).
@@ -49,6 +50,20 @@ export function startFinalsFromQualification(
 }
 
 /**
+ * 예선 통과 48개국으로 본선 조추첨을 "준비"만 한다 (순차 진행용). 조추첨을 즉시 끝내지 않고,
+ * 개최국 사전 배치 + 포트만 구성해 두어, 조추첨 화면에서 사용자가 한 팀씩(또는 시드로) 직접
+ * 진행할 수 있게 한다. 예선 폼(formOffsets)은 본선 컨디션에 반영하고, 진행/확률/선택을 초기화한다.
+ */
+export function prepareFinalsDrawFromQualification(teamIds48: string[], formOffsets?: Record<string, number>): void {
+  useDrawStore.getState().prepareFromField(teamIds48)
+  useProgressStore.getState().reset()
+  useSimulationStore.getState().reset()
+  useSelectionStore.getState().clearTeam()
+  useConditionStore.getState().reroll()
+  if (formOffsets) useConditionStore.getState().applyFormOffsets(formOffsets)
+}
+
+/**
  * 방금 끝난 본선을 마무리하고 "다음 대회"로 흐름을 이어간다 (커리어 모드).
  *
  * 1) 방금 끝난 본선 성적(우승·준우승·토너먼트 진출 깊이)을 커리어 폼 보정으로 환산해
@@ -64,8 +79,19 @@ export function advanceToNextEdition(): void {
   if (progress.phase !== 'complete') return
 
   const deltas = finalsFormDeltas(progress.knockoutSlots, progress.champion)
-  // 다음 대회 개최국 선정 + 커리어 폼 누적(감쇠). 이후 시뮬레이션이 새 개최국을 참조한다.
-  useCareerStore.getState().advanceEdition(deltas)
+  // 이번 대회(예선+본선)까지 반영된 FIFA 점수를 계산해 다음 대회로 이월한다(본선 반영 랭킹 회귀 방지).
+  const qualResult = useQualificationStore.getState().result
+  const carried = useCareerStore.getState().rankingBase
+  const carriedArg = Object.keys(carried).length > 0 ? carried : undefined
+  const finals: FinalsResults = {
+    groupMatches: progress.groupMatches,
+    knockoutMatches: Object.values(progress.knockoutSlots)
+      .map((s) => s.result)
+      .filter((m): m is NonNullable<typeof m> => m != null),
+  }
+  const endPoints = qualResult ? editionEndRankingPoints(qualResult, finals, carriedArg) : carried
+  // 다음 대회 개최국 선정 + 커리어 폼 누적(감쇠) + FIFA 점수 이월. 이후 시뮬레이션이 새 개최국을 참조한다.
+  useCareerStore.getState().advanceEdition(deltas, endPoints)
 
   // 이전 대회의 진행 이력을 정리하고(저장 슬롯·샌드박스는 유지) 새 예선을 시작한다.
   useDrawStore.getState().reset()

@@ -6,6 +6,7 @@ import { dailySeedForDate, dailyChallengeLabel } from '../../engine/dailyChallen
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { findNextSlot } from '../../engine/drawEngine'
+import { getCurrentHostIds } from '../../engine/hostContext'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
@@ -31,6 +32,11 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
   }
 
   const nextSlot = findNextSlot(state)
+  const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
+  // 개최국 사전 배치 설명(커리어 모드로 개최국이 바뀌므로 동적으로 구성). 앞쪽 조부터 1번 시드.
+  const hostSeedText = getCurrentHostIds()
+    .map((id, i) => `${TEAMS_BY_ID[id]?.nameKo ?? id}=${GROUP_LETTERS[i]}1`)
+    .join(', ')
   const lastEntry = log[log.length - 1]
   const lastTeam = lastEntry ? TEAMS_BY_ID[lastEntry.teamId] : null
   // 방금 뽑힌 팀이 어느 조에 배정됐는지 바로 확인할 수 있도록, 직전 픽의 결과(lastEntry)를
@@ -145,7 +151,7 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
       <PotTray pots={state.pots} currentPot={nextSlot?.pot ?? null} />
 
       <GlassCard className="p-4 text-xs leading-relaxed text-gray-400">
-        <strong className="text-gray-300">조추첨 규정:</strong> 개최국 3팀(멕시코=A1, 캐나다=B1, 미국=D1)은 사전
+        <strong className="text-gray-300">조추첨 규정:</strong> 개최국({hostSeedText})은 각 조 1번 시드로 사전
         고정됩니다. 이후 포트1→4 순서로 각 조에 한 팀씩 배정하며, 같은 대륙연맹 팀은 원칙적으로 한 조에 1팀까지만
         허용됩니다(유럽 UEFA는 예외적으로 최대 2팀). 배정이 규정을 위반하면 자동으로 다른 팀을 다시 뽑습니다.
       </GlassCard>
