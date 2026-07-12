@@ -9,7 +9,7 @@ import { computePots, runSeededDraw } from '../src/engine/drawEngine'
 import { createQualProbAccumulator } from '../src/engine/qualification/probability'
 import { extractQualDrama } from '../src/engine/qualification/drama'
 import { QUAL_FORMAT } from '../src/engine/qualification/formats'
-import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct } from '../src/engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, computeQualHighlights } from '../src/engine/qualification/stats'
 import { pickQualUpset } from '../src/engine/qualification/upset'
 import { runWhatIfScenarios } from '../src/engine/qualification/whatif'
 import { generateUpsetArticle } from '../src/engine/upsetArticle'
@@ -136,6 +136,29 @@ describe('진출 확률 신뢰구간 (개선 G2)', () => {
     expect(probMarginPct(50, 1200)).toBeLessThan(probMarginPct(50, 300))
     // n<=0 방어
     expect(probMarginPct(50, 0)).toBe(0)
+  })
+})
+
+describe('예선 명장면 피드 (개선 F3)', () => {
+  it('드라마 점수 내림차순으로 상위 N개를 뽑고 유형을 분류한다', () => {
+    const all = simulateAllQualification('HL')
+    const hl = computeQualHighlights(all, 6)
+    expect(hl.length).toBe(6)
+    for (let i = 1; i < hl.length; i++) {
+      expect(hl[i - 1].score).toBeGreaterThanOrEqual(hl[i].score)
+    }
+    for (const h of hl) {
+      expect(['대이변', '대승', '골잔치', '명승부']).toContain(h.category)
+      expect(all.byConfederation[h.confederation]).toBeTruthy()
+    }
+  })
+
+  it('같은 시드는 같은 명장면을 재현한다', () => {
+    const a = computeQualHighlights(simulateAllQualification('HL-SAME'))
+    const b = computeQualHighlights(simulateAllQualification('HL-SAME'))
+    expect(a.map((h) => h.match.homeTeamId + h.match.awayTeamId)).toEqual(
+      b.map((h) => h.match.homeTeamId + h.match.awayTeamId),
+    )
   })
 })
 

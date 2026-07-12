@@ -9,7 +9,7 @@ import { playVictory } from '../../engine/sound'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
-import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, type QualTeamStat } from '../../engine/qualification/stats'
+import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMarginPct, computeQualHighlights, type QualTeamStat } from '../../engine/qualification/stats'
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
@@ -120,6 +120,86 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
           <span className="text-[10px] text-gray-500">({bw.margin}점차)</span>
         </div>
       )}
+    </GlassCard>
+  )
+}
+
+const HIGHLIGHT_STYLE: Record<string, string> = {
+  대이변: 'bg-red-500/20 text-red-300',
+  대승: 'bg-emerald-500/20 text-emerald-300',
+  골잔치: 'bg-sky-500/20 text-sky-300',
+  명승부: 'bg-amber-500/20 text-amber-300',
+}
+
+/** 예선 명장면 피드 (F3). 드라마 점수 상위 경기들을 유형 태그와 함께 보여준다. */
+function QualHighlightsCard({ result, onSelectMatch }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void }) {
+  const highlights = useMemo(() => computeQualHighlights(result, 6), [result])
+  if (highlights.length === 0) return null
+  return (
+    <GlassCard className="p-4">
+      <h3 className="mb-3 text-sm font-bold text-amber-300">🎬 예선 명장면</h3>
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {highlights.map((h, i) => (
+          <button
+            key={i}
+            onClick={() => onSelectMatch(h.match)}
+            className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-left text-xs hover:bg-white/10"
+          >
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${HIGHLIGHT_STYLE[h.category] ?? 'bg-white/10 text-gray-300'}`}>
+              {h.category}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-right text-gray-300">
+              {ALL_NATIONS_BY_ID[h.match.homeTeamId]?.nameKo ?? h.match.homeTeamId}
+            </span>
+            <span className="shrink-0 font-bold tabular-nums text-white">{h.match.homeGoals}-{h.match.awayGoals}</span>
+            <span className="min-w-0 flex-1 truncate text-gray-300">
+              {ALL_NATIONS_BY_ID[h.match.awayTeamId]?.nameKo ?? h.match.awayTeamId}
+            </span>
+            <span className="shrink-0 text-[9px] text-gray-600">{CONFEDERATION_LABEL_KO[h.confederation as Confederation] ?? h.confederation}</span>
+          </button>
+        ))}
+      </div>
+    </GlassCard>
+  )
+}
+
+/** 대륙 예선 개요 그리드 (H2). 전 대륙 진행·슬롯·대표 진출국을 한눈에. */
+function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult; onSelect: (c: Confederation) => void }) {
+  return (
+    <GlassCard className="p-4">
+      <h3 className="mb-3 text-sm font-bold text-gray-200">🗺️ 대륙 예선 개요</h3>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {CONFEDS.map((c) => {
+          const r = result.byConfederation[c]
+          if (!r) return null
+          const participants = new Set(r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])).size
+          const topQualifier = r.qualified[0]
+          return (
+            <button
+              key={c}
+              onClick={() => onSelect(c)}
+              className="rounded-lg border border-white/10 bg-white/5 p-3 text-left transition-colors hover:bg-white/10"
+            >
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-gray-200">{CONFEDERATION_LABEL_KO[c]}</span>
+                <span className="flex gap-1">
+                  <span className="rounded bg-emerald-500/20 px-1 text-[9px] font-bold tabular-nums text-emerald-300">직행 {r.qualified.length}</span>
+                  {r.playoff.length > 0 && (
+                    <span className="rounded bg-amber-500/20 px-1 text-[9px] font-bold tabular-nums text-amber-300">PO {r.playoff.length}</span>
+                  )}
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500">{participants}팀 · {r.groups.length}개 조 · {r.matchdays}R</p>
+              {topQualifier && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-300">
+                  <span className="text-[9px] text-gray-500">대표</span>
+                  <NationLabel teamId={topQualifier} />
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
     </GlassCard>
   )
 }
@@ -741,6 +821,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </p>
           )}
 
+          <QualOverviewCard result={result} onSelect={setConfed} />
+
           <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />
 
           <GlassCard className="p-4">
@@ -845,6 +927,8 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </GlassCard>
 
           <QualStatsCard result={result} />
+
+          <QualHighlightsCard result={result} onSelectMatch={setSelMatch} />
 
           <QualUpsetArticleCard result={result} />
 

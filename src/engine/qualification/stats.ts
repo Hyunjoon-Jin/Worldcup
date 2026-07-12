@@ -1,4 +1,4 @@
-import { nationsByConfederation } from '../../data/nations'
+import { nationsByConfederation, ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { HOST_SLOTS } from '../../data/hostSlots'
 import type { AllQualificationResult } from './index'
@@ -47,6 +47,45 @@ export interface QualStats {
   bestDefense: QualTeamStat[]
   mostWins: QualTeamStat[]
   biggestWin: { match: QualMatch; margin: number } | null
+}
+
+/** 예선 명장면 항목(F3). */
+export interface QualHighlight {
+  match: QualMatch
+  confederation: string
+  category: '대이변' | '대승' | '골잔치' | '명승부'
+  score: number
+}
+
+/**
+ * 예선 명장면 피드(F3). 모든 경기를 '드라마 점수'(이변 격차 + 골 차 + 총 득점)로 매겨
+ * 상위 N개를 뽑고 유형을 분류한다. 같은 결과는 결정적으로 재현된다.
+ */
+export function computeQualHighlights(all: AllQualificationResult, topN = 6): QualHighlight[] {
+  const scored: QualHighlight[] = []
+  for (const confed of Object.keys(all.byConfederation)) {
+    for (const m of all.byConfederation[confed].matches) {
+      const isDraw = m.homeGoals === m.awayGoals
+      const winnerId = m.homeGoals >= m.awayGoals ? m.homeTeamId : m.awayTeamId
+      const loserId = m.homeGoals >= m.awayGoals ? m.awayTeamId : m.homeTeamId
+      const w = ALL_NATIONS_BY_ID[winnerId]
+      const l = ALL_NATIONS_BY_ID[loserId]
+      if (!w || !l) continue
+      const margin = Math.abs(m.homeGoals - m.awayGoals)
+      const total = m.homeGoals + m.awayGoals
+      const upset = isDraw ? 0 : Math.max(0, w.fifaRankApprox - l.fifaRankApprox) // 양수 = 약체 승
+      const score = upset + margin * 3 + total * 1.5
+      let category: QualHighlight['category']
+      if (upset >= 20) category = '대이변'
+      else if (margin >= 4) category = '대승'
+      else if (total >= 6) category = '골잔치'
+      else category = '명승부'
+      scored.push({ match: m, confederation: confed, category, score })
+    }
+  }
+  // 점수 내림차순, 동점은 결정적으로(팀 조합) 정렬
+  scored.sort((a, b) => b.score - a.score || (a.match.homeTeamId + a.match.awayTeamId).localeCompare(b.match.homeTeamId + b.match.awayTeamId))
+  return scored.slice(0, topN)
 }
 
 /**
