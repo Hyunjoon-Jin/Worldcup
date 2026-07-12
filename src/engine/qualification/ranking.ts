@@ -77,10 +77,23 @@ export function applyMatchElo(
   points[m.awayTeamId] = a + importance * (wAway - expectedResult(a, h))
 }
 
-/** 참가국들의 초기 Elo 점수 맵. */
+/** 참가국들의 초기 Elo 점수 맵(정적 FIFA 랭킹 근사). */
 export function initRankingPoints(teamIds: string[]): Record<string, number> {
   const p: Record<string, number> = {}
   for (const id of teamIds) p[id] = basePointsFromRank(ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 100)
+  return p
+}
+
+/**
+ * 시작 점수 맵을 만든다. carried(이전 대회에서 이월된 FIFA 점수)가 있으면 그 값을 우선 쓰고,
+ * 없는 팀만 정적 근사(fifaRankApprox)로 채운다. 커리어 모드에서 대회를 거듭해도 FIFA 점수가
+ * 이어지도록(본선 성적이 다음 대회로 회귀하지 않도록) 한다.
+ */
+export function resolveBasePoints(teamIds: string[], carried?: Record<string, number>): Record<string, number> {
+  const p: Record<string, number> = {}
+  for (const id of teamIds) {
+    p[id] = carried?.[id] ?? basePointsFromRank(ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 100)
+  }
   return p
 }
 
@@ -104,6 +117,27 @@ export interface FinalsResults {
 export function applyFinalsElo(points: Record<string, number>, finals: FinalsResults): void {
   for (const m of finals.groupMatches) applyMatchElo(points, m, IMPORTANCE_WC_GROUP)
   for (const m of finals.knockoutMatches) applyMatchElo(points, m, wcKnockoutImportance(m.round))
+}
+
+/**
+ * 한 대회(예선 전체 + 본선 전체)가 끝난 뒤의 FIFA 점수 맵을 계산한다(커리어 이월용).
+ * carried(이전 대회 이월 점수)를 시작점으로, 이번 대회 모든 예선 경기와 본선 경기를 누적 적용한다.
+ * 결과를 다음 대회의 시작 점수로 저장하면, 본선까지 반영된 랭킹이 다음 대회로 이어진다.
+ * 이번 대회에 참가하지 않은 국가도 이월 점수를 그대로 유지하도록 모든 국가를 포함한다.
+ */
+export function editionEndRankingPoints(
+  all: AllQualificationResult,
+  finals: FinalsResults,
+  carriedBase?: Record<string, number>,
+): Record<string, number> {
+  const ids = Object.keys(ALL_NATIONS_BY_ID)
+  const points = resolveBasePoints(ids, carriedBase)
+  const allQual = Object.values(all.byConfederation)
+    .flatMap((r) => r.matches)
+    .sort((a, b) => a.matchday - b.matchday)
+  for (const m of allQual) applyMatchElo(points, m)
+  applyFinalsElo(points, finals)
+  return points
 }
 
 /** Elo 점수 → 갱신 전력(overall은 점수 곡선, 공수 성향은 기존 팀 배분 유지). */
@@ -210,7 +244,12 @@ export interface LiveRankRow {
  * 반영한 전체 참가국 순위표를 점수순으로 반환한다. 본선 경기는 개최국(예선 미참가)도 포함하므로
  * 개최국이 랭킹에 함께 나타난다.
  */
-export function computeLiveRanking(all: AllQualificationResult, played: QualMatch[], finals?: FinalsResults): LiveRankRow[] {
+export function computeLiveRanking(
+  all: AllQualificationResult,
+  played: QualMatch[],
+  finals?: FinalsResults,
+  carriedBase?: Record<string, number>,
+): LiveRankRow[] {
   const idSet = new Set(qualParticipantIds(all))
   if (finals) {
     for (const m of finals.groupMatches) {
@@ -222,8 +261,10 @@ export function computeLiveRanking(all: AllQualificationResult, played: QualMatc
       idSet.add(m.awayTeamId)
     }
   }
+  // 이월 점수가 있는 팀(이전 대회 참가국 등)도 순위표에 포함한다.
+  if (carriedBase) for (const id of Object.keys(carriedBase)) idSet.add(id)
   const ids = [...idSet]
-  const base = initRankingPoints(ids)
+  const base = resolveBasePoints(ids, carriedBase)
   const now = updateRankingPoints(base, played)
   if (finals) applyFinalsElo(now, finals)
   const baseRanks = rankMap(ids, base)
@@ -284,9 +325,12 @@ export function computeRankingTrend(
   all: AllQualificationResult,
   days: Array<{ date: string; label: string; matches: Array<{ match: QualMatch }> }>,
   teamIds: string[],
+  carriedBase?: Record<string, number>,
 ): TeamTrend[] {
-  const ids = qualParticipantIds(all)
-  const points = initRankingPoints(ids)
+  const idSet = new Set(qualParticipantIds(all))
+  if (carriedBase) for (const id of Object.keys(carriedBase)) idSet.add(id)
+  const ids = [...idSet]
+  const points = resolveBasePoints(ids, carriedBase)
   const trends: TeamTrend[] = teamIds.map((id) => ({ teamId: id, series: [] }))
   // 시작점(경기 전) 기록
   const startRanks = rankMap(ids, points)

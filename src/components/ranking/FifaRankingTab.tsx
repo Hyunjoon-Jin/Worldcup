@@ -4,6 +4,7 @@ import { TeamLink } from '../common/TeamLink'
 import { ALL_NATIONS } from '../../data/nations'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
+import { useCareerStore } from '../../store/useCareerStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { flattenPlayed, collectPlayedByConfed } from '../../engine/qualification/conditional'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
@@ -49,9 +50,12 @@ function TrendChart({ trend }: { trend: TeamTrend[] }) {
   )
 }
 
-/** 대회 진행 전 기본 FIFA 랭킹(경기 없음). */
-function baseRanking(): LiveRankRow[] {
-  return ALL_NATIONS.map((n) => ({ teamId: n.id, points: Math.round(basePointsFromRank(n.fifaRankApprox)) }))
+/** 대회 진행 전 기본 FIFA 랭킹(경기 없음). carried(이월 점수)가 있으면 그 점수로 표시한다. */
+function baseRanking(carried?: Record<string, number>): LiveRankRow[] {
+  return ALL_NATIONS.map((n) => ({
+    teamId: n.id,
+    points: Math.round(carried?.[n.id] ?? basePointsFromRank(n.fifaRankApprox)),
+  }))
     .sort((a, b) => b.points - a.points)
     .map((r, i) => ({
       teamId: r.teamId,
@@ -70,9 +74,16 @@ export function FifaRankingTab() {
   const revealed = useQualificationStore((s) => s.revealed)
   const groupMatches = useProgressStore((s) => s.groupMatches)
   const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
+  const rankingBase = useCareerStore((s) => s.rankingBase)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const [query, setQuery] = useState('')
   const [sortMode, setSortMode] = useState<'rank' | 'up' | 'down'>('rank')
+
+  // 이전 대회들에서 이월된 FIFA 점수(있으면 시작 점수로 사용 → 본선 반영 랭킹이 다음 대회로 이어짐).
+  const carried = useMemo(
+    () => (Object.keys(rankingBase).length > 0 ? rankingBase : undefined),
+    [rankingBase],
+  )
 
   // 진행된 본선 경기(조별리그 + 토너먼트 결과)를 모아 랭킹에 반영한다.
   const finals = useMemo<FinalsResults>(() => {
@@ -84,9 +95,9 @@ export function FifaRankingTab() {
   const hasFinals = finals.groupMatches.length > 0 || finals.knockoutMatches.length > 0
 
   const ranking = useMemo<LiveRankRow[]>(() => {
-    if (!result) return baseRanking()
-    return computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals)
-  }, [result, revealed, finals])
+    if (!result) return baseRanking(carried)
+    return computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried)
+  }, [result, revealed, finals, carried])
 
   const calendar = useMemo(() => (result ? buildQualCalendar(result) : []), [result])
   const dayCount = useMemo(
@@ -99,8 +110,8 @@ export function FifaRankingTab() {
     if (!result || dayCount === 0) return []
     const ids = ranking.slice(0, 6).map((r) => r.teamId)
     if (myTeamId && !ids.includes(myTeamId) && ranking.some((r) => r.teamId === myTeamId)) ids.push(myTeamId)
-    return computeRankingTrend(result, calendar.slice(0, dayCount), ids)
-  }, [result, calendar, dayCount, ranking, myTeamId])
+    return computeRankingTrend(result, calendar.slice(0, dayCount), ids, carried)
+  }, [result, calendar, dayCount, ranking, myTeamId, carried])
 
   const sorted = useMemo(() => {
     let rows = ranking

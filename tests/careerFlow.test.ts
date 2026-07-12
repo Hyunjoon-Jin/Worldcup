@@ -4,6 +4,8 @@ import { useProgressStore } from '../src/store/useProgressStore'
 import { useQualificationStore } from '../src/store/useQualificationStore'
 import { advanceToNextEdition } from '../src/store/tournamentActions'
 import { getCurrentHostIds } from '../src/engine/hostContext'
+import { basePointsFromRank } from '../src/engine/qualification/ranking'
+import { ALL_NATIONS_BY_ID } from '../src/data/nations'
 import type { KnockoutMatch } from '../src/types/match'
 
 function completedFinals(champion: string, runnerUp: string) {
@@ -58,6 +60,19 @@ describe('advanceToNextEdition — 다음 대회로 흐름 이어가기', () => 
     // 이전 본선 진행은 초기화된다
     expect(useProgressStore.getState().phase).not.toBe('complete')
     expect(useProgressStore.getState().champion).toBeNull()
+  })
+
+  it('본선까지 반영된 FIFA 점수가 다음 대회로 이월된다(회귀하지 않는다)', () => {
+    // 실제 흐름처럼 예선 결과가 있어야 이번 대회 점수를 계산해 이월할 수 있다.
+    useQualificationStore.getState().simulate('CARRY-TEST')
+    useProgressStore.setState(completedFinals('BRA', 'ARG'))
+    advanceToNextEdition()
+    const carried = useCareerStore.getState().rankingBase
+    // 이월 점수가 저장되었고, 우승국(BRA)의 이월 점수는 정적 기본값보다 높다(본선 성적 반영).
+    expect(Object.keys(carried).length).toBeGreaterThan(0)
+    const braCarried = carried['BRA']
+    const braStatic = basePointsFromRank(ALL_NATIONS_BY_ID['BRA'].fifaRankApprox)
+    expect(braCarried).toBeGreaterThan(braStatic)
   })
 
   it('본선이 끝나지 않았으면 아무 것도 하지 않는다', () => {

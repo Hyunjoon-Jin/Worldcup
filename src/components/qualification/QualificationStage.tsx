@@ -7,7 +7,7 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useSoundStore } from '../../store/useSoundStore'
 import { playVictory } from '../../engine/sound'
-import { startFinalsFromQualification, advanceToNextEdition } from '../../store/tournamentActions'
+import { prepareFinalsDrawFromQualification, advanceToNextEdition } from '../../store/tournamentActions'
 import { useCareerStore } from '../../store/useCareerStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
@@ -200,12 +200,15 @@ function RankingTrendChart({ trend }: { trend: TeamTrend[] }) {
  */
 function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult; myTeamId: string | null }) {
   const revealed = useQualificationStore((s) => s.revealed)
+  const rankingBase = useCareerStore((s) => s.rankingBase)
   const [sortMode, setSortMode] = useState<'rank' | 'up' | 'down'>('rank')
   const [expanded, setExpanded] = useState(false)
 
+  // 이전 대회들에서 이월된 FIFA 점수(있으면 시작 점수로 사용).
+  const carried = useMemo(() => (Object.keys(rankingBase).length > 0 ? rankingBase : undefined), [rankingBase])
   const calendar = useMemo(() => buildQualCalendar(result), [result])
   const played = useMemo(() => flattenPlayed(collectPlayedByConfed(result, revealed)), [result, revealed])
-  const ranking = useMemo(() => computeLiveRanking(result, played), [result, played])
+  const ranking = useMemo(() => computeLiveRanking(result, played, undefined, carried), [result, played, carried])
 
   // 진행된 경기일까지의 변동 추이(상위 5팀 + 내 팀)
   const dayCount = useMemo(
@@ -220,8 +223,8 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
     return top
   }, [ranking, myTeamId])
   const trend = useMemo(
-    () => computeRankingTrend(result, calendar.slice(0, dayCount), chartIds),
-    [result, calendar, dayCount, chartIds],
+    () => computeRankingTrend(result, calendar.slice(0, dayCount), chartIds, carried),
+    [result, calendar, dayCount, chartIds, carried],
   )
 
   const sorted = useMemo(() => {
@@ -1251,11 +1254,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 <GlassButton
                   onClick={() => {
                     // 예선 폼(Elo 변동)을 본선 컨디션에 반영 → 우승 확률이 예선 실황을 반영.
-                    startFinalsFromQualification(result.qualified48, seed ?? undefined, formOffsetsFromResults(result))
+                    // 조추첨을 즉시 끝내지 않고 "준비"만 해, 조추첨 화면에서 순서대로 진행하게 한다.
+                    prepareFinalsDrawFromQualification(result.qualified48, formOffsetsFromResults(result))
                     onStartFinals?.()
                   }}
                 >
-                  이 결과로 본선 조추첨 시작 →
+                  🎲 본선 조추첨으로 이동 →
                 </GlassButton>
               </div>
             </div>
@@ -1283,9 +1287,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               })}
             </div>
 
-            <details className="group mt-4 border-t border-white/10 pt-3">
+            <details open className="group mt-4 border-t border-white/10 pt-3">
               <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold text-gray-300">
-                <span>🎩 본선 포트 배정 미리보기 (랭킹 기준)</span>
+                <span>🎩 본선 포트 배정 확인 (랭킹 기준)</span>
                 <span className="text-gray-500 transition-transform group-open:rotate-180">▾</span>
               </summary>
               {(() => {

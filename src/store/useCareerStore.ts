@@ -14,9 +14,12 @@ interface CareerStore {
   hostIds: string[]
   /** 대회를 이어가며 누적되는 팀별 "커리어 폼"(성적 흐름). 다음 대회 시작 전력에 반영된다. */
   carriedForm: Record<string, number>
+  /** 이전 대회들에서 이월된 FIFA 랭킹 점수(팀ID→점수). 비어 있으면 정적 기본값을 쓴다.
+   *  본선까지 반영된 랭킹이 다음 대회로 이어지도록(회귀하지 않도록) 유지한다. */
+  rankingBase: Record<string, number>
   /** 다음 대회로 넘어간다. 방금 끝난 대회의 성적 보정(finalDeltas)을 커리어 폼에 절반 반영하고,
-   *  다음 대회 개최국을 로테이션에서 선정한다. */
-  advanceEdition: (finalDeltas: Record<string, number>) => void
+   *  다음 대회 개최국을 로테이션에서 선정한다. endRankingPoints가 있으면 이월 FIFA 점수로 저장한다. */
+  advanceEdition: (finalDeltas: Record<string, number>, endRankingPoints?: Record<string, number>) => void
   /** 커리어를 처음(2026)으로 되돌린다. */
   reset: () => void
 }
@@ -30,8 +33,9 @@ export const useCareerStore = create<CareerStore>()(
       year: first.year,
       hostIds: first.hostIds,
       carriedForm: {},
-      advanceEdition: (finalDeltas) => {
-        const { editionIndex, carriedForm } = get()
+      rankingBase: {},
+      advanceEdition: (finalDeltas, endRankingPoints) => {
+        const { editionIndex, carriedForm, rankingBase } = get()
         // 커리어 폼 = 기존의 절반 + 이번 대회 성적의 절반(누적되되 발산하지 않도록 감쇠)
         const nextForm: Record<string, number> = { ...carriedForm }
         const ids = new Set([...Object.keys(carriedForm), ...Object.keys(finalDeltas)])
@@ -41,11 +45,18 @@ export const useCareerStore = create<CareerStore>()(
         }
         const nextEd = hostEditionAt(editionIndex + 1)
         setCurrentHosts(nextEd.hostIds)
-        set({ editionIndex: editionIndex + 1, year: nextEd.year, hostIds: nextEd.hostIds, carriedForm: nextForm })
+        set({
+          editionIndex: editionIndex + 1,
+          year: nextEd.year,
+          hostIds: nextEd.hostIds,
+          carriedForm: nextForm,
+          // 본선까지 반영된 FIFA 점수를 다음 대회 시작 점수로 이월(회귀 방지).
+          rankingBase: endRankingPoints ?? rankingBase,
+        })
       },
       reset: () => {
         setCurrentHosts(first.hostIds)
-        set({ editionIndex: 0, year: first.year, hostIds: first.hostIds, carriedForm: {} })
+        set({ editionIndex: 0, year: first.year, hostIds: first.hostIds, carriedForm: {}, rankingBase: {} })
       },
     }),
     {
