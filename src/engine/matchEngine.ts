@@ -1,33 +1,42 @@
 import { TEAMS_BY_ID } from '../data/teams'
 import { useConditionStore } from '../store/useConditionStore'
+import { useMomentumStore } from '../store/useMomentumStore'
 import { useSandboxStore } from '../store/useSandboxStore'
 import type { TeamRatings } from '../types/team'
 import {
   EXPECTED_GOALS,
   FORECAST_GOAL_CAP,
-  HOST_ADVANTAGE,
   PENALTY,
   UPSET_RATING_GAP,
   clamp,
+  hostAdvantageFor,
 } from './config'
 
-/** 이번 대회의 팀별 컨디션(useConditionStore)을 폼 능력치에 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다. */
+/**
+ * 이번 대회의 팀별 컨디션(useConditionStore)과 진행 중 모멘텀(useMomentumStore, C4)을 폼 능력치에
+ * 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다.
+ */
 export function getRatings(teamId: string): TeamRatings {
   const team = TEAMS_BY_ID[teamId]
   const conditionOffset = useConditionStore.getState().offsets[teamId] ?? 0
-  const conditioned: TeamRatings = { ...team.baseRatings, form: clamp(team.baseRatings.form + conditionOffset, 30, 99) }
+  const momentumOffset = useMomentumStore.getState().offsets[teamId] ?? 0
+  const conditioned: TeamRatings = {
+    ...team.baseRatings,
+    form: clamp(team.baseRatings.form + conditionOffset + momentumOffset, 30, 99),
+  }
   const override = useSandboxStore.getState().overrides[teamId]
   return override ? { ...conditioned, ...override } : conditioned
 }
 
 // 실제 축구 경기의 평균 득점(팀당 약 1.3골)에 가깝게 보정하고, 극단적인 능력치 차이에서도
 // 대량 득점 블로아웃이 지나치게 자주 나오지 않도록 민감도를 낮추고 상하한을 좁혔다.
-function expectedGoals(attacker: TeamRatings, defender: TeamRatings, isHostTeam: boolean): number {
+// hostAdvantage는 개최국 홈 경기일 때만 양수(팀별 세분화, C2).
+function expectedGoals(attacker: TeamRatings, defender: TeamRatings, hostAdvantage: number): number {
   const strengthDiff =
     attacker.attack -
     defender.defense +
     (attacker.form - EXPECTED_GOALS.formBaseline) * EXPECTED_GOALS.formWeight +
-    (isHostTeam ? HOST_ADVANTAGE : 0)
+    hostAdvantage
   return clamp(EXPECTED_GOALS.base + strengthDiff / EXPECTED_GOALS.divisor, EXPECTED_GOALS.min, EXPECTED_GOALS.max)
 }
 
@@ -63,10 +72,10 @@ export interface MatchForecast {
 export function forecastMatch(homeTeamId: string, awayTeamId: string): MatchForecast {
   const home = getRatings(homeTeamId)
   const away = getRatings(awayTeamId)
-  const homeIsHost = TEAMS_BY_ID[homeTeamId].isHost
-  const awayIsHost = TEAMS_BY_ID[awayTeamId].isHost
-  const homeLambda = expectedGoals(home, away, homeIsHost)
-  const awayLambda = expectedGoals(away, home, awayIsHost)
+  const homeHostAdv = TEAMS_BY_ID[homeTeamId].isHost ? hostAdvantageFor(homeTeamId) : 0
+  const awayHostAdv = TEAMS_BY_ID[awayTeamId].isHost ? hostAdvantageFor(awayTeamId) : 0
+  const homeLambda = expectedGoals(home, away, homeHostAdv)
+  const awayLambda = expectedGoals(away, home, awayHostAdv)
 
   let homeWin = 0
   let draw = 0
@@ -91,11 +100,11 @@ export interface SimulatedScore {
 export function simulateMatch(homeTeamId: string, awayTeamId: string): SimulatedScore {
   const home = getRatings(homeTeamId)
   const away = getRatings(awayTeamId)
-  const homeIsHost = TEAMS_BY_ID[homeTeamId].isHost
-  const awayIsHost = TEAMS_BY_ID[awayTeamId].isHost
+  const homeHostAdv = TEAMS_BY_ID[homeTeamId].isHost ? hostAdvantageFor(homeTeamId) : 0
+  const awayHostAdv = TEAMS_BY_ID[awayTeamId].isHost ? hostAdvantageFor(awayTeamId) : 0
 
-  const homeLambda = expectedGoals(home, away, homeIsHost)
-  const awayLambda = expectedGoals(away, home, awayIsHost)
+  const homeLambda = expectedGoals(home, away, homeHostAdv)
+  const awayLambda = expectedGoals(away, home, awayHostAdv)
 
   return {
     homeGoals: samplePoisson(homeLambda),
@@ -124,7 +133,9 @@ export function simulateKnockoutMatch(homeTeamId: string, awayTeamId: string): S
   const away = getRatings(awayTeamId)
   const homeStrength = home.overall + home.form * PENALTY.formFactor + PENALTY.baseline
   const awayStrength = away.overall + away.form * PENALTY.formFactor + PENALTY.baseline
-  const homeWinProb = homeStrength / (homeStrength + awayStrength)
+  const rawProb = homeStrength / (homeStrength + awayStrength)
+  // 실력차의 영향을 줄여 50:50에 가깝게 — 승부차기의 높은 변동성 반영 (C3)
+  const homeWinProb = 0.5 + (rawProb - 0.5) * PENALTY.dampen
 
   return {
     homeGoals,

@@ -18,6 +18,12 @@ interface RawTeam {
 
 // 2026 북중미 월드컵 실제 본선 진출 48개국. pot(1-4)은 2025.12.5 실제 드로우의 포트 구성을 따른다.
 // fifaRankApprox(rank)는 본 시뮬레이터용 근사치이며, 샌드박스 모드에서 조정 가능하다.
+//
+// [데이터 출처/기준] (G1)
+//   - 포트 구성: 2025-12-05 FIFA 공식 조추첨 포트(개최국 3팀 포트1 고정)
+//   - rank: FIFA 랭킹 근사치(기준일 2025-12) — 본선 진출 48팀 내 상대 서열용
+//   - styleBias: 공격/수비 성향 근사치(-10 수비적 ~ +10 공격적), 시뮬레이터 튜닝값
+//   갱신 시 이 블록의 기준일을 함께 수정할 것.
 const RAW_TEAMS: RawTeam[] = [
   // --- Pot 1: 개최국 3팀 + 랭킹 상위 9팀 ---
   { id: 'ARG', nameKo: '아르헨티나', nameEn: 'Argentina', code: 'ARG', iso2: 'AR', confederation: 'CONMEBOL', pot: 1, rank: 1, styleBias: 6 },
@@ -77,8 +83,9 @@ const RAW_TEAMS: RawTeam[] = [
 ]
 
 function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
-  // rank 1 -> ~97, rank 48 -> ~46, roughly linear with a soft floor
-  const overall = clamp(Math.round(R.overallTop - (rank - 1) * R.overallSlope), R.overallFloor, R.overallCap)
+  // 거듭제곱 곡선: 상위권은 밀집, 하위로 갈수록 격차 확대 (C1)
+  const t = (rank - 1) / (R.totalRanks - 1)
+  const overall = clamp(Math.round(R.overallTop - R.overallSpan * Math.pow(t, R.overallExponent)), R.overallFloor, R.overallCap)
   const styleShift = Math.round(styleBias * R.styleFactor)
   const attack = clamp(overall + styleShift, R.attackFloor, R.attackCap)
   const defense = clamp(overall - styleShift, R.attackFloor, R.attackCap)

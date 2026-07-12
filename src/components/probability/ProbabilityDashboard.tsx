@@ -7,9 +7,25 @@ import { ProbBar } from './ProbBar'
 import { STAGES, type NumericKey } from './probabilityStages'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
+import { useMomentumStore } from '../../store/useMomentumStore'
 import { ITERATION_PRESETS, type IterationPreset } from '../../engine/config'
 
 const PRESET_LABEL: Record<IterationPreset, string> = { fast: '빠름', standard: '표준', precise: '정밀' }
+
+function MomentumTag({ value }: { value?: number }) {
+  if (value == null || Math.abs(value) < 2) return null
+  const rising = value > 0
+  return (
+    <span
+      className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${
+        rising ? 'bg-orange-500/20 text-orange-300' : 'bg-sky-500/20 text-sky-300'
+      }`}
+      title={`최근 성적 기반 폼 ${rising ? '+' : ''}${value}`}
+    >
+      {rising ? '🔥 상승세' : '🥶 하락세'}
+    </span>
+  )
+}
 
 function CrisisTag({ pct }: { pct?: number }) {
   if (pct == null) return null
@@ -27,6 +43,7 @@ export function ProbabilityDashboard() {
   const { result, iterations, isComputing, progress, setPreset, run } = useSimulationStore()
   const [sortKey, setSortKey] = useState<NumericKey>('championPct')
   const crisisByTeam = useCrisisTeams()
+  const momentumByTeam = useMomentumStore((s) => s.offsets)
 
   useEffect(() => {
     if (!result) run()
@@ -110,6 +127,7 @@ export function ProbabilityDashboard() {
                   <td className="py-1.5">
                     <div className="flex items-center gap-1.5">
                       <TeamLink teamId={row.teamId} className="font-medium whitespace-nowrap text-gray-100" />
+                      <MomentumTag value={momentumByTeam[row.teamId]} />
                       <CrisisTag pct={crisisByTeam[row.teamId]?.pct} />
                     </div>
                   </td>
@@ -147,6 +165,7 @@ export function ProbabilityDashboard() {
               <span className="w-5 shrink-0 text-center text-xs text-gray-500">{idx + 1}</span>
               <TeamLink teamId={row.teamId} className="min-w-0 font-medium text-gray-100" />
               <span className="shrink-0 text-[10px] text-gray-500">FIFA {TEAMS_BY_ID[row.teamId].fifaRankApprox}위</span>
+              <MomentumTag value={momentumByTeam[row.teamId]} />
               <CrisisTag pct={crisisByTeam[row.teamId]?.pct} />
             </div>
             <div className="space-y-1">
