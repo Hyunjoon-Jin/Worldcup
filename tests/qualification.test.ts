@@ -164,6 +164,35 @@ describe('예선 진출 확률 (지역예선 Q5)', () => {
   })
 })
 
+describe('매치데이 구조 (개선 B1)', () => {
+  it('CONMEBOL(10팀 홈&어웨이)은 18라운드, 경기마다 유효 matchday', () => {
+    const all = simulateAllQualification('MD')
+    const c = all.byConfederation.CONMEBOL
+    expect(c.matchdays).toBe(18)
+    for (const m of c.matches) {
+      expect(m.matchday).toBeGreaterThanOrEqual(1)
+      expect(m.matchday).toBeLessThanOrEqual(18)
+    }
+  })
+  it('UEFA(4팀 조 단판)는 3라운드', () => {
+    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(3)
+  })
+  it('groups 구조가 노출된다(H1)', () => {
+    const all = simulateAllQualification('MD')
+    expect(all.byConfederation.UEFA.groups.length).toBe(8)
+    expect(all.byConfederation.CONMEBOL.groups.length).toBe(1)
+  })
+})
+
+describe('능력치 주입 (개선 D1)', () => {
+  it('약체(볼리비아)를 최강으로 키우면 본선에 진출한다', () => {
+    const boosted = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
+    boosted.BOL = { attack: 99, defense: 99, form: 99, overall: 99 }
+    const res = simulateAllQualification('D1TEST', boosted)
+    expect(res.qualified48).toContain('BOL')
+  })
+})
+
 describe('예선 드라마 (지역예선 Q6)', () => {
   it('깜짝 진출/충격 탈락을 랭킹 대조로 뽑고 개최국은 제외한다', () => {
     const all = simulateAllQualification('DRAMA')

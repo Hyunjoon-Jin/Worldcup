@@ -39,8 +39,12 @@ interface QualificationStore {
   /** 본선 진출 확률(%) — 계산 전 null (Q5) */
   probabilities: Record<string, number> | null
   probLoading: boolean
+  /** 대륙별 현재까지 공개된 라운드(B1 라운드별 진행). 기본은 전체 공개. */
+  revealed: Record<string, number>
   simulate: (seed?: string) => void
   computeProbabilities: () => void
+  /** 특정 대륙의 공개 라운드를 설정한다. */
+  setRevealed: (confed: string, matchday: number) => void
   reset: () => void
 }
 
@@ -61,10 +65,15 @@ export const useQualificationStore = create<QualificationStore>()(
       result: null,
       probabilities: null,
       probLoading: false,
+      revealed: {},
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
-        set({ seed: usedSeed, result: simulateAllQualification(usedSeed, buildQualRatings()), probabilities: null })
+        const result = simulateAllQualification(usedSeed, buildQualRatings())
+        // 기본은 전체 라운드 공개(기존 UX 유지). "처음부터 관전"으로 되돌릴 수 있다.
+        const revealed = Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
+        set({ seed: usedSeed, result, probabilities: null, revealed })
       },
+      setRevealed: (confed, matchday) => set({ revealed: { ...get().revealed, [confed]: matchday } }),
       computeProbabilities: () => {
         const runId = ++probRunId
         const seedBase = get().seed ?? 'PROB'
@@ -107,13 +116,13 @@ export const useQualificationStore = create<QualificationStore>()(
           probWorker.terminate()
           probWorker = null
         }
-        set({ seed: null, result: null, probabilities: null, probLoading: false })
+        set({ seed: null, result: null, probabilities: null, probLoading: false, revealed: {} })
       },
     }),
     {
       name: 'wc2026-qualification-store',
-      version: 2,
-      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities }),
+      version: 3,
+      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, revealed: s.revealed }),
     },
   ),
 )

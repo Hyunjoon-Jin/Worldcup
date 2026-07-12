@@ -2,9 +2,8 @@ import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { QUALIFIER_HOME_ADVANTAGE } from '../config'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
 import { computeStandings, rankGroupTeams } from '../tiebreakers'
-import type { MatchResult } from '../../types/match'
 import type { TeamRatings } from '../../types/team'
-import type { QualificationResult } from '../../types/qualification'
+import type { QualificationResult, QualMatch } from '../../types/qualification'
 
 export interface QualConfig {
   confederation: string
@@ -16,6 +15,33 @@ export interface QualConfig {
   playoff: number
   /** 조 내 홈&어웨이(2경기)면 true, 단판이면 false */
   doubleRound?: boolean
+}
+
+/**
+ * 서클(circle) 방식 라운드로빈 일정 — 각 경기에 라운드(matchday)를 부여한다 (B1).
+ * 홀수 팀이면 부전승(bye)을 넣어 처리한다.
+ */
+function roundRobinRounds(teams: string[]): Array<{ home: string; away: string; matchday: number }> {
+  const arr = [...teams]
+  if (arr.length % 2 !== 0) arr.push('__BYE__')
+  const n = arr.length
+  const rounds = n - 1
+  const half = n / 2
+  const out: Array<{ home: string; away: string; matchday: number }> = []
+  let rot = arr.slice(1)
+  for (let r = 0; r < rounds; r++) {
+    const day = [arr[0], ...rot]
+    for (let i = 0; i < half; i++) {
+      const a = day[i]
+      const b = day[n - 1 - i]
+      if (a === '__BYE__' || b === '__BYE__') continue
+      // 라운드마다 홈/원정을 번갈아 배정
+      const [home, away] = r % 2 === 0 ? [a, b] : [b, a]
+      out.push({ home, away, matchday: r + 1 })
+    }
+    rot = [rot[rot.length - 1], ...rot.slice(0, -1)]
+  }
+  return out
 }
 
 /** 실력(랭킹) 순으로 뱀 배정(serpentine)해 조를 균형 있게 나눈다. */
@@ -51,29 +77,38 @@ export function simulateGroupQualification(
     (a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox,
   )
   const groups = snakeSeed(sorted, cfg.numGroups)
-  const matches: MatchResult[] = []
+  const matches: QualMatch[] = []
   const groupRankings: string[][] = []
+  let matchdays = 0
 
-  for (const g of groups) {
-    const gm: MatchResult[] = []
-    for (let i = 0; i < g.length; i++) {
-      for (let j = i + 1; j < g.length; j++) {
-        const legs: Array<[string, string]> = cfg.doubleRound
-          ? [
-              [g[i], g[j]],
-              [g[j], g[i]],
-            ]
-          : [[g[i], g[j]]]
-        for (const [home, away] of legs) {
-          const s = simulateScoreRaw(ratings[home], ratings[away], QUALIFIER_HOME_ADVANTAGE, 0, rand)
-          const m: MatchResult = { homeTeamId: home, awayTeamId: away, homeGoals: s.homeGoals, awayGoals: s.awayGoals }
-          gm.push(m)
-          matches.push(m)
+  groups.forEach((g, gi) => {
+    const gm: QualMatch[] = []
+    const schedule = roundRobinRounds(g)
+    const singleRounds = Math.max(1, g.length % 2 === 0 ? g.length - 1 : g.length)
+    for (const { home, away, matchday } of schedule) {
+      const legs: Array<{ home: string; away: string; matchday: number }> = cfg.doubleRound
+        ? [
+            { home, away, matchday },
+            { home: away, away: home, matchday: matchday + singleRounds }, // 2차전(원정 스왑, 뒤쪽 라운드)
+          ]
+        : [{ home, away, matchday }]
+      for (const leg of legs) {
+        const s = simulateScoreRaw(ratings[leg.home], ratings[leg.away], QUALIFIER_HOME_ADVANTAGE, 0, rand)
+        const m: QualMatch = {
+          homeTeamId: leg.home,
+          awayTeamId: leg.away,
+          homeGoals: s.homeGoals,
+          awayGoals: s.awayGoals,
+          matchday: leg.matchday,
+          group: gi,
         }
+        gm.push(m)
+        matches.push(m)
+        matchdays = Math.max(matchdays, leg.matchday)
       }
     }
     groupRankings.push(rankGroupTeams(g, gm))
-  }
+  })
 
   const overall = computeStandings(teams, matches)
   const byRecord = (a: string, b: string) => {
@@ -103,5 +138,6 @@ export function simulateGroupQualification(
     qualified: standings.slice(0, cfg.direct),
     playoff: standings.slice(cfg.direct, cfg.direct + cfg.playoff),
     matches,
+    matchdays,
   }
 }

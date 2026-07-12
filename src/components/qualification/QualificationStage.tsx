@@ -4,7 +4,7 @@ import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { startFinalsFromQualification } from '../../store/tournamentActions'
-import { computeStandings } from '../../engine/tiebreakers'
+import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { extractQualDrama } from '../../engine/qualification/drama'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
@@ -77,9 +77,15 @@ function ConfederationStandings({
 }) {
   const result = useQualificationStore((s) => s.result)
   const probabilities = useQualificationStore((s) => s.probabilities)
+  const revealedMap = useQualificationStore((s) => s.revealed)
+  const setRevealed = useQualificationStore((s) => s.setRevealed)
   const r = result?.byConfederation[confed]
   if (!r) return null
-  const standings = computeStandings(r.standings, r.matches)
+  const total = r.matchdays
+  const revealed = revealedMap[confed] ?? total
+  const full = revealed >= total
+  const shownMatches = r.matches.filter((m) => m.matchday <= revealed)
+  const standings = computeStandings(r.standings, shownMatches)
   const qSet = new Set(r.qualified)
   const pSet = new Set(r.playoff)
   const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
@@ -92,8 +98,25 @@ function ConfederationStandings({
           개최국(멕시코·미국·캐나다)은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
         </p>
       )}
+
+      {/* 라운드별 진행 컨트롤 (B1) */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-gray-300">
+          라운드 <span className="text-emerald-300">{revealed}</span> / {total}
+          {!full && <span className="ml-1 text-[10px] font-normal text-amber-300">진행 중</span>}
+        </span>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setRevealed(confed, 1)} disabled={revealed <= 1} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
+          <button onClick={() => setRevealed(confed, Math.max(1, revealed - 1))} disabled={revealed <= 1} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀</button>
+          <button onClick={() => setRevealed(confed, Math.min(total, revealed + 1))} disabled={full} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">▶ 다음</button>
+          <button onClick={() => setRevealed(confed, total)} disabled={full} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">⏭ 전체</button>
+        </div>
+      </div>
+
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
-        {r.groups.map((groupTeams, gi) => (
+        {r.groups.map((finalOrder, gi) => {
+          const groupTeams = rankGroupTeams(finalOrder, shownMatches.filter((m) => m.group === gi))
+          return (
           <div key={gi}>
             {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{GROUP_LETTERS[gi]}조</p>}
             <div className="overflow-x-auto">
@@ -113,8 +136,8 @@ function ConfederationStandings({
                   {groupTeams.map((teamId, idx) => {
                     const s = standings[teamId]
                     const gd = s.goalsFor - s.goalsAgainst
-                    const direct = qSet.has(teamId)
-                    const po = pSet.has(teamId)
+                    const direct = full && qSet.has(teamId)
+                    const po = full && pSet.has(teamId)
                     return (
                       <tr
                         key={teamId}
@@ -129,7 +152,9 @@ function ConfederationStandings({
                           <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
                         )}
                         <td className="py-1.5 text-right">
-                          {direct ? (
+                          {!full ? (
+                            <span className="text-[10px] text-gray-600">—</span>
+                          ) : direct ? (
                             <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
                           ) : po ? (
                             <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
@@ -143,15 +168,18 @@ function ConfederationStandings({
                 </tbody>
               </table>
             </div>
-            <MatchList teams={groupTeams} matches={r.matches} onSelectMatch={onSelectMatch} />
+            <MatchList teams={groupTeams} matches={shownMatches} onSelectMatch={onSelectMatch} />
           </div>
-        ))}
+          )
+        })}
       </div>
-      {!single && (
-        <p className="mt-3 text-[11px] text-gray-500">
-          ※ 조 순위는 조별 성적, 직행/PO 여부는 전체 대륙 순위(조 1위 우선 → 최고 2위 …)로 결정됩니다.
-        </p>
-      )}
+      <p className="mt-3 text-[11px] text-gray-500">
+        {full
+          ? single
+            ? '※ 상위권 직행, 다음 순위 대륙간 PO로 결정됩니다.'
+            : '※ 조 순위는 조별 성적, 직행/PO 여부는 전체 대륙 순위(조 1위 우선 → 최고 2위 …)로 결정됩니다.'
+          : '※ 진행 중 — 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'}
+      </p>
     </GlassCard>
   )
 }
