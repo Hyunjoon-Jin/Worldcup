@@ -74,14 +74,17 @@ export interface SimKnockout extends SimScore {
   winnerTeamId: string
 }
 
-export function simulateKnockout(
+/** 홈 이점을 명시적으로 받는 순수 녹아웃 시뮬(팀 ID 조회 없음 — 예선/PO 등 임의 팀에 안전). */
+export function simulateKnockoutRaw(
   homeId: string,
   homeR: TeamRatings,
   awayId: string,
   awayR: TeamRatings,
+  homeHostAdv: number,
+  awayHostAdv: number,
   rand: RandomFn,
 ): SimKnockout {
-  const { homeGoals, awayGoals } = simulateScore(homeId, homeR, awayId, awayR, rand)
+  const { homeGoals, awayGoals } = simulateScoreRaw(homeR, awayR, homeHostAdv, awayHostAdv, rand)
   if (homeGoals !== awayGoals) {
     return { homeGoals, awayGoals, wentToPenalties: false, winnerTeamId: homeGoals > awayGoals ? homeId : awayId }
   }
@@ -91,4 +94,14 @@ export function simulateKnockout(
   // 실력차의 영향을 줄여 50:50에 가깝게 — 승부차기의 높은 변동성 반영 (C3)
   const homeWinProb = 0.5 + (rawProb - 0.5) * PENALTY.dampen
   return { homeGoals, awayGoals, wentToPenalties: true, winnerTeamId: rand() < homeWinProb ? homeId : awayId }
+}
+
+export function simulateKnockout(
+  homeId: string,
+  homeR: TeamRatings,
+  awayId: string,
+  awayR: TeamRatings,
+  rand: RandomFn,
+): SimKnockout {
+  return simulateKnockoutRaw(homeId, homeR, awayId, awayR, hostAdvFor(homeId), hostAdvFor(awayId), rand)
 }

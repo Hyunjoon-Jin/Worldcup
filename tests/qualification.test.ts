@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { simulateConmebol } from '../src/engine/qualification/conmebol'
-import { nationsByConfederation, baseRatingsMap, ALL_NATIONS_BY_ID } from '../src/data/nations'
+import { simulateAllQualification, simulateConfederation } from '../src/engine/qualification'
+import { nationsByConfederation, baseRatingsMap, ALL_NATIONS, ALL_NATIONS_BY_ID } from '../src/data/nations'
 import { SLOT_ALLOCATION } from '../src/data/confederations'
 import { createSeededRandom } from '../src/engine/rng'
+import type { Confederation } from '../src/types/team'
 
 const conmebolIds = nationsByConfederation('CONMEBOL').map((t) => t.id)
 const ratings = baseRatingsMap(conmebolIds)
@@ -54,5 +56,57 @@ describe('simulateConmebol (지역예선 Q2)', () => {
       if (r.qualified.includes('BOL')) bolQ++
     }
     expect(argQ).toBeGreaterThan(bolQ)
+  })
+})
+
+describe('대륙별 예선 슬롯 정확성 (지역예선 Q2 확장)', () => {
+  const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
+  const cases: Array<[Confederation, number, number]> = [
+    ['UEFA', 16, 0],
+    ['CAF', 9, 1],
+    ['AFC', 8, 1],
+    ['CONMEBOL', 6, 1],
+    ['OFC', 1, 1],
+  ]
+  for (const [confed, direct, playoff] of cases) {
+    it(`${confed}: 직행 ${direct} + PO ${playoff}`, () => {
+      const r = simulateConfederation(confed, allRatings, createSeededRandom(`${confed}-x`))
+      expect(r.qualified).toHaveLength(direct)
+      expect(r.playoff).toHaveLength(playoff)
+    })
+  }
+
+  it('CONCACAF: 비개최국 시뮬은 직행 3 + PO 2 (개최 3국은 오케스트레이터에서 자동)', () => {
+    const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('CCF'))
+    expect(r.qualified).toHaveLength(SLOT_ALLOCATION.CONCACAF.direct - 3) // 3
+    expect(r.playoff).toHaveLength(2)
+    for (const host of ['MEX', 'USA', 'CAN']) expect(r.qualified).not.toContain(host)
+  })
+})
+
+describe('simulateAllQualification — 본선 48 확정', () => {
+  it('정확히 48개국, 중복 없음, 개최 3국 포함', () => {
+    const all = simulateAllQualification('WORLD-2026')
+    expect(all.qualified48).toHaveLength(48)
+    expect(new Set(all.qualified48).size).toBe(48)
+    for (const host of ['MEX', 'USA', 'CAN']) expect(all.qualified48).toContain(host)
+  })
+
+  it('대륙간 플레이오프는 6팀 → 2장', () => {
+    const all = simulateAllQualification('WORLD-2026')
+    expect(all.interConfed.participants).toHaveLength(6)
+    expect(all.interConfed.winners).toHaveLength(2)
+    for (const w of all.interConfed.winners) expect(all.qualified48).toContain(w)
+  })
+
+  it('같은 시드는 같은 본선 진출국을 재현한다', () => {
+    const a = simulateAllQualification('SEED-Z')
+    const b = simulateAllQualification('SEED-Z')
+    expect(a.qualified48).toEqual(b.qualified48)
+  })
+
+  it('모든 진출국은 실존 등록국이다', () => {
+    const all = simulateAllQualification('CHECK')
+    for (const id of all.qualified48) expect(ALL_NATIONS_BY_ID[id]).toBeTruthy()
   })
 })

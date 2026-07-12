@@ -21,11 +21,73 @@ interface RawQualifier {
  * rank는 시뮬레이터용 근사치(기준 2025-12, 실제 대회 결과와 무관).
  */
 const RAW_QUALIFIERS: RawQualifier[] = [
-  // --- CONMEBOL 비본선 4국 ---
+  // --- CONMEBOL 비본선 4국 (10개국 단일리그) ---
   { id: 'CHI', nameKo: '칠레', nameEn: 'Chile', code: 'CHI', iso2: 'CL', confederation: 'CONMEBOL', rank: 40, styleBias: -1 },
   { id: 'PER', nameKo: '페루', nameEn: 'Peru', code: 'PER', iso2: 'PE', confederation: 'CONMEBOL', rank: 43, styleBias: -3 },
   { id: 'VEN', nameKo: '베네수엘라', nameEn: 'Venezuela', code: 'VEN', iso2: 'VE', confederation: 'CONMEBOL', rank: 46, styleBias: 0 },
   { id: 'BOL', nameKo: '볼리비아', nameEn: 'Bolivia', code: 'BOL', iso2: 'BO', confederation: 'CONMEBOL', rank: 58, styleBias: -2 },
+
+  // --- OFC(오세아니아) 비본선: NZL(본선) 외 경쟁국 ---
+  { id: 'NCL', nameKo: '뉴칼레도니아', nameEn: 'New Caledonia', code: 'NCL', iso2: 'NC', confederation: 'OFC', rank: 62 },
+  { id: 'TAH', nameKo: '타히티', nameEn: 'Tahiti', code: 'TAH', iso2: 'PF', confederation: 'OFC', rank: 68 },
+  { id: 'SOL', nameKo: '솔로몬제도', nameEn: 'Solomon Islands', code: 'SOL', iso2: 'SB', confederation: 'OFC', rank: 66 },
+  { id: 'FIJ', nameKo: '피지', nameEn: 'Fiji', code: 'FIJ', iso2: 'FJ', confederation: 'OFC', rank: 64 },
+  { id: 'VAN', nameKo: '바누아투', nameEn: 'Vanuatu', code: 'VAN', iso2: 'VU', confederation: 'OFC', rank: 74 },
+
+  // --- CAF(아프리카) 비본선 ---
+  { id: 'NGA', nameKo: '나이지리아', nameEn: 'Nigeria', code: 'NGA', iso2: 'NG', confederation: 'CAF', rank: 38, styleBias: 3 },
+  { id: 'CMR', nameKo: '카메룬', nameEn: 'Cameroon', code: 'CMR', iso2: 'CM', confederation: 'CAF', rank: 41, styleBias: 2 },
+  { id: 'MLI', nameKo: '말리', nameEn: 'Mali', code: 'MLI', iso2: 'ML', confederation: 'CAF', rank: 47, styleBias: 1 },
+  { id: 'BFA', nameKo: '부르키나파소', nameEn: 'Burkina Faso', code: 'BFA', iso2: 'BF', confederation: 'CAF', rank: 49, styleBias: 1 },
+  { id: 'GIN', nameKo: '기니', nameEn: 'Guinea', code: 'GIN', iso2: 'GN', confederation: 'CAF', rank: 52 },
+  { id: 'GAB', nameKo: '가봉', nameEn: 'Gabon', code: 'GAB', iso2: 'GA', confederation: 'CAF', rank: 54, styleBias: 1 },
+  { id: 'BEN', nameKo: '베냉', nameEn: 'Benin', code: 'BEN', iso2: 'BJ', confederation: 'CAF', rank: 58 },
+  { id: 'ZAM', nameKo: '잠비아', nameEn: 'Zambia', code: 'ZAM', iso2: 'ZM', confederation: 'CAF', rank: 61 },
+  { id: 'ANG', nameKo: '앙골라', nameEn: 'Angola', code: 'ANG', iso2: 'AO', confederation: 'CAF', rank: 63 },
+  { id: 'UGA', nameKo: '우간다', nameEn: 'Uganda', code: 'UGA', iso2: 'UG', confederation: 'CAF', rank: 67 },
+  { id: 'MOZ', nameKo: '모잠비크', nameEn: 'Mozambique', code: 'MOZ', iso2: 'MZ', confederation: 'CAF', rank: 72 },
+  { id: 'NAM', nameKo: '나미비아', nameEn: 'Namibia', code: 'NAM', iso2: 'NA', confederation: 'CAF', rank: 76 },
+
+  // --- UEFA(유럽) 비본선 ---
+  { id: 'ITA', nameKo: '이탈리아', nameEn: 'Italy', code: 'ITA', iso2: 'IT', confederation: 'UEFA', rank: 38, styleBias: 1 },
+  { id: 'UKR', nameKo: '우크라이나', nameEn: 'Ukraine', code: 'UKR', iso2: 'UA', confederation: 'UEFA', rank: 40, styleBias: 1 },
+  { id: 'SRB', nameKo: '세르비아', nameEn: 'Serbia', code: 'SRB', iso2: 'RS', confederation: 'UEFA', rank: 42, styleBias: 2 },
+  { id: 'POL', nameKo: '폴란드', nameEn: 'Poland', code: 'POL', iso2: 'PL', confederation: 'UEFA', rank: 44, styleBias: 1 },
+  { id: 'HUN', nameKo: '헝가리', nameEn: 'Hungary', code: 'HUN', iso2: 'HU', confederation: 'UEFA', rank: 46, styleBias: 0 },
+  { id: 'SVK', nameKo: '슬로바키아', nameEn: 'Slovakia', code: 'SVK', iso2: 'SK', confederation: 'UEFA', rank: 48, styleBias: -1 },
+  { id: 'ROU', nameKo: '루마니아', nameEn: 'Romania', code: 'ROU', iso2: 'RO', confederation: 'UEFA', rank: 50 },
+  { id: 'GRE', nameKo: '그리스', nameEn: 'Greece', code: 'GRE', iso2: 'GR', confederation: 'UEFA', rank: 51, styleBias: -2 },
+  { id: 'WAL', nameKo: '웨일스', nameEn: 'Wales', code: 'WAL', iso2: 'GB_WLS', confederation: 'UEFA', rank: 53 },
+  { id: 'DEN', nameKo: '덴마크', nameEn: 'Denmark', code: 'DEN', iso2: 'DK', confederation: 'UEFA', rank: 39, styleBias: 0 },
+  { id: 'SVN', nameKo: '슬로베니아', nameEn: 'Slovenia', code: 'SVN', iso2: 'SI', confederation: 'UEFA', rank: 55 },
+  { id: 'GEO', nameKo: '조지아', nameEn: 'Georgia', code: 'GEO', iso2: 'GE', confederation: 'UEFA', rank: 57 },
+  { id: 'ALB', nameKo: '알바니아', nameEn: 'Albania', code: 'ALB', iso2: 'AL', confederation: 'UEFA', rank: 59 },
+  { id: 'MKD', nameKo: '북마케도니아', nameEn: 'North Macedonia', code: 'MKD', iso2: 'MK', confederation: 'UEFA', rank: 64 },
+  { id: 'ISL', nameKo: '아이슬란드', nameEn: 'Iceland', code: 'ISL', iso2: 'IS', confederation: 'UEFA', rank: 66 },
+  { id: 'FIN', nameKo: '핀란드', nameEn: 'Finland', code: 'FIN', iso2: 'FI', confederation: 'UEFA', rank: 62 },
+
+  // --- CONCACAF(북중미) 비본선 (개최 3국 자동, 나머지 경쟁) ---
+  { id: 'CRC', nameKo: '코스타리카', nameEn: 'Costa Rica', code: 'CRC', iso2: 'CR', confederation: 'CONCACAF', rank: 45, styleBias: -1 },
+  { id: 'HON', nameKo: '온두라스', nameEn: 'Honduras', code: 'HON', iso2: 'HN', confederation: 'CONCACAF', rank: 55 },
+  { id: 'JAM', nameKo: '자메이카', nameEn: 'Jamaica', code: 'JAM', iso2: 'JM', confederation: 'CONCACAF', rank: 56, styleBias: 1 },
+  { id: 'SLV', nameKo: '엘살바도르', nameEn: 'El Salvador', code: 'SLV', iso2: 'SV', confederation: 'CONCACAF', rank: 69 },
+  { id: 'GUA', nameKo: '과테말라', nameEn: 'Guatemala', code: 'GUA', iso2: 'GT', confederation: 'CONCACAF', rank: 71 },
+  { id: 'TRI', nameKo: '트리니다드토바고', nameEn: 'Trinidad and Tobago', code: 'TRI', iso2: 'TT', confederation: 'CONCACAF', rank: 73 },
+  { id: 'SUR', nameKo: '수리남', nameEn: 'Suriname', code: 'SUR', iso2: 'SR', confederation: 'CONCACAF', rank: 78 },
+  { id: 'NCA', nameKo: '니카라과', nameEn: 'Nicaragua', code: 'NCA', iso2: 'NI', confederation: 'CONCACAF', rank: 84 },
+
+  // --- AFC(아시아) 비본선 ---
+  { id: 'UAE', nameKo: '아랍에미리트', nameEn: 'United Arab Emirates', code: 'UAE', iso2: 'AE', confederation: 'AFC', rank: 50 },
+  { id: 'CHN', nameKo: '중국', nameEn: 'China PR', code: 'CHN', iso2: 'CN', confederation: 'AFC', rank: 60 },
+  { id: 'BHR', nameKo: '바레인', nameEn: 'Bahrain', code: 'BHR', iso2: 'BH', confederation: 'AFC', rank: 65 },
+  { id: 'OMA', nameKo: '오만', nameEn: 'Oman', code: 'OMA', iso2: 'OM', confederation: 'AFC', rank: 59 },
+  { id: 'PLE', nameKo: '팔레스타인', nameEn: 'Palestine', code: 'PLE', iso2: 'PS', confederation: 'AFC', rank: 70 },
+  { id: 'KUW', nameKo: '쿠웨이트', nameEn: 'Kuwait', code: 'KUW', iso2: 'KW', confederation: 'AFC', rank: 75 },
+  { id: 'KGZ', nameKo: '키르기스스탄', nameEn: 'Kyrgyzstan', code: 'KGZ', iso2: 'KG', confederation: 'AFC', rank: 67 },
+  { id: 'THA', nameKo: '태국', nameEn: 'Thailand', code: 'THA', iso2: 'TH', confederation: 'AFC', rank: 72 },
+  { id: 'IND', nameKo: '인도', nameEn: 'India', code: 'IND', iso2: 'IN', confederation: 'AFC', rank: 80 },
+  { id: 'VIE', nameKo: '베트남', nameEn: 'Vietnam', code: 'VIE', iso2: 'VN', confederation: 'AFC', rank: 63, styleBias: 1 },
+  { id: 'LBN', nameKo: '레바논', nameEn: 'Lebanon', code: 'LBN', iso2: 'LB', confederation: 'AFC', rank: 82 },
 ]
 
 export const QUALIFIER_TEAMS: Team[] = RAW_QUALIFIERS.map((raw) => ({

@@ -80,7 +80,9 @@ export const RATINGS_FROM_RANK = {
   overallSpan: 37, // rank 48 ≈ 58
   overallExponent: 1.35,
   totalRanks: 48,
-  overallFloor: 55,
+  // 본선 48국(rank≤48)의 overall은 항상 ≥58이라 이 floor에 닿지 않는다. floor를 낮추면
+  // 예선 참가 비본선국(rank>48)만 더 넓게 아래로 퍼져 실력 차가 드러난다(지역예선).
+  overallFloor: 48,
   overallCap: 97,
   /** styleBias가 공격/수비 배분에 곱해지는 계수. */
   styleFactor: 1.4,
