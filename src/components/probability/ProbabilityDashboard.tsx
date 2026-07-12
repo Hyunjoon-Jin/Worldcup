@@ -8,6 +8,7 @@ import { STAGES, type NumericKey } from './probabilityStages'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useMomentumStore } from '../../store/useMomentumStore'
+import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { ITERATION_PRESETS, type IterationPreset } from '../../engine/config'
 
 const PRESET_LABEL: Record<IterationPreset, string> = { fast: '빠름', standard: '표준', precise: '정밀' }
@@ -44,6 +45,7 @@ export function ProbabilityDashboard() {
   const [sortKey, setSortKey] = useState<NumericKey>('championPct')
   const crisisByTeam = useCrisisTeams()
   const momentumByTeam = useMomentumStore((s) => s.offsets)
+  const myTeamId = useMyTeamStore((s) => s.myTeamId)
 
   useEffect(() => {
     if (!result) run()
@@ -122,10 +124,14 @@ export function ProbabilityDashboard() {
             </thead>
             <tbody>
               {rows.map((row, idx) => (
-                <tr key={row.teamId} className="border-t border-white/5">
+                <tr
+                  key={row.teamId}
+                  className={`border-t border-white/5 ${myTeamId === row.teamId ? 'bg-amber-400/10' : ''}`}
+                >
                   <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                   <td className="py-1.5">
                     <div className="flex items-center gap-1.5">
+                      {myTeamId === row.teamId && <span title="내 팀">⭐</span>}
                       <TeamLink teamId={row.teamId} className="font-medium whitespace-nowrap text-gray-100" />
                       <MomentumTag value={momentumByTeam[row.teamId]} />
                       <CrisisTag pct={crisisByTeam[row.teamId]?.pct} />
@@ -160,9 +166,10 @@ export function ProbabilityDashboard() {
           ))}
         </div>
         {rows.map((row, idx) => (
-          <GlassCard key={row.teamId} className="p-3">
+          <GlassCard key={row.teamId} className={`p-3 ${myTeamId === row.teamId ? 'ring-1 ring-amber-400/40' : ''}`}>
             <div className="mb-2 flex items-center gap-2">
               <span className="w-5 shrink-0 text-center text-xs text-gray-500">{idx + 1}</span>
+              {myTeamId === row.teamId && <span title="내 팀">⭐</span>}
               <TeamLink teamId={row.teamId} className="min-w-0 font-medium text-gray-100" />
               <span className="shrink-0 text-[10px] text-gray-500">FIFA {TEAMS_BY_ID[row.teamId].fifaRankApprox}위</span>
               <MomentumTag value={momentumByTeam[row.teamId]} />

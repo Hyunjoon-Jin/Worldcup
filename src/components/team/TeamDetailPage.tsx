@@ -23,6 +23,7 @@ import { runOpponentForecast, runTeamScenarioSimulation, type RoundOpponentForec
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
+import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useConditionStore } from '../../store/useConditionStore'
@@ -107,6 +108,8 @@ interface UpcomingMatchEntry {
 export function TeamDetailPage() {
   const teamId = useSelectionStore((s) => s.selectedTeamId)
   const clearTeam = useSelectionStore((s) => s.clearTeam)
+  const myTeamId = useMyTeamStore((s) => s.myTeamId)
+  const toggleMyTeam = useMyTeamStore((s) => s.toggleMyTeam)
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
@@ -297,7 +300,20 @@ export function TeamDetailPage() {
         <div className="flex flex-wrap items-center gap-4">
           <FlagIcon iso2={team.iso2} className="h-10 w-14 shrink-0" />
           <div className="flex-1">
-            <h2 className="font-display text-2xl font-semibold tracking-wide text-white">{team.nameKo}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-2xl font-semibold tracking-wide text-white">{team.nameKo}</h2>
+              <button
+                onClick={() => teamId && toggleMyTeam(teamId)}
+                aria-pressed={myTeamId === teamId}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                  myTeamId === teamId
+                    ? 'bg-amber-400/25 text-amber-200'
+                    : 'bg-white/5 text-gray-400 hover:text-white'
+                }`}
+              >
+                {myTeamId === teamId ? '⭐ 내 팀' : '☆ 내 팀으로'}
+              </button>
+            </div>
             <p className="text-xs text-gray-400">
               {team.nameEn} · FIFA 랭킹 {team.fifaRankApprox}위 · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트{' '}
               {team.pot}

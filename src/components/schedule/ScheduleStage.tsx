@@ -7,6 +7,7 @@ import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { CalendarTimeline } from './CalendarTimeline'
 import { DayResultFeed } from './DayResultFeed'
+import { TournamentSummary } from './TournamentSummary'
 import { nextPendingGroupSlot, nextPendingKnockoutSlot, useProgressStore } from '../../store/useProgressStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import type { KnockoutRound } from '../../types/match'
@@ -119,6 +120,7 @@ export function ScheduleStage() {
       )}
 
       <DayResultFeed />
+      <TournamentSummary />
       {champion && (
         <GlassCard strong className="p-6 text-center">
           <p className="text-sm text-gray-300">2026 북중미 월드컵 우승</p>

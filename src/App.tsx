@@ -1,15 +1,19 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { Header } from './components/layout/Header'
 import { TabNav } from './components/layout/TabNav'
-import { DrawStage } from './components/draw/DrawStage'
-import { ScheduleStage } from './components/schedule/ScheduleStage'
-import { GroupStageView } from './components/groups/GroupStageView'
-import { BracketView } from './components/knockout/BracketView'
-import { ProbabilityDashboard } from './components/probability/ProbabilityDashboard'
-import { SandboxPanel } from './components/sandbox/SandboxPanel'
-import { TeamDetailPage } from './components/team/TeamDetailPage'
 import { MatchDetailModal } from './components/common/MatchDetailModal'
+
+// 탭별 화면은 지연 로딩해 초기 번들 크기를 줄인다 (B5).
+const DrawStage = lazy(() => import('./components/draw/DrawStage').then((m) => ({ default: m.DrawStage })))
+const ScheduleStage = lazy(() => import('./components/schedule/ScheduleStage').then((m) => ({ default: m.ScheduleStage })))
+const GroupStageView = lazy(() => import('./components/groups/GroupStageView').then((m) => ({ default: m.GroupStageView })))
+const BracketView = lazy(() => import('./components/knockout/BracketView').then((m) => ({ default: m.BracketView })))
+const ProbabilityDashboard = lazy(() =>
+  import('./components/probability/ProbabilityDashboard').then((m) => ({ default: m.ProbabilityDashboard })),
+)
+const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
+const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
 import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
@@ -72,7 +76,11 @@ function App() {
   return (
     <AppShell>
       <Header />
-      {sandboxMode && <SandboxPanel />}
+      {sandboxMode && (
+        <Suspense fallback={null}>
+          <SandboxPanel />
+        </Suspense>
+      )}
       {showResume && (
         <div className="mb-4 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2.5 text-center text-sm text-emerald-100">
           <span>💾 저장된 대회를 이어가는 중입니다.</span>
@@ -106,17 +114,19 @@ function App() {
         />
       </div>
 
-      {selectedTeamId ? (
-        <TeamDetailPage />
-      ) : (
-        <>
-          {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
-          {tab === 'schedule' && <ScheduleStage />}
-          {tab === 'groups' && <GroupStageView />}
-          {tab === 'knockout' && <BracketView />}
-          {tab === 'probability' && <ProbabilityDashboard />}
-        </>
-      )}
+      <Suspense fallback={<div className="py-16 text-center text-sm text-gray-500">불러오는 중…</div>}>
+        {selectedTeamId ? (
+          <TeamDetailPage />
+        ) : (
+          <>
+            {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
+            {tab === 'schedule' && <ScheduleStage />}
+            {tab === 'groups' && <GroupStageView />}
+            {tab === 'knockout' && <BracketView />}
+            {tab === 'probability' && <ProbabilityDashboard />}
+          </>
+        )}
+      </Suspense>
       <MatchDetailModal />
     </AppShell>
   )
