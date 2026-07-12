@@ -69,6 +69,14 @@ function NationLabel({ teamId, className = '' }: { teamId: string; className?: s
   )
 }
 
+/** 직행/PO/탈락 상태 배지 (색+아이콘+텍스트 병행, I4). 진행 중이면 '—'. */
+function ResultBadge({ full, direct, po }: { full: boolean; direct: boolean; po: boolean }) {
+  if (!full) return <span className="text-[10px] text-gray-600">—</span>
+  if (direct) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
+  if (po) return <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
+  return <span className="text-[10px] text-gray-600">탈락</span>
+}
+
 /** 대륙간 플레이오프 브래킷 (F4). 준결승 2경기 → 시드와의 결승 2경기 → 본선 2장. */
 function InterConfedBracket({ result }: { result: InterConfedResult }) {
   const bySlot = new Map(result.matches.map((m) => [m.slotId, m] as const))
@@ -196,13 +204,26 @@ function ConfederationStandings({
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
         {r.groups.map((finalOrder, gi) => {
           const groupTeams = rankGroupTeams(finalOrder, shownMatches.filter((m) => m.group === gi))
+          const rows = groupTeams.map((teamId, idx) => {
+            const s = standings[teamId]
+            return {
+              teamId,
+              idx,
+              s,
+              gd: s.goalsFor - s.goalsAgainst,
+              direct: full && qSet.has(teamId),
+              po: full && pSet.has(teamId),
+            }
+          })
+          const groupLabel = single ? '단일리그' : `${GROUP_LETTERS[gi]}조`
           return (
           <div key={gi}>
             {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{GROUP_LETTERS[gi]}조</p>}
-            <div className="overflow-x-auto">
+            {/* 데스크톱: 표 */}
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full min-w-[360px] text-left text-xs sm:text-sm">
                 <caption className="sr-only">
-                  {CONFEDERATION_LABEL_KO[confed]} {single ? '단일리그' : `${GROUP_LETTERS[gi]}조`} 순위표
+                  {CONFEDERATION_LABEL_KO[confed]} {groupLabel} 순위표
                 </caption>
                 <thead>
                   <tr className="text-gray-400">
@@ -216,41 +237,48 @@ function ConfederationStandings({
                   </tr>
                 </thead>
                 <tbody>
-                  {groupTeams.map((teamId, idx) => {
-                    const s = standings[teamId]
-                    const gd = s.goalsFor - s.goalsAgainst
-                    const direct = full && qSet.has(teamId)
-                    const po = full && pSet.has(teamId)
-                    return (
-                      <tr
-                        key={teamId}
-                        className={`border-t border-white/5 ${direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
-                      >
-                        <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
-                        <th scope="row" className="py-1.5 font-normal"><NationLabel teamId={teamId} /></th>
-                        <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
-                        <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
-                        <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                        {probabilities && (
-                          <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
-                        )}
-                        <td className="py-1.5 text-right">
-                          {!full ? (
-                            <span className="text-[10px] text-gray-600">—</span>
-                          ) : direct ? (
-                            <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
-                          ) : po ? (
-                            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
-                          ) : (
-                            <span className="text-[10px] text-gray-600">탈락</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {rows.map(({ teamId, idx, s, gd, direct, po }) => (
+                    <tr
+                      key={teamId}
+                      className={`border-t border-white/5 ${direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : ''}`}
+                    >
+                      <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
+                      <th scope="row" className="py-1.5 font-normal"><NationLabel teamId={teamId} /></th>
+                      <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
+                      <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
+                      <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
+                      {probabilities && (
+                        <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
+                      )}
+                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} /></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
+            {/* 모바일: 카드형 순위표 (I2) */}
+            <ul className="space-y-1.5 sm:hidden" aria-label={`${CONFEDERATION_LABEL_KO[confed]} ${groupLabel} 순위표`}>
+              {rows.map(({ teamId, idx, s, gd, direct, po }) => (
+                <li
+                  key={teamId}
+                  className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
+                    direct ? 'bg-emerald-500/10' : po ? 'bg-amber-500/10' : 'bg-white/5'
+                  }`}
+                >
+                  <span className="w-4 shrink-0 text-center text-[11px] text-gray-500 tabular-nums">{idx + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <NationLabel teamId={teamId} />
+                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400 tabular-nums">
+                      <span>{s.played}경기</span>
+                      <span className="font-bold text-white">{s.points}점</span>
+                      <span>{gd > 0 ? `+${gd}` : gd}</span>
+                      {probabilities && <span className="text-sky-300">{(probabilities[teamId] ?? 0).toFixed(0)}%</span>}
+                    </div>
+                  </div>
+                  <ResultBadge full={full} direct={direct} po={po} />
+                </li>
+              ))}
+            </ul>
             <MatchList teams={groupTeams} matches={shownMatches} onSelectMatch={onSelectMatch} />
           </div>
           )
@@ -484,6 +512,10 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 <p>
                   <strong className="text-emerald-300">대륙간 플레이오프:</strong> 각 대륙의 PO행 팀(총 6팀)이
                   시드 브래킷으로 맞붙어 2장을 가립니다.
+                </p>
+                <p>
+                  <strong className="text-emerald-300">랭킹 기준:</strong> 팀 전력·시드는 FIFA 랭킹을
+                  근사한 값(2026 예선 시점 기준)이며, 정확한 최신 공식 랭킹과 다를 수 있습니다.
                 </p>
                 <p>세부 포맷은 시뮬레이션에 맞게 근사했으며, 조추첨 이후처럼 예선 결과도 실제 대회와 무관한 가상 시뮬레이션입니다.</p>
               </div>
