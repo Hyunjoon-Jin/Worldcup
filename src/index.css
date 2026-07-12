@@ -45,6 +45,45 @@ body {
   background: rgba(79, 139, 255, 0.4);
 }
 
+/* ---------- 라이트 테마 (E4) ---------- */
+html[data-theme="light"] {
+  color-scheme: light;
+}
+html[data-theme="light"] body {
+  background:
+    radial-gradient(ellipse 80% 60% at 15% -10%, rgba(0, 104, 71, 0.14), transparent),
+    radial-gradient(ellipse 80% 60% at 85% 0%, rgba(60, 59, 110, 0.14), transparent),
+    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(255, 0, 0, 0.06), transparent),
+    #eef1f6;
+  color: #1f2937;
+}
+html[data-theme="light"] .glass {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow:
+    0 8px 32px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+html[data-theme="light"] .glass-strong {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.14);
+}
+/* 어두운 배경 전제의 옅은 회색 텍스트를 라이트에서 읽히도록 어둡게 재매핑 */
+html[data-theme="light"] .text-white { color: #0f172a; }
+html[data-theme="light"] .text-gray-100 { color: #111827; }
+html[data-theme="light"] .text-gray-200 { color: #1f2937; }
+html[data-theme="light"] .text-gray-300 { color: #374151; }
+html[data-theme="light"] .text-gray-400 { color: #4b5563; }
+html[data-theme="light"] .text-gray-500 { color: #6b7280; }
+html[data-theme="light"] .text-gray-600 { color: #9ca3af; }
+/* 반투명 흰색 표면은 라이트에서 보이도록 옅은 슬레이트로 */
+html[data-theme="light"] .bg-white\/5 { background-color: rgba(15, 23, 42, 0.05); }
+html[data-theme="light"] .bg-white\/10 { background-color: rgba(15, 23, 42, 0.08); }
+html[data-theme="light"] .bg-white\/15 { background-color: rgba(15, 23, 42, 0.12); }
+html[data-theme="light"] .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.2);
+}
+
 /* Glassmorphism primitives */
 .glass {
   background: rgba(255, 255, 255, 0.06);

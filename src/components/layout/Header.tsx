@@ -1,9 +1,12 @@
 import { GlassButton } from '../common/GlassButton'
 import { useSandboxStore } from '../../store/useSandboxStore'
+import { useThemeStore } from '../../store/useThemeStore'
 
 export function Header() {
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const toggleSandbox = useSandboxStore((s) => s.toggleSandbox)
+  const theme = useThemeStore((s) => s.theme)
+  const toggleTheme = useThemeStore((s) => s.toggle)
 
   return (
     <header className="flex flex-col items-center gap-3 px-4 pt-8 pb-4 text-center sm:flex-row sm:justify-between sm:text-left">
@@ -15,14 +18,23 @@ export function Header() {
           조추첨부터 결승까지 — 실제 규정 기반 가상 시뮬레이션 (실제 대회 결과와 무관)
         </p>
       </div>
-      <GlassButton
-        variant={sandboxMode ? 'danger' : 'ghost'}
-        onClick={toggleSandbox}
-        aria-pressed={sandboxMode}
-        className="shrink-0"
-      >
-        {sandboxMode ? '🧪 샌드박스 모드 ON' : '🧪 샌드박스 모드'}
-      </GlassButton>
+      <div className="flex shrink-0 items-center gap-2">
+        <GlassButton
+          variant="ghost"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+          aria-pressed={theme === 'light'}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </GlassButton>
+        <GlassButton
+          variant={sandboxMode ? 'danger' : 'ghost'}
+          onClick={toggleSandbox}
+          aria-pressed={sandboxMode}
+        >
+          {sandboxMode ? '🧪 샌드박스 모드 ON' : '🧪 샌드박스 모드'}
+        </GlassButton>
+      </div>
     </header>
   )
 }
