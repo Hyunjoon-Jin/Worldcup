@@ -3,14 +3,8 @@ import { useConditionStore } from '../store/useConditionStore'
 import { useMomentumStore } from '../store/useMomentumStore'
 import { useSandboxStore } from '../store/useSandboxStore'
 import type { TeamRatings } from '../types/team'
-import {
-  EXPECTED_GOALS,
-  FORECAST_GOAL_CAP,
-  PENALTY,
-  UPSET_RATING_GAP,
-  clamp,
-  hostAdvantageFor,
-} from './config'
+import { FORECAST_GOAL_CAP, UPSET_RATING_GAP, clamp } from './config'
+import { expectedGoals, hostAdvFor, poissonPmf, simulateKnockout, simulateScore } from './matchCore'
 
 // getRatings는 몬테카를로에서 수백만 번 호출되므로, 입력(컨디션·모멘텀·샌드박스)이 바뀌지 않는
 // 동안에는 결과를 캐시해 재계산을 피한다 (B4). 세 store 중 하나라도 바뀌면 버전을 올려 캐시를 비운다.
@@ -49,35 +43,6 @@ export function getRatings(teamId: string): TeamRatings {
   return result
 }
 
-// 실제 축구 경기의 평균 득점(팀당 약 1.3골)에 가깝게 보정하고, 극단적인 능력치 차이에서도
-// 대량 득점 블로아웃이 지나치게 자주 나오지 않도록 민감도를 낮추고 상하한을 좁혔다.
-// hostAdvantage는 개최국 홈 경기일 때만 양수(팀별 세분화, C2).
-function expectedGoals(attacker: TeamRatings, defender: TeamRatings, hostAdvantage: number): number {
-  const strengthDiff =
-    attacker.attack -
-    defender.defense +
-    (attacker.form - EXPECTED_GOALS.formBaseline) * EXPECTED_GOALS.formWeight +
-    hostAdvantage
-  return clamp(EXPECTED_GOALS.base + strengthDiff / EXPECTED_GOALS.divisor, EXPECTED_GOALS.min, EXPECTED_GOALS.max)
-}
-
-function samplePoisson(lambda: number): number {
-  const limit = Math.exp(-lambda)
-  let k = 0
-  let p = 1
-  do {
-    k += 1
-    p *= Math.random()
-  } while (p > limit)
-  return k - 1
-}
-
-function poissonPmf(lambda: number, k: number): number {
-  let factorial = 1
-  for (let i = 2; i <= k; i++) factorial *= i
-  return (Math.exp(-lambda) * lambda ** k) / factorial
-}
-
 export interface MatchForecast {
   homeWinPct: number
   drawPct: number
@@ -93,10 +58,8 @@ export interface MatchForecast {
 export function forecastMatch(homeTeamId: string, awayTeamId: string): MatchForecast {
   const home = getRatings(homeTeamId)
   const away = getRatings(awayTeamId)
-  const homeHostAdv = TEAMS_BY_ID[homeTeamId].isHost ? hostAdvantageFor(homeTeamId) : 0
-  const awayHostAdv = TEAMS_BY_ID[awayTeamId].isHost ? hostAdvantageFor(awayTeamId) : 0
-  const homeLambda = expectedGoals(home, away, homeHostAdv)
-  const awayLambda = expectedGoals(away, home, awayHostAdv)
+  const homeLambda = expectedGoals(home, away, hostAdvFor(homeTeamId))
+  const awayLambda = expectedGoals(away, home, hostAdvFor(awayTeamId))
 
   let homeWin = 0
   let draw = 0
@@ -119,51 +82,14 @@ export interface SimulatedScore {
 }
 
 export function simulateMatch(homeTeamId: string, awayTeamId: string): SimulatedScore {
-  const home = getRatings(homeTeamId)
-  const away = getRatings(awayTeamId)
-  const homeHostAdv = TEAMS_BY_ID[homeTeamId].isHost ? hostAdvantageFor(homeTeamId) : 0
-  const awayHostAdv = TEAMS_BY_ID[awayTeamId].isHost ? hostAdvantageFor(awayTeamId) : 0
-
-  const homeLambda = expectedGoals(home, away, homeHostAdv)
-  const awayLambda = expectedGoals(away, home, awayHostAdv)
-
-  return {
-    homeGoals: samplePoisson(homeLambda),
-    awayGoals: samplePoisson(awayLambda),
-  }
+  return simulateScore(homeTeamId, getRatings(homeTeamId), awayTeamId, getRatings(awayTeamId), Math.random)
 }
 
-export interface SimulatedKnockoutScore extends SimulatedScore {
-  wentToPenalties: boolean
-  winnerTeamId: string
-}
+export type SimulatedKnockoutScore = ReturnType<typeof simulateKnockout>
 
 /** 무승부 시 승부차기로 승자를 결정한다(능력치 기반 확률 + 약간의 변수). */
 export function simulateKnockoutMatch(homeTeamId: string, awayTeamId: string): SimulatedKnockoutScore {
-  const { homeGoals, awayGoals } = simulateMatch(homeTeamId, awayTeamId)
-  if (homeGoals !== awayGoals) {
-    return {
-      homeGoals,
-      awayGoals,
-      wentToPenalties: false,
-      winnerTeamId: homeGoals > awayGoals ? homeTeamId : awayTeamId,
-    }
-  }
-
-  const home = getRatings(homeTeamId)
-  const away = getRatings(awayTeamId)
-  const homeStrength = home.overall + home.form * PENALTY.formFactor + PENALTY.baseline
-  const awayStrength = away.overall + away.form * PENALTY.formFactor + PENALTY.baseline
-  const rawProb = homeStrength / (homeStrength + awayStrength)
-  // 실력차의 영향을 줄여 50:50에 가깝게 — 승부차기의 높은 변동성 반영 (C3)
-  const homeWinProb = 0.5 + (rawProb - 0.5) * PENALTY.dampen
-
-  return {
-    homeGoals,
-    awayGoals,
-    wentToPenalties: true,
-    winnerTeamId: Math.random() < homeWinProb ? homeTeamId : awayTeamId,
-  }
+  return simulateKnockout(homeTeamId, getRatings(homeTeamId), awayTeamId, getRatings(awayTeamId), Math.random)
 }
 
 /** 승자의 종합 능력치가 패자보다 일정 격차 이상 낮으면 이변으로 판정한다. */
