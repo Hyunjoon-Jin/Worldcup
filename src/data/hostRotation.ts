@@ -21,10 +21,16 @@ export const HOST_ROTATION: HostEdition[] = [
   { year: 2050, hostIds: ['NGA'] }, // 아프리카 단독
   { year: 2054, hostIds: ['AUS'] }, // 오세아니아/아시아
   { year: 2058, hostIds: ['FRA'] },
-  { year: 2062, hostIds: ['USA', 'MEX'] },
+  // 로테이션이 한 바퀴 돌아 다시 2026(MEX·CAN·USA)로 이어지므로, 마지막 항목은 개최국이
+  // 그 셋과 겹치지 않아야 한다(연속 개최 방지 — 순환 경계 포함). CONMEBOL 공동개최로 배치.
+  { year: 2062, hostIds: ['COL', 'ECU'] },
 ]
 
-/** edition 인덱스(0부터)에 해당하는 개최 정보. 로테이션을 순환한다. */
+/**
+ * edition 인덱스(0부터)에 해당하는 개최 정보. 로테이션을 순환한다.
+ * HOST_ROTATION은 순환 경계를 포함해 인접 대회 간 개최국이 겹치지 않도록 구성돼 있어,
+ * 어떤 연속 두 대회도 같은 나라가 개최하지 않는다(hostRotation 테스트로 강제).
+ */
 export function hostEditionAt(index: number): HostEdition {
   const base = HOST_ROTATION[index % HOST_ROTATION.length]
   // 한 바퀴 돈 뒤에도 연도가 계속 증가하도록 4년씩 더한다.
