@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { useCareerStore } from '../src/store/useCareerStore'
 import { useProgressStore } from '../src/store/useProgressStore'
 import { useQualificationStore } from '../src/store/useQualificationStore'
-import { advanceToNextEdition } from '../src/store/tournamentActions'
+import { advanceToNextEdition, clearAllHistory } from '../src/store/tournamentActions'
+import { useHistoryStore } from '../src/store/useHistoryStore'
 import { getCurrentHostIds } from '../src/engine/hostContext'
 import { basePointsFromRank } from '../src/engine/qualification/ranking'
 import { ALL_NATIONS_BY_ID } from '../src/data/nations'
@@ -98,5 +99,15 @@ describe('advanceToNextEdition — 다음 대회로 흐름 이어가기', () => 
     expect(useCareerStore.getState().editionIndex).toBe(0)
     expect(useCareerStore.getState().year).toBe(2026)
     expect([...getCurrentHostIds()].sort()).toEqual(['CAN', 'MEX', 'USA'])
+  })
+
+  it('clearAllHistory는 팀별 역대 기록(useHistoryStore)도 함께 삭제한다', () => {
+    // 대회를 마치고 다음 대회로 넘어가면 역대 기록이 쌓인다.
+    useProgressStore.setState(completedFinals('BRA', 'ARG'))
+    advanceToNextEdition()
+    expect(useHistoryStore.getState().editions.length).toBeGreaterThan(0)
+    // 진행 이력 전체 삭제 시 역대 기록도 비워져야 한다.
+    clearAllHistory()
+    expect(useHistoryStore.getState().editions).toEqual([])
   })
 })
