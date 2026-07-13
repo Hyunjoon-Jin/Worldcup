@@ -173,6 +173,12 @@ export function deriveQualStages(r: QualificationResult): QualStageProgress[] {
     .sort((a, b) => a.startMd - b.startMd || a.endMd - b.endMd)
 }
 
+/** 특정 라운드(matchday)가 속한 스테이지 이름을 돌려준다(일별 일정에 "2차 예선 · R3" 표기용). */
+export function stageNameAt(stages: QualStageProgress[], matchday: number): string | null {
+  const s = stages.find((st) => matchday >= st.startMd && matchday <= st.endMd)
+  return s ? s.name : null
+}
+
 /** 스테이지 진행 상태 — 완료/진행 중/예정. */
 export type StageStatus = 'done' | 'active' | 'upcoming'
 

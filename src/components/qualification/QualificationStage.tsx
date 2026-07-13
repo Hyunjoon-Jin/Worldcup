@@ -17,7 +17,7 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
-import { QUAL_RULES, INTER_CONFED_RULE, deriveQualStages, stageStatus } from '../../engine/qualification/rules'
+import { QUAL_RULES, INTER_CONFED_RULE, deriveQualStages, stageStatus, stageNameAt } from '../../engine/qualification/rules'
 import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, editionEndRankingPoints, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
@@ -345,6 +345,12 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
  *  모든 대륙 순위표를 해당 날짜 기준으로 동기화한다. */
 function QualDailyProgress({ result, onSelectMatch }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void }) {
   const calendar = useMemo(() => buildQualCalendar(result), [result])
+  // 대륙별 스테이지 구간을 미리 계산해, 그날 각 대륙이 어느 스테이지·라운드인지 표기한다(일정↔룰 연결).
+  const stagesByConfed = useMemo(() => {
+    const out: Record<string, ReturnType<typeof deriveQualStages>> = {}
+    for (const c of Object.keys(result.byConfederation)) out[c] = deriveQualStages(result.byConfederation[c])
+    return out
+  }, [result])
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
   const revealed = useQualificationStore((s) => s.revealed)
   // 현재 공개 상태(revealed)와 정확히 일치하는 경기일을 찾는다(시뮬 직후엔 1일차). 없으면 1일차.
@@ -404,10 +410,18 @@ function QualDailyProgress({ result, onSelectMatch }: { result: AllQualification
       <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
         {confedOrder.map((c) => {
           const list = byConfed.get(c)!
+          // 그날 이 대륙의 라운드·스테이지(모든 경기가 같은 라운드에 열림)를 표기해 일정을 룰과 연결한다.
+          const roundMd = list[0]?.match.matchday
+          const stageName = roundMd != null ? stageNameAt(stagesByConfed[c] ?? [], roundMd) : null
           return (
             <div key={c}>
-              <p className="mb-1 text-[11px] font-bold text-gray-300">
+              <p className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-gray-300">
                 {CONFEDERATION_LABEL_KO[c as Confederation] ?? c} <span className="text-gray-500">({list.length})</span>
+                {stageName && (
+                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">
+                    {stageName} · R{roundMd}
+                  </span>
+                )}
               </p>
               <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                 {list.map((cm, i) => (
