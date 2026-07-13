@@ -17,7 +17,7 @@ import { GroupSlotCard } from './GroupSlotCard'
 const POT_LABEL: Record<number, string> = { 1: '포트1', 2: '포트2', 3: '포트3', 4: '포트4' }
 
 export function DrawStage({ onComplete }: { onComplete?: () => void }) {
-  const { state, log, isComplete, drawOne, undoLast, drawFromSeed, seed, potComposition, rankPoints } = useDrawStore()
+  const { state, log, isComplete, drawOne, undoLast, drawFromSeed, seed, potComposition, rankPoints, fieldTeams } = useDrawStore()
   const [seedInput, setSeedInput] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -29,6 +29,20 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })
+  }
+
+  // 예선을 거치지 않았으면(본선 48개국 필드 없음) 조추첨을 진행할 수 없다.
+  if (!fieldTeams && !isComplete) {
+    return (
+      <GlassCard strong className="flex flex-col items-center gap-3 p-10 text-center">
+        <p className="text-2xl">🧭</p>
+        <p className="text-sm font-semibold text-white">먼저 지역예선을 완료하세요</p>
+        <p className="max-w-md text-xs text-gray-400">
+          조추첨은 지역예선에서 본선 진출 48개국이 확정된 뒤에 진행할 수 있습니다. ‘지역예선’ 탭에서 예선을
+          시뮬레이션하고 <strong className="text-emerald-300">본선 조추첨으로 이동</strong>을 눌러 주세요.
+        </p>
+      </GlassCard>
+    )
   }
 
   const nextSlot = findNextSlot(state)
