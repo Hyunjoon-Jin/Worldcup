@@ -20,6 +20,7 @@ const ProbabilityDashboard = lazy(() =>
 )
 const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
 const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
+const MyTeamTab = lazy(() => import('./components/team/MyTeamTab').then((m) => ({ default: m.MyTeamTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
 import { useQualificationStore } from './store/useQualificationStore'
@@ -31,10 +32,11 @@ import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
 
-type TabId = 'qualifiers' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
+type TabId = 'qualifiers' | 'myteam' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'qualifiers', label: '지역예선' },
+  { id: 'myteam', label: '내 팀' },
   { id: 'ranking', label: 'FIFA 랭킹' },
   { id: 'draw', label: '조추첨' },
   { id: 'schedule', label: '일정 진행' },
@@ -44,7 +46,7 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 
 /** 조추첨 진행 여부와 무관하게 언제나 접근 가능한 탭. 조추첨은 예선을 거쳐야 열린다. */
-const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'ranking']
+const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'myteam', 'ranking']
 
 function App() {
   // 시작은 지역예선부터. 저장된 대회를 이어가는 경우에만 조추첨/일정으로 진입한다.
@@ -186,6 +188,7 @@ function App() {
         ) : (
           <>
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
+            {tab === 'myteam' && <MyTeamTab />}
             {tab === 'ranking' && <FifaRankingTab />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
             {tab === 'schedule' && (
