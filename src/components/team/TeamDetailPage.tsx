@@ -118,9 +118,10 @@ export function TeamDetailPage() {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const toggleMyTeam = useMyTeamStore((s) => s.toggleMyTeam)
   const perfDeltas = usePerformanceStore((s) => s.deltas)
-  const { rankByTeam: liveRankByTeam, pointsByTeam: livePointsByTeam } = useLiveFifaRanking()
+  const { rankByTeam: liveRankByTeam, pointsByTeam: livePointsByTeam, rowByTeam: liveRowByTeam } = useLiveFifaRanking()
   const liveRank = teamId ? liveRankByTeam[teamId] : undefined
   const livePoints = teamId ? livePointsByTeam[teamId] : undefined
+  const liveRow = teamId ? liveRowByTeam[teamId] : undefined
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
@@ -396,6 +397,45 @@ export function TeamDetailPage() {
           )
         })()}
       </GlassCard>
+
+      {/* FIFA 점수 카드(D20) — 라이브 점수·세계 순위·이번 대회 등락 */}
+      {liveRow && (
+        <GlassCard className="p-4">
+          <div className="mb-2 flex items-center gap-1.5">
+            <p className="text-sm font-bold text-sky-300">🌐 FIFA 랭킹 점수</p>
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">잠정</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-lg bg-white/5 py-2">
+              <div className="text-lg font-bold tabular-nums text-white">{liveRow.points}</div>
+              <div className="text-[10px] text-gray-500">현재 점수</div>
+            </div>
+            <div className="rounded-lg bg-white/5 py-2">
+              <div className="text-lg font-bold tabular-nums text-white">{liveRow.rank}위</div>
+              <div className="text-[10px] text-gray-500">세계 순위</div>
+            </div>
+            <div className="rounded-lg bg-white/5 py-2">
+              {(() => {
+                const rd = liveRow.rankDelta
+                const pd = liveRow.pointsDelta
+                const up = rd > 0 || (rd === 0 && pd > 0)
+                const moved = rd !== 0 || pd !== 0
+                return (
+                  <>
+                    <div className={`text-lg font-bold tabular-nums ${!moved ? 'text-gray-500' : up ? 'text-emerald-300' : 'text-red-300'}`}>
+                      {!moved ? '–' : `${rd !== 0 ? `${up ? '▲' : '▼'}${Math.abs(rd)}` : ''} ${pd >= 0 ? '+' : ''}${pd}`}
+                    </div>
+                    <div className="text-[10px] text-gray-500">이번 대회 등락</div>
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+          <p className="mt-2 text-[10px] text-gray-500">
+            대회 시작({liveRow.basePoints}점) 대비 예선·본선 결과가 실제 FIFA 산정식으로 반영된 잠정 점수입니다.
+          </p>
+        </GlassCard>
+      )}
 
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-sky-300">경기 기록</h3>

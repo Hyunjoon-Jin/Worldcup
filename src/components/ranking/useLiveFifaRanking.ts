@@ -15,6 +15,7 @@ export function useLiveFifaRanking(): {
   rows: LiveRankRow[]
   rankByTeam: Record<string, number>
   pointsByTeam: Record<string, number>
+  rowByTeam: Record<string, LiveRankRow>
   hasLive: boolean
 } {
   const result = useQualificationStore((s) => s.result)
@@ -25,7 +26,7 @@ export function useLiveFifaRanking(): {
 
   return useMemo(() => {
     if (!result) {
-      return { rows: [], rankByTeam: {}, pointsByTeam: {}, hasLive: false }
+      return { rows: [], rankByTeam: {}, pointsByTeam: {}, rowByTeam: {}, hasLive: false }
     }
     const carried = Object.keys(rankingBase).length > 0 ? rankingBase : undefined
     const finals: FinalsResults = {
@@ -37,10 +38,12 @@ export function useLiveFifaRanking(): {
     const rows = computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried)
     const rankByTeam: Record<string, number> = {}
     const pointsByTeam: Record<string, number> = {}
+    const rowByTeam: Record<string, LiveRankRow> = {}
     for (const r of rows) {
       rankByTeam[r.teamId] = r.rank
       pointsByTeam[r.teamId] = r.points
+      rowByTeam[r.teamId] = r
     }
-    return { rows, rankByTeam, pointsByTeam, hasLive: true }
+    return { rows, rankByTeam, pointsByTeam, rowByTeam, hasLive: true }
   }, [result, revealed, groupMatches, knockoutSlots, rankingBase])
 }
