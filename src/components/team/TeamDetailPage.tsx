@@ -10,6 +10,7 @@ import { FlagIcon } from '../common/FlagIcon'
 import { GlassButton } from '../common/GlassButton'
 import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
+import { TeamHistorySection } from './TeamHistorySection'
 import { UpsetBadge } from '../common/UpsetBadge'
 import { ProbBar } from '../probability/ProbBar'
 import { STAGES } from '../probability/probabilityStages'
@@ -436,6 +437,8 @@ export function TeamDetailPage() {
           </p>
         </GlassCard>
       )}
+
+      <TeamHistorySection teamId={teamId} />
 
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-sky-300">경기 기록</h3>
