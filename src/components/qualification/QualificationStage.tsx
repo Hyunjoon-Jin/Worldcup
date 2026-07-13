@@ -947,6 +947,7 @@ function ConfederationStandings({
 }) {
   const result = useQualificationStore((s) => s.result)
   const probabilities = useQualificationStore((s) => s.probabilities)
+  const stageProbs = useQualificationStore((s) => s.stageProbabilities)
   const revealedMap = useQualificationStore((s) => s.revealed)
   const setRevealed = useQualificationStore((s) => s.setRevealed)
   // 선택된 예선 차수(스테이지) 탭. null이면 '현재 진행 중인 차수'를 따라간다. 대륙을 바꾸면 리셋.
@@ -996,6 +997,16 @@ function ConfederationStandings({
   )
   // 아직 시작되지 않은 차수는 진출국이 스포일러가 되므로 조/순위를 감춘다.
   const selectedStageUpcoming = !!(useStageTabs && selectedStage && stageStatus(selectedStage, revealed) === 'upcoming')
+
+  // 단계별 진출 확률 — 선택 차수에서 '다음 차수'로 진출할 확률(마지막 차수면 없음). 실시간 조건부 값.
+  const stageOrder = stageProbs?.stageOrderByConfed[confed] ?? stages.map((s) => s.name)
+  const selStageIdx = selectedStage ? stageOrder.indexOf(selectedStage.name) : -1
+  const nextStageName = selStageIdx >= 0 && selStageIdx < stageOrder.length - 1 ? stageOrder[selStageIdx + 1] : null
+  const showAdvanceCol = !!stageProbs && !!nextStageName && !selectedStageUpcoming
+  const advancePctFor = (teamId: string): number | null => {
+    if (!stageProbs || !nextStageName) return null
+    return stageProbs.byTeam[teamId]?.[nextStageName] ?? 0
+  }
 
   return (
     <GlassCard className="p-4">
@@ -1093,7 +1104,10 @@ function ConfederationStandings({
                     <th scope="col" className="w-10 py-1 text-center">경기</th>
                     <th scope="col" className="w-10 py-1 text-center">승점</th>
                     <th scope="col" className="w-12 py-1 text-center">득실</th>
-                    {probabilities && <th scope="col" className="w-14 py-1 text-right">진출</th>}
+                    {showAdvanceCol && (
+                      <th scope="col" className="w-16 py-1 text-right" title={`${nextStageName} 진출 확률`}>{nextStageName} ↑</th>
+                    )}
+                    {probabilities && <th scope="col" className="w-14 py-1 text-right">본선</th>}
                     <th scope="col" className="py-1 text-right">결과</th>
                   </tr>
                 </thead>
@@ -1113,6 +1127,9 @@ function ConfederationStandings({
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
+                      {showAdvanceCol && (
+                        <td className="py-1.5 text-right text-amber-300 tabular-nums">{(advancePctFor(teamId) ?? 0).toFixed(0)}%</td>
+                      )}
                       {probabilities && (
                         <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
                       )}
@@ -1141,7 +1158,10 @@ function ConfederationStandings({
                       <span>{s.played}경기</span>
                       <span className="font-bold text-white">{s.points}점</span>
                       <span>{gd > 0 ? `+${gd}` : gd}</span>
-                      {probabilities && <span className="text-sky-300">{(probabilities[teamId] ?? 0).toFixed(0)}%</span>}
+                      {showAdvanceCol && (
+                        <span className="text-amber-300" title={`${nextStageName} 진출`}>{nextStageName} {(advancePctFor(teamId) ?? 0).toFixed(0)}%</span>
+                      )}
+                      {probabilities && <span className="text-sky-300" title="본선 진출">본선 {(probabilities[teamId] ?? 0).toFixed(0)}%</span>}
                     </div>
                   </div>
                   <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} />
@@ -1340,8 +1360,13 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 )
               })}
             </div>
-            <GlassButton variant="ghost" onClick={computeProbabilities} disabled={probLoading}>
-              {probLoading ? '진출 확률 계산 중…' : probabilities ? '🔄 진출 확률 재계산' : '📊 본선 진출 확률'}
+            <GlassButton
+              variant="ghost"
+              onClick={computeProbabilities}
+              disabled={probLoading}
+              title="본선 진출 확률과 예선 단계별(차수별) 진출 확률을 함께 계산합니다"
+            >
+              {probLoading ? '진출 확률 계산 중…' : probabilities ? '🔄 진출 확률 재계산' : '📊 진출 확률 (단계별 포함)'}
             </GlassButton>
           </div>
 

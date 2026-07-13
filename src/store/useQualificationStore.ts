@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { simulateAllQualification, type AllQualificationResult } from '../engine/qualification'
 import { buildQualCalendar } from '../engine/qualification/calendar'
-import { createQualProbAccumulator } from '../engine/qualification/probability'
+import { createQualProbAccumulator, type StageProbabilities } from '../engine/qualification/probability'
 import {
   collectPlayedByConfed,
   buildLockedLookups,
@@ -94,7 +94,7 @@ async function runProbOnMainThread(
     await new Promise((r) => setTimeout(r, 0))
   }
   if (runId !== probRunId) return
-  set({ probabilities: acc.result(), probLoading: false })
+  set({ probabilities: acc.result(), stageProbabilities: acc.stageResult(), probLoading: false })
 }
 
 interface QualificationStore {
@@ -102,6 +102,8 @@ interface QualificationStore {
   result: AllQualificationResult | null
   /** 본선 진출 확률(%) — 계산 전 null (Q5) */
   probabilities: Record<string, number> | null
+  /** 예선 단계별(차수별) 진출 확률 — 계산 전 null */
+  stageProbabilities: StageProbabilities | null
   probLoading: boolean
   /** 대륙별 현재까지 공개된 라운드(B1 라운드별 진행). 기본은 전체 공개. */
   revealed: Record<string, number>
@@ -130,6 +132,7 @@ export const useQualificationStore = create<QualificationStore>()(
       seed: null,
       result: null,
       probabilities: null,
+      stageProbabilities: null,
       probLoading: false,
       revealed: {},
       simulate: (seed) => {
@@ -144,7 +147,7 @@ export const useQualificationStore = create<QualificationStore>()(
           calendar.length > 0
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
-        set({ seed: usedSeed, result, probabilities: null, revealed })
+        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed })
         syncPerformanceDeltas(result, revealed)
       },
       setRevealed: (confed, matchday) => {
@@ -161,7 +164,7 @@ export const useQualificationStore = create<QualificationStore>()(
         const hostIds = getCurrentHostIds()
         // 진행 상황(실황)을 반영: 부분 진행이면 치른 경기 고정 + 갱신 전력으로 조건부 계산.
         const { ratings, locked, lockedByConfed } = buildProbInputs()
-        set({ probLoading: true, probabilities: null })
+        set({ probLoading: true, probabilities: null, stageProbabilities: null })
         if (probWorker) {
           probWorker.terminate()
           probWorker = null
@@ -175,7 +178,7 @@ export const useQualificationStore = create<QualificationStore>()(
             worker.onmessage = (e: MessageEvent<QualWorkerOut>) => {
               if (runId !== probRunId) return
               if (e.data.type === 'result') {
-                set({ probabilities: e.data.probabilities, probLoading: false })
+                set({ probabilities: e.data.probabilities, stageProbabilities: e.data.stageProbabilities, probLoading: false })
                 worker.terminate()
                 if (probWorker === worker) probWorker = null
               }
@@ -200,13 +203,13 @@ export const useQualificationStore = create<QualificationStore>()(
           probWorker = null
         }
         usePerformanceStore.getState().reset()
-        set({ seed: null, result: null, probabilities: null, probLoading: false, revealed: {} })
+        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {} })
       },
     }),
     {
       name: 'wc2026-qualification-store',
       version: 3,
-      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, revealed: s.revealed }),
+      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed }),
       onRehydrateStorage: () => (state) => {
         // 새로고침 후 저장된 진행 상황으로 성적 반영 능력치 보정을 복원한다.
         if (state?.result) syncPerformanceDeltas(state.result, state.revealed)

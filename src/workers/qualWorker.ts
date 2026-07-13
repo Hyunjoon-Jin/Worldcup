@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { createQualProbAccumulator } from '../engine/qualification/probability'
+import { createQualProbAccumulator, type StageProbabilities } from '../engine/qualification/probability'
 import { buildLockedLookups, type LockedMatchData } from '../engine/qualification/conditional'
 import type { TeamRatings } from '../types/team'
 
@@ -15,7 +15,7 @@ interface RunMessage {
 
 export type QualWorkerOut =
   | { type: 'progress'; progress: number }
-  | { type: 'result'; probabilities: Record<string, number> }
+  | { type: 'result'; probabilities: Record<string, number>; stageProbabilities: StageProbabilities }
 
 const BATCH = 20
 
@@ -27,5 +27,5 @@ self.onmessage = (e: MessageEvent<RunMessage>) => {
     acc.runBatch(Math.min(BATCH, iterations - acc.done))
     ;(self as unknown as Worker).postMessage({ type: 'progress', progress: acc.done / iterations })
   }
-  ;(self as unknown as Worker).postMessage({ type: 'result', probabilities: acc.result() })
+  ;(self as unknown as Worker).postMessage({ type: 'result', probabilities: acc.result(), stageProbabilities: acc.stageResult() })
 }

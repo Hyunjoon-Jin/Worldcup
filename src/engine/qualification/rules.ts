@@ -145,6 +145,25 @@ export interface QualStageProgress {
   groupIndices: number[]
 }
 
+/** 조 인덱스가 속한 스테이지 이름. 확률 집계·표시에서 조→차수 매핑에 쓴다(매치데이 계산 없이 가볍게). */
+export function stageNameOfGroup(r: QualificationResult, gi: number): string {
+  return stageNameFromLabel(r.groupLabels?.[gi], r.groups.length <= 1)
+}
+
+/** 결과에서 스테이지 이름 순서(조 인덱스 등장 순 = 차수 순). deriveQualStages보다 가볍다. */
+export function stageOrderOfResult(r: QualificationResult): string[] {
+  const seen = new Set<string>()
+  const order: string[] = []
+  r.groups.forEach((_, gi) => {
+    const name = stageNameOfGroup(r, gi)
+    if (!seen.has(name)) {
+      seen.add(name)
+      order.push(name)
+    }
+  })
+  return order
+}
+
 /** 조 라벨에서 스테이지 이름을 뽑는다("2차 A조"→"2차 예선", "PO 경로 A"→"플레이오프", "A조"→"조별리그"). */
 function stageNameFromLabel(label: string | undefined, single: boolean): string {
   if (!label) return single ? '단일 리그' : '조별리그'
