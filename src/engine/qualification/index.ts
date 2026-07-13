@@ -6,6 +6,8 @@ import { simulateGroupQualification, type LockedLookup } from './generic'
 import { simulateAfc } from './afc'
 import { simulateConcacaf } from './concacaf'
 import { simulateUefa } from './uefa'
+import { simulateCaf } from './caf'
+import { simulateOfc } from './ofc'
 import { QUAL_FORMAT } from './formats'
 import { simulateInterConfedPlayoff, type InterConfedResult } from './interConfed'
 import type { Confederation, TeamRatings } from '../../types/team'
@@ -47,6 +49,8 @@ export function simulateConfederation(
   if (confed === 'AFC') return simulateAfc(teams, ratings, rand, locked, direct)
   if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand, locked, direct)
   if (confed === 'UEFA') return simulateUefa(teams, ratings, rand, locked, direct)
+  if (confed === 'CAF') return simulateCaf(teams, ratings, rand, locked, direct)
+  if (confed === 'OFC') return simulateOfc(teams, ratings, rand, locked, direct)
   // 단일 조별 스테이지 대륙: 포맷(조 수·홈&어웨이)은 QUAL_FORMAT, 슬롯은 SLOT_ALLOCATION에서 (C4).
   const fmt = QUAL_FORMAT[confed]
   if (fmt.kind !== 'groups') throw new Error(`조별 포맷이 아닌 대륙: ${confed}`)

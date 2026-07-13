@@ -544,14 +544,12 @@ describe('대륙 난이도 지수 (개선 G4)', () => {
 describe('포맷 데이터 주도화 (개선 C4)', () => {
   const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
 
-  it('단일 조별 대륙의 조 수는 QUAL_FORMAT.numGroups를 따른다', () => {
-    // CAF·CONMEBOL·OFC는 순수 조별. UEFA는 플레이오프 경로가 붙으므로 별도 검증(아래).
-    for (const c of ['CAF', 'CONMEBOL', 'OFC'] as const) {
-      const fmt = QUAL_FORMAT[c]
-      if (fmt.kind !== 'groups') continue
-      const r = simulateConfederation(c, allRatings, createSeededRandom(`fmt-${c}`))
-      expect(r.groups.length).toBe(fmt.numGroups)
-    }
+  it('CONMEBOL(단일리그)은 조 수가 QUAL_FORMAT.numGroups를 따른다', () => {
+    // CONMEBOL만 순수 단일리그. UEFA·CAF·OFC는 플레이오프/녹아웃 경로가 붙으므로 별도 검증(아래).
+    const fmt = QUAL_FORMAT.CONMEBOL
+    if (fmt.kind !== 'groups') throw new Error('CONMEBOL은 groups 포맷')
+    const r = simulateConfederation('CONMEBOL', allRatings, createSeededRandom('fmt-conmebol'))
+    expect(r.groups.length).toBe(fmt.numGroups)
   })
 
   it('UEFA는 조별 12개 조 + 플레이오프 4개 경로 = 16 (B14)', () => {
@@ -560,6 +558,22 @@ describe('포맷 데이터 주도화 (개선 C4)', () => {
     const r = simulateConfederation('UEFA', allRatings, createSeededRandom('fmt-uefa'))
     expect(r.groups.length).toBe(fmt.numGroups + 4)
     expect(r.groupLabels?.slice(-4)).toEqual(['PO 경로 A', 'PO 경로 B', 'PO 경로 C', 'PO 경로 D'])
+  })
+
+  it('CAF는 9개 조 + 최고 2위 미니토너먼트 = 10 (B15)', () => {
+    const r = simulateConfederation('CAF', allRatings, createSeededRandom('fmt-caf'))
+    expect(r.groups.length).toBe(10)
+    expect(r.groupLabels?.[9]).toBe('최고 2위 PO')
+    expect(r.qualified).toHaveLength(SLOT_ALLOCATION.CAF.direct)
+    expect(r.playoff).toHaveLength(SLOT_ALLOCATION.CAF.playoff)
+  })
+
+  it('OFC는 2개 조 + 녹아웃 = 3, 결승 승자 직행·패자 PO (B16)', () => {
+    const r = simulateConfederation('OFC', allRatings, createSeededRandom('fmt-ofc'))
+    expect(r.groups.length).toBe(3)
+    expect(r.groupLabels?.[2]).toBe('녹아웃')
+    expect(r.qualified).toHaveLength(SLOT_ALLOCATION.OFC.direct)
+    expect(r.playoff).toHaveLength(SLOT_ALLOCATION.OFC.playoff)
   })
 
   it('AFC/CONCACAF 스테이지 조 수가 포맷 파라미터와 일치한다', () => {

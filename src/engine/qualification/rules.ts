@@ -57,7 +57,7 @@ export const QUAL_RULES: Record<Confederation, QualRule> = {
   },
   CAF: {
     confederation: 'CAF',
-    summary: `${CAF.kind === 'groups' ? CAF.numGroups : 9}개 조 리그. 조 1위 직행, 최고 2위는 대륙간 PO.`,
+    summary: `${CAF.kind === 'groups' ? CAF.numGroups : 9}개 조 리그. 조 1위 직행, 최고 2위 4팀은 미니토너먼트로 대륙간 PO 1장을 다툰다.`,
     slots: `본선 직행 ${S.CAF.direct}장 + 대륙간 PO ${S.CAF.playoff}장`,
     stages: [
       {
@@ -66,9 +66,9 @@ export const QUAL_RULES: Record<Confederation, QualRule> = {
         advance: `각 조 1위 본선 직행 (${S.CAF.direct}장)`,
       },
       {
-        name: '대륙간 PO 선발',
-        format: '조 2위 전원을 성적순으로 비교',
-        advance: `최고 성적 2위 1팀이 대륙간 플레이오프행 (${S.CAF.playoff}장)`,
+        name: '최고 2위 PO',
+        format: '조 2위 중 성적 최고 4팀이 준결승·결승 단판 녹아웃(중립지)',
+        advance: `우승 1팀이 대륙간 플레이오프행 (${S.CAF.playoff}장)`,
       },
     ],
   },
@@ -109,13 +109,18 @@ export const QUAL_RULES: Record<Confederation, QualRule> = {
   },
   OFC: {
     confederation: 'OFC',
-    summary: '오세아니아 단일 리그. 1위 직행, 2위 대륙간 PO.',
+    summary: '2개 조 리그 후 녹아웃. 결승 승자 직행, 결승 패자 대륙간 PO.',
     slots: `본선 직행 ${S.OFC.direct}장 + 대륙간 PO ${S.OFC.playoff}장`,
     stages: [
       {
-        name: '단일 리그',
-        format: '홈&어웨이 풀리그',
-        advance: `1위 본선 직행 (${S.OFC.direct}장), 2위는 대륙간 플레이오프행 (${S.OFC.playoff}장)`,
+        name: '조별리그',
+        format: '2개 조 홈&어웨이',
+        advance: '각 조 1·2위가 준결승 진출',
+      },
+      {
+        name: '녹아웃',
+        format: '준결승(A1-B2·B1-A2) → 결승, 모두 단판',
+        advance: `결승 승자 본선 직행 (${S.OFC.direct}장), 결승 패자 대륙간 플레이오프행 (${S.OFC.playoff}장)`,
       },
     ],
   },
@@ -146,6 +151,7 @@ function stageNameFromLabel(label: string | undefined, single: boolean): string 
   const staged = label.match(/^(\d+)차/)
   if (staged) return `${staged[1]}차 예선`
   if (label.startsWith('최종')) return '최종 라운드'
+  if (label.startsWith('녹아웃')) return '녹아웃'
   if (label.startsWith('PO') || label.includes('PO')) return '플레이오프'
   return '조별리그'
 }
