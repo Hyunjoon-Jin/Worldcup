@@ -949,6 +949,11 @@ function ConfederationStandings({
   const probabilities = useQualificationStore((s) => s.probabilities)
   const revealedMap = useQualificationStore((s) => s.revealed)
   const setRevealed = useQualificationStore((s) => s.setRevealed)
+  // 선택된 예선 차수(스테이지) 탭. null이면 '현재 진행 중인 차수'를 따라간다. 대륙을 바꾸면 리셋.
+  const [selectedStageName, setSelectedStageName] = useState<string | null>(null)
+  useEffect(() => {
+    setSelectedStageName(null)
+  }, [confed])
   const r = result?.byConfederation[confed]
   if (!r) return null
   const total = r.matchdays
@@ -975,6 +980,23 @@ function ConfederationStandings({
   // 이 대륙에 속한 현재 대회 개최국(예선 없이 자동 진출) — 커리어 모드로 매 대회 바뀔 수 있다.
   const confedHosts = getCurrentHostIds().filter((id) => ALL_NATIONS_BY_ID[id]?.confederation === confed)
 
+  // 예선 차수(스테이지) 서브탭 — 다단계 대륙만. 현재 진행 중인 차수를 기본 선택한다.
+  const stages = deriveQualStages(r)
+  const useStageTabs = stages.length > 1
+  const activeStage =
+    stages.find((s) => stageStatus(s, revealed) === 'active') ??
+    [...stages].reverse().find((s) => stageStatus(s, revealed) === 'done') ??
+    stages[0]
+  const effectiveStageName =
+    selectedStageName && stages.some((s) => s.name === selectedStageName) ? selectedStageName : activeStage?.name
+  const selectedStage = stages.find((s) => s.name === effectiveStageName)
+  // 선택 차수에 속한 조만 노출한다(다른 차수 경기/순위는 그 탭에서 생략).
+  const visibleGroupIdx = new Set<number>(
+    useStageTabs && selectedStage ? selectedStage.groupIndices : r.groups.map((_, i) => i),
+  )
+  // 아직 시작되지 않은 차수는 진출국이 스포일러가 되므로 조/순위를 감춘다.
+  const selectedStageUpcoming = !!(useStageTabs && selectedStage && stageStatus(selectedStage, revealed) === 'upcoming')
+
   return (
     <GlassCard className="p-4">
       <QualRulesPanel confed={confed} />
@@ -986,6 +1008,35 @@ function ConfederationStandings({
       )}
 
       <QualStageTimeline r={r} revealed={revealed} />
+
+      {useStageTabs && (
+        <div role="tablist" aria-label={`${CONFEDERATION_LABEL_KO[confed]} 예선 차수`} className="mb-3 flex flex-wrap gap-1.5">
+          {stages.map((s) => {
+            const status = stageStatus(s, revealed)
+            const selected = s.name === effectiveStageName
+            const dot = status === 'done' ? '✓' : status === 'active' ? '●' : '○'
+            return (
+              <button
+                key={s.name}
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setSelectedStageName(s.name)}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  selected
+                    ? 'bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40'
+                    : status === 'active'
+                      ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                      : 'bg-white/5 text-gray-400 hover:text-white'
+                }`}
+              >
+                <span aria-hidden className="text-[9px]">{dot}</span>
+                {s.name}
+                {status === 'active' && <span className="text-[8px] font-bold text-amber-300">진행중</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* 라운드별 진행 컨트롤 (B1) */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1001,8 +1052,15 @@ function ConfederationStandings({
         </div>
       </div>
 
+      {selectedStageUpcoming ? (
+        <div className="rounded-lg bg-white/5 p-6 text-center text-xs text-gray-500">
+          <p>아직 진행되지 않은 차수입니다. 이전 차수가 끝나면 이 차수 진출국이 확정됩니다.</p>
+          <p className="mt-1 text-[10px]">📅 일별 진행에서 라운드를 넘겨 이 차수까지 진행해 보세요.</p>
+        </div>
+      ) : (
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
         {r.groups.map((finalOrder, gi) => {
+          if (!visibleGroupIdx.has(gi)) return null // 선택된 차수의 조만 노출
           const groupMatches = shownMatches.filter((m) => m.group === gi)
           const groupTeams = rankGroupTeams(finalOrder, groupMatches)
           // 조 자체 경기만으로 순위 지표 계산(다단계 대륙에서 팀이 여러 조에 걸쳐도 정확).
@@ -1095,13 +1153,14 @@ function ConfederationStandings({
           )
         })}
       </div>
+      )}
       <p className="mt-3 text-[11px] text-gray-500">
         {full
           ? single
             ? '※ 상위권 직행, 다음 순위 대륙간 PO로 결정됩니다.'
             : '※ 조 순위는 조별 성적, 직행/PO 여부는 전체 대륙 순위(조 1위 우선 → 최고 2위 …)로 결정됩니다.'
           : r.groupLabels
-            ? '※ 진행 중 — 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'
+            ? '※ 진행 중 — 위 차수 탭으로 각 라운드를 전환하고, 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'
             : '※ 진행 중 — 점선 배지는 현재 순위 기준 잠정 진출 상황(확정 아님)입니다. 라운드를 넘기면 실시간으로 바뀝니다.'}
       </p>
     </GlassCard>
@@ -1210,7 +1269,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             aria-label="예선 시드"
             className="w-36 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
           />
-          <GlassButton onClick={() => simulate(seedInput)}>⚽ 전체 예선 시뮬레이션</GlassButton>
+          <GlassButton onClick={() => simulate(seedInput)} title="예선을 시작하면 첫 경기일부터 하루씩 진행합니다">
+            ⚽ 지역예선 시작
+          </GlassButton>
           <GlassButton
             variant="ghost"
             onClick={() => {
@@ -1222,16 +1283,21 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             🗓️ 오늘의 예선
           </GlassButton>
         </div>
+        <p className="mt-2 text-[11px] text-gray-500">
+          시작하면 <strong className="text-gray-300">첫 경기일</strong>부터 진행됩니다. 아래 <strong className="text-gray-300">📅 일별 진행</strong>에서
+          <strong className="text-emerald-300"> 다음 경기일 ▶</strong>로 하루씩 넘기며 관전하세요(⏭ 전체로 끝까지 건너뛸 수 있습니다).
+        </p>
         {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span>{seed === todaySeed && <span className="ml-1 text-amber-300">· 오늘의 챌린지</span>}</p>}
       </GlassCard>
 
       {!result ? (
         <GlassCard className="flex flex-col items-center gap-3 p-8 text-center">
           <p className="text-sm text-gray-400">
-            먼저 지역예선을 시뮬레이션해 본선 진출 48개국을 가립니다. 예선을 마쳐야 조추첨으로 넘어갈 수 있어요.
+            먼저 지역예선을 진행해 본선 진출 48개국을 가립니다. 예선을 마쳐야 조추첨으로 넘어갈 수 있어요.
+            시작하면 <strong className="text-gray-300">첫 경기일부터 하루씩</strong> 진행됩니다.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <GlassButton onClick={() => simulate(seedInput)}>⚽ 예선부터 시작</GlassButton>
+            <GlassButton onClick={() => simulate(seedInput)}>⚽ 예선 시작 (하루씩 진행)</GlassButton>
           </div>
         </GlassCard>
       ) : (
