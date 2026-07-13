@@ -39,9 +39,9 @@ export function simulateAfc(
   const ROUND3_SIZE = fmt.round2Groups * 2 // 3차 진입 팀 수(9×2=18)
 
   /** 한 조를 치르고 등록한다. 같은 스테이지 조들은 base(matchdayOffset)를 공유해 병행한다. */
-  const runGroup = (g: string[], label: string, base: number): string[] => {
+  const runGroup = (g: string[], label: string, base: number, doubleRound = fmt.doubleRound): string[] => {
     const { matches, ranking, lastMatchday } = playSingleGroup(g, ratings, rand, {
-      doubleRound: fmt.doubleRound,
+      doubleRound,
       groupIndex: groupRankings.length,
       matchdayOffset: base,
       locked,
@@ -101,25 +101,36 @@ export function simulateAfc(
   })
 
   // --- 4차: 3·4위 팀들을 round4Groups개 조로 → 1위 직행, 2위 5차로 ---
+  // 4차는 중립지 단판 라운드로빈(B9): 실제 2026 4차와 동일하게 홈&어웨이가 아니다.
   const round5Pool: string[] = []
   const r4Base = md
   snakeSeed([...round4Pool].sort(byRank), fmt.round4Groups).forEach((g, i) => {
-    const ranking = runGroup(g, `4차 ${GROUP_LETTERS[i]}조`, r4Base)
+    const ranking = runGroup(g, `4차 ${GROUP_LETTERS[i]}조`, r4Base, false)
     if (ranking[0]) direct.push(ranking[0])
     if (ranking[1]) round5Pool.push(ranking[1])
   })
 
-  // --- 5차: 두 조 2위 단판 PO → 승자 대륙간 PO행 ---
+  // --- 5차: 두 조 2위 홈&어웨이 2연전 → 합산 승자 대륙간 PO행(B10) ---
   const playoff: string[] = []
   if (round5Pool.length >= 2) {
     const [a, b] = [...round5Pool].sort(byRank)
+    // 1차전: a 홈, 2차전: b 홈
     md += 1
-    const lk = locked?.(a, b, md, groupRankings.length)
-    const s = lk ?? simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand)
-    const winner = s.homeGoals >= s.awayGoals ? a : b
-    allMatches.push({ homeTeamId: a, awayTeamId: b, homeGoals: s.homeGoals, awayGoals: s.awayGoals, matchday: md, group: groupRankings.length })
+    const md1 = md
+    const lk1 = locked?.(a, b, md1, groupRankings.length)
+    const s1 = lk1 ?? simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand)
+    allMatches.push({ homeTeamId: a, awayTeamId: b, homeGoals: s1.homeGoals, awayGoals: s1.awayGoals, matchday: md1, group: groupRankings.length })
+    md += 1
+    const md2 = md
+    const lk2 = locked?.(b, a, md2, groupRankings.length)
+    const s2 = lk2 ?? simulateScoreRaw(ratings[b], ratings[a], 0, 0, rand)
+    allMatches.push({ homeTeamId: b, awayTeamId: a, homeGoals: s2.homeGoals, awayGoals: s2.awayGoals, matchday: md2, group: groupRankings.length })
+    // 합산: a 득점 = 1차전 홈 + 2차전 원정, b 득점 = 1차전 원정 + 2차전 홈. 동점이면 상위 시드(a).
+    const aggA = s1.homeGoals + s2.awayGoals
+    const aggB = s1.awayGoals + s2.homeGoals
+    const winner = aggA >= aggB ? a : b
     groupRankings.push([winner, winner === a ? b : a])
-    groupLabels.push('5차 PO')
+    groupLabels.push('5차 PO(2연전)')
     playoff.push(winner)
   } else if (round5Pool.length === 1) {
     playoff.push(round5Pool[0])
