@@ -17,6 +17,7 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
+import { QUAL_RULES, INTER_CONFED_RULE, deriveQualStages, stageStatus } from '../../engine/qualification/rules'
 import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, editionEndRankingPoints, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
@@ -29,6 +30,7 @@ import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
+import type { QualificationResult } from '../../types/qualification'
 import type { InterConfedResult } from '../../engine/qualification/interConfed'
 
 /** 한 조의 경기 목록(접이식). 클릭 시 상세 모달을 연다 (F1). */
@@ -847,6 +849,79 @@ function InterConfedBracket({ result }: { result: InterConfedResult }) {
   )
 }
 
+/** 선택한 대륙 예선의 룰(라운드 구조·슬롯·진출 방식)을 접이식으로 설명한다 — "각 예선별 룰을 제대로". */
+function QualRulesPanel({ confed }: { confed: Confederation }) {
+  const rule = QUAL_RULES[confed]
+  return (
+    <details className="group mb-3 rounded-lg border border-sky-400/20 bg-sky-500/[0.06]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-bold text-sky-200">
+        <span className="flex items-center gap-1.5">
+          📖 {CONFEDERATION_LABEL_KO[confed]} 예선 룰
+          <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold text-sky-100">{rule.slots}</span>
+        </span>
+        <span className="text-gray-400 transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div className="space-y-2 px-3 pb-3">
+        <p className="text-[11px] text-gray-300">{rule.summary}</p>
+        <ol className="space-y-1.5">
+          {rule.stages.map((st, i) => (
+            <li key={i} className="rounded-md bg-white/5 px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/25 text-[9px] font-bold text-emerald-200 tabular-nums">
+                  {i + 1}
+                </span>
+                <span className="text-[11px] font-bold text-gray-100">{st.name}</span>
+                <span className="text-[10px] text-gray-400">— {st.format}</span>
+              </div>
+              <p className="mt-0.5 pl-6 text-[10px] text-emerald-300/90">→ {st.advance}</p>
+            </li>
+          ))}
+        </ol>
+        {rule.note && <p className="text-[10px] text-gray-500">※ {rule.note}</p>}
+        <p className="border-t border-white/10 pt-1.5 text-[10px] text-gray-500">
+          🎯 대륙간 플레이오프: {INTER_CONFED_RULE.summary}. {INTER_CONFED_RULE.detail}
+        </p>
+      </div>
+    </details>
+  )
+}
+
+/** 예선 스테이지(라운드) 진행현황 타임라인 — 완료/진행 중/예정을 한눈에 (월드컵급 진행현황). */
+function QualStageTimeline({ r, revealed }: { r: QualificationResult; revealed: number }) {
+  const stages = useMemo(() => deriveQualStages(r), [r])
+  if (stages.length <= 1) return null // 단일 스테이지 대륙은 타임라인이 의미가 적어 생략
+  const active = stages.find((s) => stageStatus(s, revealed) === 'active')
+  return (
+    <div className="mb-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-gray-300">
+        <span>🗺️ 예선 진행 단계</span>
+        {active && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">현재: {active.name}</span>}
+      </div>
+      <ol className="flex items-stretch gap-1 overflow-x-auto pb-1">
+        {stages.map((st, i) => {
+          const status = stageStatus(st, revealed)
+          const cls =
+            status === 'done'
+              ? 'border-emerald-400/30 bg-emerald-500/20 text-emerald-100'
+              : status === 'active'
+                ? 'border-amber-400/50 bg-amber-500/25 text-amber-50 ring-1 ring-amber-400/40'
+                : 'border-white/10 bg-white/5 text-gray-500'
+          return (
+            <li key={st.name} className="flex items-center gap-1">
+              <div className={`min-w-[64px] rounded-md border px-2 py-1 text-center ${cls}`}>
+                <div className="text-[10px] font-bold leading-tight">{st.name}</div>
+                <div className="text-[8px] opacity-75 tabular-nums">R{st.startMd}–{st.endMd}</div>
+                <div className="text-[8px] font-bold">{status === 'done' ? '✓ 완료' : status === 'active' ? '● 진행 중' : '○ 예정'}</div>
+              </div>
+              {i < stages.length - 1 && <span className="text-[10px] text-gray-600">›</span>}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 function ConfederationStandings({
   confed,
   onSelectMatch,
@@ -888,11 +963,15 @@ function ConfederationStandings({
 
   return (
     <GlassCard className="p-4">
+      <QualRulesPanel confed={confed} />
+
       {confedHosts.length > 0 && (
         <p className="mb-3 text-[11px] text-gray-500">
           개최국({confedHosts.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join('·')})은 예선 없이 자동 진출하며, 아래는 나머지 국가들의 최종 라운드입니다.
         </p>
       )}
+
+      <QualStageTimeline r={r} revealed={revealed} />
 
       {/* 라운드별 진행 컨트롤 (B1) */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
