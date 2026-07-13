@@ -717,6 +717,21 @@ describe('예선 진출 확률 (지역예선 Q5)', () => {
     b.runBatch(20)
     expect(a.result().ARG).toBe(b.result().ARG)
   })
+
+  it('진출국뿐 아니라 회원군 전체(210개국)를 확률에 포함한다 — 한 번도 진출 못 해도 0%로 표시', () => {
+    const acc = createQualProbAccumulator('ALL')
+    acc.runBatch(30)
+    const probs = acc.result()
+    // 6개 대륙 회원국 전체가 결과에 들어간다(약체는 0%라도 대시보드에 나타나야 함).
+    expect(Object.keys(probs).length).toBe(210)
+    // 최소 한 팀은 0%(한 번도 진출 못 함)로 존재한다.
+    expect(Object.values(probs).some((p) => p === 0)).toBe(true)
+    // 모든 확률은 0~100 범위.
+    for (const p of Object.values(probs)) {
+      expect(p).toBeGreaterThanOrEqual(0)
+      expect(p).toBeLessThanOrEqual(100)
+    }
+  })
 })
 
 describe('매치데이 구조 (개선 B1)', () => {

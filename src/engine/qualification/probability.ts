@@ -16,6 +16,19 @@ export function createQualProbAccumulator(
 ) {
   const counts: Record<string, number> = {}
   let done = 0
+
+  // 예선에 참가하는 회원국 전체를 0%로 미리 등록한다. 그래야 한 번도 진출하지 못한 국가도
+  // 확률 대시보드에 (0%로) 표시된다 — 진출국만 보여주는 게 아니라 회원군 전체를 보여준다.
+  const seedUniverse = (res: ReturnType<typeof simulateAllQualification>): void => {
+    for (const r of Object.values(res.byConfederation)) {
+      for (const m of r.matches) {
+        counts[m.homeTeamId] ??= 0
+        counts[m.awayTeamId] ??= 0
+      }
+    }
+    for (const id of res.hosts) counts[id] ??= 0
+  }
+
   return {
     get done() {
       return done
@@ -23,6 +36,7 @@ export function createQualProbAccumulator(
     runBatch(n: number): void {
       for (let i = 0; i < n; i++) {
         const res = simulateAllQualification(`${seedBase}-${done + i}`, ratings, lockedByConfed, hostIds)
+        if (done + i === 0) seedUniverse(res)
         for (const id of res.qualified48) counts[id] = (counts[id] ?? 0) + 1
       }
       done += n
