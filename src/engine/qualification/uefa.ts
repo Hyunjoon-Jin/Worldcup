@@ -74,7 +74,15 @@ export function simulateUefa(
   })
 
   // --- 플레이오프 후보 16팀: 조 2위 전원 + 조별 성적 최고 3위 4팀 ---
-  const overall = computeStandings(teams, allMatches)
+  // D26 공정화: 조 크기가 다르면(5팀 vs 4팀) 큰 조 최하위 팀과의 경기를 제외해 (최소 조 크기−1)경기로
+  // 맞춘 뒤 3위 선발·플레이오프 시딩을 비교한다(조별 1위 직행은 각 조 자체 순위라 영향 없음).
+  const minGroupSize = Math.min(...groupRankings.map((g) => g.length))
+  const excludedForRank = new Set<string>()
+  for (const g of groupRankings) for (const t of g.slice(minGroupSize)) excludedForRank.add(t)
+  const equalizedMatches = excludedForRank.size
+    ? allMatches.filter((m) => !excludedForRank.has(m.homeTeamId) && !excludedForRank.has(m.awayTeamId))
+    : allMatches
+  const overall = computeStandings(teams, equalizedMatches)
   const rec = byRecord(overall)
   const bestThirds = [...thirds].sort(rec).slice(0, PLAYOFF_PATHS)
   const poPool = [...runnersUp, ...bestThirds]

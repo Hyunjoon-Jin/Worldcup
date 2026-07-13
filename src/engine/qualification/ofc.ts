@@ -62,7 +62,14 @@ export function simulateOfc(
     groupTop.push(ranking)
   })
 
-  const overall = computeStandings(teams, allMatches)
+  // D26 공정화: 6팀 조와 5팀 조가 섞이므로, 큰 조 최하위 팀과의 경기를 제외해 성적 비교(결승 홈·순위)를 공정화한다.
+  const minGroupSize = Math.min(...groupTop.map((g) => g.length))
+  const excludedForRank = new Set<string>()
+  for (const g of groupTop) for (const t of g.slice(minGroupSize)) excludedForRank.add(t)
+  const overall = computeStandings(
+    teams,
+    excludedForRank.size ? allMatches.filter((m) => !excludedForRank.has(m.homeTeamId) && !excludedForRank.has(m.awayTeamId)) : allMatches,
+  )
   const playKnockout = (a: string, b: string, mdNum: number, groupIdx: number): string => {
     const lk = locked?.(a, b, mdNum, groupIdx)
     const s = lk ?? simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand) // 중립지 단판

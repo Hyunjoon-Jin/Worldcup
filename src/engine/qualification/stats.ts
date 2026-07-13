@@ -189,13 +189,15 @@ export function computeQualStats(all: AllQualificationResult, topN = 5): QualSta
   }
 
   const stats = [...map.values()]
-  const topScorers = [...stats].sort((a, b) => b.goalsFor - a.goalsFor || a.goalsAgainst - b.goalsAgainst).slice(0, topN)
+  // 동률 시 팀ID로 최종 정렬해 결정성 확보(같은 예선 결과는 같은 리더보드 순서를 재현).
+  const tb = (a: { teamId: string }, b: { teamId: string }) => a.teamId.localeCompare(b.teamId)
+  const topScorers = [...stats].sort((a, b) => b.goalsFor - a.goalsFor || a.goalsAgainst - b.goalsAgainst || tb(a, b)).slice(0, topN)
   // 최소 실점: 경기 수가 지나치게 적은 팀(엣지)은 제외하려 최소 3경기 이상만
   const bestDefense = [...stats]
     .filter((s) => s.played >= 3)
-    .sort((a, b) => a.goalsAgainst - b.goalsAgainst || b.goalsFor - a.goalsFor)
+    .sort((a, b) => a.goalsAgainst - b.goalsAgainst || b.goalsFor - a.goalsFor || tb(a, b))
     .slice(0, topN)
-  const mostWins = [...stats].sort((a, b) => b.wins - a.wins || b.goalsFor - a.goalsFor).slice(0, topN)
+  const mostWins = [...stats].sort((a, b) => b.wins - a.wins || b.goalsFor - a.goalsFor || tb(a, b)).slice(0, topN)
 
   return { topScorers, bestDefense, mostWins, biggestWin: biggest }
 }

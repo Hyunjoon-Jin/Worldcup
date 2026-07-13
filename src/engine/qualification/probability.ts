@@ -47,16 +47,19 @@ export function createQualProbAccumulator(
 
   const tallyStages = (res: ReturnType<typeof simulateAllQualification>): void => {
     for (const [confed, r] of Object.entries(res.byConfederation)) {
-      if (!stageOrderByConfed[confed]) stageOrderByConfed[confed] = stageOrderOfResult(r)
-      // 팀이 어떤 차수 조에 편성됐으면 그 차수에 '도달'한 것으로 집계(중복 없이).
+      // 차수 순서는 여러 시드에 걸쳐 합집합으로 누적한다(첫 시드에서 5차 PO 등이 없을 수 있으므로).
+      const order = stageOrderByConfed[confed] ?? (stageOrderByConfed[confed] = [])
+      for (const name of stageOrderOfResult(r)) if (!order.includes(name)) order.push(name)
+      // '도달' = 그 차수의 경기에 실제 출전(홈/원정). 조 편성 목록이 승자만 담는 녹아웃 예비라운드
+      // (AFC·CONCACAF 1차, AFC 5차)에서도 참가 자체를 정확히 집계한다(승률과 혼동 방지).
       const reachedThisSim: Record<string, Set<string>> = {}
-      r.groups.forEach((teams, gi) => {
-        const stage = stageNameOfGroup(r, gi)
-        for (const t of teams) {
+      for (const m of r.matches) {
+        const stage = stageNameOfGroup(r, m.group)
+        for (const t of [m.homeTeamId, m.awayTeamId]) {
           const set = reachedThisSim[t] ?? (reachedThisSim[t] = new Set())
           set.add(stage)
         }
-      })
+      }
       for (const [t, set] of Object.entries(reachedThisSim)) {
         const rec = stageCounts[t] ?? (stageCounts[t] = {})
         for (const stage of set) rec[stage] = (rec[stage] ?? 0) + 1

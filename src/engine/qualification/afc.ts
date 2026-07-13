@@ -1,5 +1,6 @@
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
+import { QUALIFIER_HOME_ADVANTAGE } from '../config'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
 import { playSingleGroup, snakeSeed, type LockedLookup } from './generic'
 import { QUAL_FORMAT, GROUP_LETTERS, type AfcFormat } from './formats'
@@ -118,12 +119,12 @@ export function simulateAfc(
     md += 1
     const md1 = md
     const lk1 = locked?.(a, b, md1, groupRankings.length)
-    const s1 = lk1 ?? simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand)
+    const s1 = lk1 ?? simulateScoreRaw(ratings[a], ratings[b], QUALIFIER_HOME_ADVANTAGE, 0, rand) // 1차전 a 홈 이점
     allMatches.push({ homeTeamId: a, awayTeamId: b, homeGoals: s1.homeGoals, awayGoals: s1.awayGoals, matchday: md1, group: groupRankings.length })
     md += 1
     const md2 = md
     const lk2 = locked?.(b, a, md2, groupRankings.length)
-    const s2 = lk2 ?? simulateScoreRaw(ratings[b], ratings[a], 0, 0, rand)
+    const s2 = lk2 ?? simulateScoreRaw(ratings[b], ratings[a], QUALIFIER_HOME_ADVANTAGE, 0, rand) // 2차전 b 홈 이점
     allMatches.push({ homeTeamId: b, awayTeamId: a, homeGoals: s2.homeGoals, awayGoals: s2.awayGoals, matchday: md2, group: groupRankings.length })
     // 합산: a 득점 = 1차전 홈 + 2차전 원정, b 득점 = 1차전 원정 + 2차전 홈. 동점이면 상위 시드(a).
     const aggA = s1.homeGoals + s2.awayGoals

@@ -1,4 +1,4 @@
-import { ALL_NATIONS, baseRatingsMap, nationsByConfederation } from '../../data/nations'
+import { ALL_NATIONS, ALL_NATIONS_BY_ID, baseRatingsMap, nationsByConfederation } from '../../data/nations'
 import { HOST_SLOTS } from '../../data/hostSlots'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { createSeededRandom, type RandomFn } from '../rng'
@@ -75,13 +75,17 @@ export function simulateAllQualification(
   lockedByConfed?: Record<string, LockedLookup>,
   hostIds: string[] = DEFAULT_HOST_IDS,
 ): AllQualificationResult {
+  // 개최국은 소속 대륙 직행 슬롯을 대신 차지하므로, 반드시 어느 대륙에든 실존하는 팀이어야 48 정합성이
+  // 유지된다. 대륙에 없는 ID(오타 등)를 걸러내, 슬롯 감소 없이 필드가 49로 늘어나는 것을 방지한다.
+  const validHostIds = hostIds.filter((id) => ALL_NATIONS_BY_ID[id]?.confederation != null)
+
   const byConfederation: Record<string, QualificationResult> = {}
   const directQualified: string[] = []
   const playoffTeams: string[] = []
 
   for (const confed of CONFEDERATIONS) {
     const rand = createSeededRandom(`${seed}-${confed}`)
-    const r = simulateConfederation(confed, ratings, rand, lockedByConfed?.[confed], hostIds)
+    const r = simulateConfederation(confed, ratings, rand, lockedByConfed?.[confed], validHostIds)
     byConfederation[confed] = r
     directQualified.push(...r.qualified)
     playoffTeams.push(...r.playoff)
@@ -90,6 +94,6 @@ export function simulateAllQualification(
   // 대륙간 플레이오프 (6팀 → 2장)
   const interConfed = simulateInterConfedPlayoff(playoffTeams, ratings, createSeededRandom(`${seed}-ICP`))
 
-  const qualified48 = [...hostIds, ...directQualified, ...interConfed.winners]
-  return { byConfederation, interConfed, hosts: hostIds, qualified48 }
+  const qualified48 = [...validHostIds, ...directQualified, ...interConfed.winners]
+  return { byConfederation, interConfed, hosts: validHostIds, qualified48 }
 }
