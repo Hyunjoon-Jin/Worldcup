@@ -1,6 +1,6 @@
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
-import { type RandomFn } from '../matchCore'
+import { simulateScoreRaw, type RandomFn } from '../matchCore'
 import { playSingleGroup, snakeSeed, rankAcrossGroups, type LockedLookup } from './generic'
 import { QUAL_FORMAT, GROUP_LETTERS, type ConcacafFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
@@ -12,9 +12,10 @@ const byRank = (a: string, b: string) => {
 }
 
 /**
- * CONCACAF 다라운드 예선 근사 (A4). 개최국은 상위(오케스트레이터)에서 이미 제외되어 들어온다.
- * - 1차 예선 라운드: 하위권 팀들이 미니 조에서 경쟁 → 상위 2팀만 최종 라운드 진출.
- * - 최종 라운드: 3개 조 홈&어웨이 → 각 조 1위 본선 직행(directSlots), 최고 2위 2팀은 대륙간 PO행.
+ * CONCACAF 다라운드 예선 (A4 · 1·2차 예비예선 포함). 개최국은 상위(오케스트레이터)에서 이미 제외되어 들어온다.
+ * - 1차 예선: 하위 팀들이 단판 녹아웃 → 필드를 2차 규모(round2Groups×4)로 줄인다.
+ * - 2차 예선: round2Groups개 조(각 4팀) 홈&어웨이 → 각 조 1·2위가 최종 라운드로(= round2Groups×2).
+ * - 최종 라운드: finalGroups개 조(각 4팀) 홈&어웨이 → 각 조 1위 본선 직행(directSlots), 최고 2위 2팀은 대륙간 PO행.
  * directSlots는 개최국 수를 뺀 값이 오케스트레이터에서 전달된다(기본 3).
  */
 export function simulateConcacaf(
@@ -34,30 +35,57 @@ export function simulateConcacaf(
   const groupLabels: string[] = []
   let md = 0
 
-  // 최종 라운드(예: 3개 조 × 3팀 = 9팀). 상위 시드는 최종 라운드 직행, 하위권은 1차를 거친다.
-  const FINAL_SIZE = fmt.finalSize
-  const prelimSurvivors = Math.min(fmt.prelimSurvivors, Math.max(0, pool.length - (FINAL_SIZE - fmt.prelimSurvivors)))
+  const ROUND2_SIZE = fmt.round2Groups * 4 // 2차 참가 팀 수(6×4=24)
 
-  let finalists: string[]
-  if (pool.length <= FINAL_SIZE) {
-    // 팀이 적으면 1차 없이 전원 최종 라운드
-    finalists = sorted
-  } else {
-    const autoIntoFinal = sorted.slice(0, FINAL_SIZE - prelimSurvivors)
-    const prelimTeams = sorted.slice(FINAL_SIZE - prelimSurvivors)
-    // 1차: 단일 조 라운드로빈 → 상위 prelimSurvivors 진출
-    const { matches, ranking, lastMatchday } = playSingleGroup(prelimTeams, ratings, rand, {
-      doubleRound: false,
-      groupIndex: 0,
-      matchdayOffset: md,
+  /** 한 조를 치르고 등록한다. 같은 스테이지 조들은 base를 공유해 병행한다. */
+  const runGroup = (g: string[], label: string, base: number, keep: (r: string[]) => void): void => {
+    const { matches, ranking, lastMatchday } = playSingleGroup(g, ratings, rand, {
+      doubleRound: true,
+      groupIndex: groupRankings.length,
+      matchdayOffset: base,
       locked,
     })
     allMatches.push(...matches)
     groupRankings.push(ranking)
-    groupLabels.push('1차 예선 라운드')
+    groupLabels.push(label)
     md = Math.max(md, lastMatchday)
-    finalists = [...autoIntoFinal, ...ranking.slice(0, prelimSurvivors)]
+    keep(ranking)
   }
+
+  // --- 1차 예선: 하위 팀 단판 녹아웃으로 필드를 ROUND2_SIZE로 줄인다 ---
+  let round2Field: string[]
+  const cut = Math.max(0, Math.min(sorted.length - ROUND2_SIZE, Math.floor(sorted.length / 2)))
+  if (cut > 0) {
+    const byes = sorted.slice(0, sorted.length - 2 * cut)
+    const play = sorted.slice(sorted.length - 2 * cut)
+    md += 1
+    const r1Md = md
+    const winners: string[] = []
+    for (let i = 0; i < cut; i++) {
+      const a = play[i]
+      const b = play[play.length - 1 - i]
+      const lk = locked?.(a, b, r1Md, groupRankings.length)
+      const s = lk ?? simulateScoreRaw(ratings[a], ratings[b], 0, 0, rand)
+      const winner = s.homeGoals >= s.awayGoals ? a : b
+      allMatches.push({ homeTeamId: a, awayTeamId: b, homeGoals: s.homeGoals, awayGoals: s.awayGoals, matchday: r1Md, group: groupRankings.length })
+      winners.push(winner)
+    }
+    groupRankings.push([...winners].sort(byRank))
+    groupLabels.push('1차 예선')
+    round2Field = [...byes, ...winners].sort(byRank)
+  } else {
+    round2Field = sorted
+  }
+
+  // --- 2차 예선: round2Groups개 조(각 4팀) → 각 조 1·2위가 최종 라운드로 ---
+  const r2Base = md
+  const finalists: string[] = []
+  snakeSeed(round2Field, fmt.round2Groups).forEach((g, i) => {
+    runGroup(g, `2차 ${GROUP_LETTERS[i]}조`, r2Base, (ranking) => {
+      if (ranking[0]) finalists.push(ranking[0])
+      if (ranking[1]) finalists.push(ranking[1])
+    })
+  })
 
   // 최종 라운드: N개 조
   const finalBase = md

@@ -8,11 +8,14 @@ describe('참가국 로스터 확충', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('단일 스테이지 대륙이 실제 회원국 수에 근접한다', () => {
+  it('각 대륙이 실제 회원국 수에 근접한다(총 210개국)', () => {
     expect(nationsByConfederation('UEFA').length).toBe(54)
     expect(nationsByConfederation('CAF').length).toBe(54)
+    expect(nationsByConfederation('AFC').length).toBe(46)
     expect(nationsByConfederation('CONMEBOL').length).toBe(10)
+    expect(nationsByConfederation('CONCACAF').length).toBe(35)
     expect(nationsByConfederation('OFC').length).toBe(11)
+    expect(ALL_NATIONS.length).toBe(210)
   })
 
   it('CAF는 9개 조 6팀으로 채워진다(실제 2026 포맷)', () => {

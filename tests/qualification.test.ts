@@ -563,7 +563,8 @@ describe('포맷 데이터 주도화 (개선 C4)', () => {
     const ccf = QUAL_FORMAT.CONCACAF
     if (ccf.kind === 'concacaf') {
       const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('fmt-ccf'))
-      expect(r.groups.length).toBe(1 + ccf.finalGroups) // 1차 + 최종 조들
+      // 1차 예선 + 2차 조 + 최종 조
+      expect(r.groups.length).toBe(1 + ccf.round2Groups + ccf.finalGroups)
     }
   })
 })
@@ -618,11 +619,14 @@ describe('다단계 대륙 구조 (개선 A3·A4)', () => {
     expect(new Set([...r.qualified, ...r.playoff]).size).toBe(9)
   })
 
-  it('CONCACAF는 1차 예선 라운드 + 최종 3개 조로 구성되고 개최국을 제외한다', () => {
+  it('CONCACAF는 1차·2차 예비예선 + 최종 3개 조(4팀)로 구성되고 개최국을 제외한다', () => {
     const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('CCF-ms'))
-    expect(r.groupLabels?.[0]).toBe('1차 예선 라운드')
+    expect(r.groupLabels?.[0]).toBe('1차 예선')
+    expect(r.groupLabels).toContain('2차 A조')
     expect(r.groupLabels).toContain('최종 A조')
     expect(r.groupLabels).toContain('최종 C조')
+    // 최종 라운드는 3개 조 × 4팀(12팀) — B12 정정
+    expect(r.groups[r.groupLabels!.indexOf('최종 A조')]).toHaveLength(4)
     expect(r.qualified).toHaveLength(3) // 최종 각 조 1위
     expect(r.playoff).toHaveLength(2) // 최고 2위
     for (const host of ['MEX', 'USA', 'CAN']) {
