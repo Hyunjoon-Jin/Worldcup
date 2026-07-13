@@ -545,12 +545,21 @@ describe('포맷 데이터 주도화 (개선 C4)', () => {
   const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
 
   it('단일 조별 대륙의 조 수는 QUAL_FORMAT.numGroups를 따른다', () => {
-    for (const c of ['UEFA', 'CAF', 'CONMEBOL', 'OFC'] as const) {
+    // CAF·CONMEBOL·OFC는 순수 조별. UEFA는 플레이오프 경로가 붙으므로 별도 검증(아래).
+    for (const c of ['CAF', 'CONMEBOL', 'OFC'] as const) {
       const fmt = QUAL_FORMAT[c]
       if (fmt.kind !== 'groups') continue
       const r = simulateConfederation(c, allRatings, createSeededRandom(`fmt-${c}`))
       expect(r.groups.length).toBe(fmt.numGroups)
     }
+  })
+
+  it('UEFA는 조별 12개 조 + 플레이오프 4개 경로 = 16 (B14)', () => {
+    const fmt = QUAL_FORMAT.UEFA
+    if (fmt.kind !== 'groups') throw new Error('UEFA는 groups 포맷')
+    const r = simulateConfederation('UEFA', allRatings, createSeededRandom('fmt-uefa'))
+    expect(r.groups.length).toBe(fmt.numGroups + 4)
+    expect(r.groupLabels?.slice(-4)).toEqual(['PO 경로 A', 'PO 경로 B', 'PO 경로 C', 'PO 경로 D'])
   })
 
   it('AFC/CONCACAF 스테이지 조 수가 포맷 파라미터와 일치한다', () => {
@@ -744,13 +753,14 @@ describe('매치데이 구조 (개선 B1)', () => {
       expect(m.matchday).toBeLessThanOrEqual(18)
     }
   })
-  it('UEFA(54개국 12개 조, 4~5팀 홈&어웨이)는 최대 10라운드 (A5)', () => {
-    // 54팀 / 12조 = 5팀 6조 + 4팀 6조. 5팀 조(홀수)는 바이 라운드 포함 더블 라운드로빈 = 10라운드.
-    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(10)
+  it('UEFA(54개국 12개 조 홈&어웨이 + 플레이오프)는 12라운드 (A5·B14)', () => {
+    // 조별리그 10라운드(5팀 조 더블 라운드로빈) + 플레이오프 준결승·결승 2라운드 = 12.
+    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(12)
   })
   it('groups 구조가 노출된다(H1)', () => {
     const all = simulateAllQualification('MD')
-    expect(all.byConfederation.UEFA.groups.length).toBe(12)
+    // UEFA: 12개 조 + 플레이오프 4개 경로 = 16.
+    expect(all.byConfederation.UEFA.groups.length).toBe(16)
     expect(all.byConfederation.CONMEBOL.groups.length).toBe(1)
   })
 })
