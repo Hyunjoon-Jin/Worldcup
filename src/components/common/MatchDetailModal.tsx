@@ -1,10 +1,20 @@
-import { useMemo } from 'react'
-import { TEAMS_BY_ID } from '../../data/teams'
+import { useEffect, useMemo, useState } from 'react'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
 import { getRatings, classifyMatchUpset, forecastMatch, type MatchForecast } from '../../engine/matchEngine'
 import { generateUpsetArticle, type UpsetArticle } from '../../engine/upsetArticle'
+import { generateGoalTimeline, formatGoalMinute, type GoalEvent } from '../../engine/goalTimeline'
+import { formatDecimalOdds } from '../../engine/odds'
+import { venueForMatchId } from '../../data/venues'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
+import {
+  applyMatchElo,
+  wcKnockoutImportance,
+  IMPORTANCE_WC_GROUP,
+  staticStartPoints,
+} from '../../engine/qualification/ranking'
+import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useDrawStore } from '../../store/useDrawStore'
@@ -40,15 +50,26 @@ function RatingRow({ label, homeValue, awayValue }: { label: string; homeValue: 
 function ForecastBar({ forecast }: { forecast: MatchForecast }) {
   return (
     <div>
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-white/10">
+      <div
+        className="flex h-2.5 overflow-hidden rounded-full bg-white/10"
+        role="img"
+        aria-label={`홈 승 ${forecast.homeWinPct.toFixed(0)}%, 무 ${forecast.drawPct.toFixed(0)}%, 원정 승 ${forecast.awayWinPct.toFixed(0)}%`}
+      >
         <div className="h-full bg-sky-400" style={{ width: `${forecast.homeWinPct}%` }} />
         <div className="h-full bg-gray-500" style={{ width: `${forecast.drawPct}%` }} />
         <div className="h-full bg-rose-400" style={{ width: `${forecast.awayWinPct}%` }} />
       </div>
+      {/* 색만으로 구분하지 않도록 승/무/패를 텍스트로도 표기 (E2) */}
       <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-        <span>{forecast.homeWinPct.toFixed(0)}%</span>
+        <span>홈 {forecast.homeWinPct.toFixed(0)}%</span>
         <span>무 {forecast.drawPct.toFixed(0)}%</span>
-        <span>{forecast.awayWinPct.toFixed(0)}%</span>
+        <span>원정 {forecast.awayWinPct.toFixed(0)}%</span>
+      </div>
+      {/* 배당률(유럽식 소수) 병기 (v2 #29) */}
+      <div className="mt-0.5 flex justify-between text-[10px] text-gray-500">
+        <span>{formatDecimalOdds(forecast.homeWinPct)}</span>
+        <span>{formatDecimalOdds(forecast.drawPct)}</span>
+        <span>{formatDecimalOdds(forecast.awayWinPct)}</span>
       </div>
     </div>
   )
@@ -93,12 +114,79 @@ function ArticleCard({ article }: { article: UpsetArticle }) {
   )
 }
 
+/** 득점 타임라인 표시 + 재생(골을 순서대로 드러내며 스코어를 갱신) (v2 #35). */
+function GoalTimelineSection({
+  timeline,
+  homeTeamId,
+  awayTeamId,
+}: {
+  timeline: GoalEvent[]
+  homeTeamId: string
+  awayTeamId: string
+}) {
+  const [playing, setPlaying] = useState(false)
+  const [revealed, setRevealed] = useState(timeline.length)
+
+  useEffect(() => {
+    setRevealed(timeline.length)
+    setPlaying(false)
+  }, [timeline])
+
+  useEffect(() => {
+    if (!playing) return
+    if (revealed >= timeline.length) {
+      setPlaying(false)
+      return
+    }
+    const t = setTimeout(() => setRevealed((r) => r + 1), 650)
+    return () => clearTimeout(t)
+  }, [playing, revealed, timeline.length])
+
+  const shown = timeline.slice(0, revealed)
+  const homeScore = shown.filter((g) => g.teamId === homeTeamId).length
+  const awayScore = shown.filter((g) => g.teamId === awayTeamId).length
+
+  return (
+    <div className="mb-4 rounded-lg bg-white/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-bold text-gray-400">⚽ 득점 타임라인</span>
+        <div className="flex items-center gap-2">
+          {playing && <span className="text-[11px] font-bold tabular-nums text-white">{homeScore} - {awayScore}</span>}
+          <button
+            onClick={() => {
+              setRevealed(0)
+              setPlaying(true)
+            }}
+            className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 hover:bg-white/20"
+          >
+            {playing ? '재생 중…' : '▶ 재생'}
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {timeline.map((g, i) => (
+          <span
+            key={i}
+            className={`inline-flex items-center gap-1 text-[11px] transition-opacity ${
+              i < revealed ? 'text-gray-300 opacity-100' : 'text-gray-500 opacity-30'
+            }`}
+          >
+            <FlagIcon iso2={TEAMS_BY_ID[g.teamId].iso2} className="h-2.5 w-3.5" />
+            <span className="tabular-nums">{formatGoalMinute(g)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function MatchDetailModal() {
   const selected = useMatchDetailStore((s) => s.selected)
   const clearMatch = useMatchDetailStore((s) => s.clearMatch)
   const selectTeam = useSelectionStore((s) => s.selectTeam)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const allGroupMatches = useProgressStore((s) => s.groupMatches)
+  const { pointsByTeam } = useLiveFifaRanking()
 
   const homeTeamId = selected ? (selected.kind === 'upcoming' ? selected.homeTeamId : selected.match.homeTeamId) : null
   const awayTeamId = selected ? (selected.kind === 'upcoming' ? selected.awayTeamId : selected.match.awayTeamId) : null
@@ -162,9 +250,34 @@ export function MatchDetailModal() {
   const played = selected.kind !== 'upcoming'
   const homeGoals = selected.kind !== 'upcoming' ? selected.match.homeGoals : undefined
   const awayGoals = selected.kind !== 'upcoming' ? selected.match.awayGoals : undefined
+
+  const venueKey =
+    selected.kind === 'knockout'
+      ? selected.match.slotId
+      : selected.kind === 'group'
+        ? `${selected.match.group}-${selected.match.matchday}-${homeTeamId}-${awayTeamId}`
+        : `${homeTeamId}-${awayTeamId}`
+  const venue = venueForMatchId(venueKey)
+
+  const goalTimeline =
+    played && (homeGoals! > 0 || awayGoals! > 0)
+      ? generateGoalTimeline(homeTeamId, awayTeamId, homeGoals!, awayGoals!)
+      : []
   const upsetInfo = played ? classifyMatchUpset(homeTeamId, awayTeamId, homeGoals!, awayGoals!) : null
   const wentToPenalties = selected.kind === 'knockout' ? selected.match.wentToPenalties : false
   const winnerTeamId = selected.kind === 'knockout' ? selected.match.winnerTeamId : upsetInfo?.winnerTeamId
+
+  // FIFA 랭킹 ±점 기여(D21). 본선 경기만 — 조별 I=50, 8강 이후 60. 현재 라이브 점수 기준 근사.
+  const fifaImportance =
+    selected.kind === 'knockout' ? wcKnockoutImportance(selected.match.round) : selected.kind === 'group' ? IMPORTANCE_WC_GROUP : null
+  let fifaDelta: { home: number; away: number; importance: number } | null = null
+  if (played && fifaImportance != null && homeGoals != null && awayGoals != null) {
+    const hp = pointsByTeam[homeTeamId] ?? staticStartPoints(homeTeamId)
+    const ap = pointsByTeam[awayTeamId] ?? staticStartPoints(awayTeamId)
+    const tmp: Record<string, number> = { [homeTeamId]: hp, [awayTeamId]: ap }
+    applyMatchElo(tmp, { homeTeamId, awayTeamId, homeGoals, awayGoals, wentToPenalties: !!wentToPenalties, winnerTeamId }, fifaImportance)
+    fifaDelta = { home: tmp[homeTeamId] - hp, away: tmp[awayTeamId] - ap, importance: fifaImportance }
+  }
 
   const label =
     selected.kind === 'group'
@@ -225,11 +338,14 @@ export function MatchDetailModal() {
         </div>
 
         {selected.date && (
-          <p className="mb-3 text-center text-[11px] text-gray-500">
+          <p className="text-center text-[11px] text-gray-500">
             {formatKoreanDate(selected.date)}
             {selected.timeSlot ? ` ${selected.timeSlot}` : ''} 현지시간
           </p>
         )}
+        <p className="mb-3 text-center text-[11px] text-gray-500">
+          📍 {venue.cityKo} · {venue.stadium}
+        </p>
 
         <div className="mb-4 flex items-center justify-center gap-4">
           <button
@@ -274,6 +390,32 @@ export function MatchDetailModal() {
           <p className="mb-4 text-center text-xs text-emerald-300">
             {TEAMS_BY_ID[winnerTeamId].nameKo} 승리{wentToPenalties ? ' (승부차기)' : ''}
           </p>
+        )}
+
+        {fifaDelta && (
+          <div className="mb-4 rounded-lg bg-white/5 p-3">
+            <p className="mb-2 text-center text-[11px] font-bold text-gray-400">
+              🌐 FIFA 랭킹 반영 <span className="font-normal text-gray-500">(중요도 I={fifaDelta.importance})</span>
+            </p>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex-1 text-center">
+                <span className="text-gray-300">{homeTeam.nameKo} </span>
+                <span className={`font-bold tabular-nums ${fifaDelta.home >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {fifaDelta.home >= 0 ? '+' : ''}{fifaDelta.home.toFixed(1)}
+                </span>
+              </span>
+              <span className="flex-1 text-center">
+                <span className="text-gray-300">{awayTeam.nameKo} </span>
+                <span className={`font-bold tabular-nums ${fifaDelta.away >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {fifaDelta.away >= 0 ? '+' : ''}{fifaDelta.away.toFixed(1)}
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
+
+        {goalTimeline.length > 0 && (
+          <GoalTimelineSection timeline={goalTimeline} homeTeamId={homeTeamId} awayTeamId={awayTeamId} />
         )}
 
         {article && (

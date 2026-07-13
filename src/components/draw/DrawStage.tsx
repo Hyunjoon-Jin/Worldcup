@@ -1,11 +1,12 @@
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDrawStore } from '../../store/useDrawStore'
-import { useProgressStore } from '../../store/useProgressStore'
-import { useSimulationStore } from '../../store/useSimulationStore'
-import { useSelectionStore } from '../../store/useSelectionStore'
-import { useConditionStore } from '../../store/useConditionStore'
-import { TEAMS_BY_ID, CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { resetTournament } from '../../store/tournamentActions'
+import { dailySeedForDate, dailyChallengeLabel } from '../../engine/dailyChallenge'
+import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { findNextSlot } from '../../engine/drawEngine'
+import { getCurrentHostIds } from '../../engine/hostContext'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
@@ -16,24 +17,40 @@ import { GroupSlotCard } from './GroupSlotCard'
 const POT_LABEL: Record<number, string> = { 1: '포트1', 2: '포트2', 3: '포트3', 4: '포트4' }
 
 export function DrawStage({ onComplete }: { onComplete?: () => void }) {
-  const { state, log, isComplete, drawOne, undoLast, reset: resetDraw } = useDrawStore()
-  const resetProgress = useProgressStore((s) => s.reset)
-  const resetSimulation = useSimulationStore((s) => s.reset)
-  const clearSelectedTeam = useSelectionStore((s) => s.clearTeam)
-  const rerollCondition = useConditionStore((s) => s.reroll)
+  const { state, log, isComplete, drawOne, undoLast, drawFromSeed, seed, potComposition, rankPoints, fieldTeams } = useDrawStore()
+  const [seedInput, setSeedInput] = useState('')
+  const [copied, setCopied] = useState(false)
 
-  // 조추첨을 다시 시작하면 이전 조추첨에 딸려있던 일정 진행 상황(경기 결과·토너먼트·우승팀)과
-  // 확률 계산 캐시까지 전부 초기화해, 새 조추첨 결과와 어긋난 데이터가 남지 않도록 한다. 팀별
-  // 컨디션도 새 대회 기준으로 다시 뽑아 이전 대회와 똑같이 반복되지 않게 한다.
-  const resetEverything = () => {
-    resetDraw()
-    resetProgress()
-    resetSimulation()
-    clearSelectedTeam()
-    rerollCondition()
+  const resetEverything = resetTournament
+
+  const copySeed = () => {
+    if (!seed) return
+    void navigator.clipboard?.writeText(seed).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  // 예선을 거치지 않았으면(본선 48개국 필드 없음) 조추첨을 진행할 수 없다.
+  if (!fieldTeams && !isComplete) {
+    return (
+      <GlassCard strong className="flex flex-col items-center gap-3 p-10 text-center">
+        <p className="text-2xl">🧭</p>
+        <p className="text-sm font-semibold text-white">먼저 지역예선을 완료하세요</p>
+        <p className="max-w-md text-xs text-gray-400">
+          조추첨은 지역예선에서 본선 진출 48개국이 확정된 뒤에 진행할 수 있습니다. ‘지역예선’ 탭에서 예선을
+          시뮬레이션하고 <strong className="text-emerald-300">본선 조추첨으로 이동</strong>을 눌러 주세요.
+        </p>
+      </GlassCard>
+    )
   }
 
   const nextSlot = findNextSlot(state)
+  const GROUP_LETTERS = 'ABCDEFGHIJKL'.split('')
+  // 개최국 사전 배치 설명(커리어 모드로 개최국이 바뀌므로 동적으로 구성). 앞쪽 조부터 1번 시드.
+  const hostSeedText = getCurrentHostIds()
+    .map((id, i) => `${TEAMS_BY_ID[id]?.nameKo ?? id}=${GROUP_LETTERS[i]}1`)
+    .join(', ')
   const lastEntry = log[log.length - 1]
   const lastTeam = lastEntry ? TEAMS_BY_ID[lastEntry.teamId] : null
   // 방금 뽑힌 팀이 어느 조에 배정됐는지 바로 확인할 수 있도록, 직전 픽의 결과(lastEntry)를
@@ -87,6 +104,42 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
             ⟲ 처음부터
           </GlassButton>
         </div>
+
+        <div className="mt-4 border-t border-white/10 pt-3">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <input
+              type="text"
+              value={seedInput}
+              onChange={(e) => setSeedInput(e.target.value)}
+              placeholder="시드 입력 (예: K3P-92FA)"
+              aria-label="조추첨 시드"
+              className="w-40 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
+            />
+            <GlassButton variant="ghost" onClick={() => drawFromSeed(seedInput)}>
+              ⚡ 시드로 즉시 조추첨
+            </GlassButton>
+            <GlassButton
+              variant="ghost"
+              onClick={() => drawFromSeed(dailySeedForDate())}
+              title={dailyChallengeLabel()}
+            >
+              🗓 오늘의 도전
+            </GlassButton>
+          </div>
+          {seed && (
+            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
+              <span>
+                이 조추첨 시드: <strong className="font-mono text-emerald-300">{seed}</strong>
+              </span>
+              <button
+                onClick={copySeed}
+                className="rounded bg-white/10 px-2 py-0.5 text-[11px] text-gray-200 hover:bg-white/20"
+              >
+                {copied ? '✓ 복사됨' : '📋 복사'}
+              </button>
+            </div>
+          )}
+        </div>
       </GlassCard>
 
       {focusGroup && (
@@ -109,10 +162,16 @@ export function DrawStage({ onComplete }: { onComplete?: () => void }) {
       )}
 
       <GroupBoard groups={state.groups} highlightGroup={nextSlot?.group ?? null} />
-      <PotTray pots={state.pots} currentPot={nextSlot?.pot ?? null} />
+      <PotTray
+        pots={state.pots}
+        currentPot={nextSlot?.pot ?? null}
+        composition={potComposition}
+        hostIds={getCurrentHostIds()}
+        rankPoints={rankPoints}
+      />
 
       <GlassCard className="p-4 text-xs leading-relaxed text-gray-400">
-        <strong className="text-gray-300">조추첨 규정:</strong> 개최국 3팀(멕시코=A1, 캐나다=B1, 미국=D1)은 사전
+        <strong className="text-gray-300">조추첨 규정:</strong> 개최국({hostSeedText})은 각 조 1번 시드로 사전
         고정됩니다. 이후 포트1→4 순서로 각 조에 한 팀씩 배정하며, 같은 대륙연맹 팀은 원칙적으로 한 조에 1팀까지만
         허용됩니다(유럽 UEFA는 예외적으로 최대 2팀). 배정이 규정을 위반하면 자동으로 다른 팀을 다시 뽑습니다.
       </GlassCard>

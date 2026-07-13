@@ -1,0 +1,19 @@
+{
+  "name": "2026 북중미 월드컵 시뮬레이터",
+  "short_name": "WC2026 시뮬",
+  "description": "조추첨부터 결승까지 — 실제 규정 기반 가상 시뮬레이션과 실시간 우승 확률.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0b12",
+  "theme_color": "#0a0b12",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

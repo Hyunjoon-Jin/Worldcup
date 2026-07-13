@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CONFEDERATION_LABEL_KO, TEAMS_BY_ID } from '../../data/teams'
+import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
+import { titlesFor } from '../../data/history'
 import { GROUP_LETTERS } from '../../data/hostSlots'
+import { isCurrentHost } from '../../engine/hostContext'
+import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
 import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassButton } from '../common/GlassButton'
@@ -20,9 +24,13 @@ import {
   type ScenarioVerdict,
 } from '../../engine/qualificationStatus'
 import { runOpponentForecast, runTeamScenarioSimulation, type RoundOpponentForecast, type TeamScenarioResult } from '../../engine/monteCarlo'
+import { buildSnapshot } from '../../engine/buildSnapshot'
+import { runSensitivity, type SensitivityPoint } from '../../engine/sensitivity'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
+import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { usePerformanceStore } from '../../store/usePerformanceStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useConditionStore } from '../../store/useConditionStore'
@@ -107,6 +115,13 @@ interface UpcomingMatchEntry {
 export function TeamDetailPage() {
   const teamId = useSelectionStore((s) => s.selectedTeamId)
   const clearTeam = useSelectionStore((s) => s.clearTeam)
+  const myTeamId = useMyTeamStore((s) => s.myTeamId)
+  const toggleMyTeam = useMyTeamStore((s) => s.toggleMyTeam)
+  const perfDeltas = usePerformanceStore((s) => s.deltas)
+  const { rankByTeam: liveRankByTeam, pointsByTeam: livePointsByTeam, rowByTeam: liveRowByTeam } = useLiveFifaRanking()
+  const liveRank = teamId ? liveRankByTeam[teamId] : undefined
+  const livePoints = teamId ? livePointsByTeam[teamId] : undefined
+  const liveRow = teamId ? liveRowByTeam[teamId] : undefined
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
@@ -118,8 +133,11 @@ export function TeamDetailPage() {
   const [scenarioLoading, setScenarioLoading] = useState(false)
   const [forecast, setForecast] = useState<RoundOpponentForecast[] | null>(null)
   const [forecastLoading, setForecastLoading] = useState(false)
+  const [sensitivity, setSensitivity] = useState<SensitivityPoint[] | null>(null)
+  const [sensitivityLoading, setSensitivityLoading] = useState(false)
 
   const team = teamId ? TEAMS_BY_ID[teamId] : null
+  const titleHistory = teamId ? titlesFor(teamId) : null
 
   const group = useMemo<GroupLetter | null>(() => {
     if (!teamId) return null
@@ -263,6 +281,7 @@ export function TeamDetailPage() {
   useEffect(() => {
     setScenario(null)
     setForecast(null)
+    setSensitivity(null)
     if (!teamId) return
 
     if (playedGroupCount === 2) {
@@ -297,13 +316,33 @@ export function TeamDetailPage() {
         <div className="flex flex-wrap items-center gap-4">
           <FlagIcon iso2={team.iso2} className="h-10 w-14 shrink-0" />
           <div className="flex-1">
-            <h2 className="font-display text-2xl font-semibold tracking-wide text-white">{team.nameKo}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-2xl font-semibold tracking-wide text-white">{team.nameKo}</h2>
+              <button
+                onClick={() => teamId && toggleMyTeam(teamId)}
+                aria-pressed={myTeamId === teamId}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                  myTeamId === teamId
+                    ? 'bg-amber-400/25 text-amber-200'
+                    : 'bg-white/5 text-gray-400 hover:text-white'
+                }`}
+              >
+                {myTeamId === teamId ? '⭐ 내 팀' : '☆ 내 팀으로'}
+              </button>
+            </div>
             <p className="text-xs text-gray-400">
-              {team.nameEn} · FIFA 랭킹 {team.fifaRankApprox}위 · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트{' '}
-              {team.pot}
+              {team.nameEn} · FIFA 랭킹 {liveRank ?? team.fifaRankApprox}위
+              {livePoints != null && <span className="text-gray-500"> ({livePoints}점)</span>} ·{' '}
+              {CONFEDERATION_LABEL_KO[team.confederation]} · 포트 {team.pot}
               {group && ` · 조 ${group}`}
-              {team.isHost && ' · 개최국'}
+              {isCurrentHost(team.id) && ' · 개최국'}
             </p>
+            {titleHistory && (
+              <p className="mt-0.5 text-xs font-bold text-amber-300" title={`우승 연도: ${titleHistory.years.join(', ')}`}>
+                🏆 역대 월드컵 우승 {titleHistory.titles}회{' '}
+                <span className="font-normal text-gray-500">({titleHistory.years.join(', ')})</span>
+              </p>
+            )}
             {Math.abs(conditionOffset) >= 3 && (
               <p className={`mt-0.5 text-xs font-bold ${conditionOffset > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
                 {conditionOffset >= 5
@@ -347,7 +386,56 @@ export function TeamDetailPage() {
             </div>
           ))}
         </div>
+        {(() => {
+          const perfDelta = teamId ? (perfDeltas[teamId] ?? 0) : 0
+          if (perfDelta === 0) return null
+          const up = perfDelta > 0
+          return (
+            <p className={`mt-2 text-[11px] font-medium ${up ? 'text-emerald-300' : 'text-red-300'}`}>
+              {up ? '📈' : '📉'} 예선 성적 반영: 공격·수비·종합 {up ? '+' : ''}{perfDelta} (기본 능력치에서 {up ? '상승' : '하락'})
+            </p>
+          )
+        })()}
       </GlassCard>
+
+      {/* FIFA 점수 카드(D20) — 라이브 점수·세계 순위·이번 대회 등락 */}
+      {liveRow && (
+        <GlassCard className="p-4">
+          <div className="mb-2 flex items-center gap-1.5">
+            <p className="text-sm font-bold text-sky-300">🌐 FIFA 랭킹 점수</p>
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">잠정</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-lg bg-white/5 py-2">
+              <div className="text-lg font-bold tabular-nums text-white">{liveRow.points}</div>
+              <div className="text-[10px] text-gray-500">현재 점수</div>
+            </div>
+            <div className="rounded-lg bg-white/5 py-2">
+              <div className="text-lg font-bold tabular-nums text-white">{liveRow.rank}위</div>
+              <div className="text-[10px] text-gray-500">세계 순위</div>
+            </div>
+            <div className="rounded-lg bg-white/5 py-2">
+              {(() => {
+                const rd = liveRow.rankDelta
+                const pd = liveRow.pointsDelta
+                const up = rd > 0 || (rd === 0 && pd > 0)
+                const moved = rd !== 0 || pd !== 0
+                return (
+                  <>
+                    <div className={`text-lg font-bold tabular-nums ${!moved ? 'text-gray-500' : up ? 'text-emerald-300' : 'text-red-300'}`}>
+                      {!moved ? '–' : `${rd !== 0 ? `${up ? '▲' : '▼'}${Math.abs(rd)}` : ''} ${pd >= 0 ? '+' : ''}${pd}`}
+                    </div>
+                    <div className="text-[10px] text-gray-500">이번 대회 등락</div>
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+          <p className="mt-2 text-[10px] text-gray-500">
+            대회 시작({liveRow.basePoints}점) 대비 예선·본선 결과가 실제 FIFA 산정식으로 반영된 잠정 점수입니다.
+          </p>
+        </GlassCard>
+      )}
 
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-sky-300">경기 기록</h3>
@@ -626,6 +714,55 @@ export function TeamDetailPage() {
             {forecast.every((f) => f.reachPct <= 0.5) && (
               <p className="text-sm text-gray-400">32강 진출 가능성이 낮아 예상 상대를 추정하기 어렵습니다.</p>
             )}
+          </div>
+        )}
+      </GlassCard>
+
+      <GlassCard className="p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-sky-300">능력치 민감도 분석</h3>
+          {teamId && (
+            <GlassButton
+              variant="ghost"
+              disabled={sensitivityLoading}
+              onClick={() => {
+                setSensitivityLoading(true)
+                const snap = buildSnapshot()
+                setTimeout(() => {
+                  setSensitivity(runSensitivity(snap, teamId, [-5, 0, 5], 250))
+                  setSensitivityLoading(false)
+                }, 10)
+              }}
+            >
+              {sensitivityLoading ? '분석 중…' : '▶ 분석 실행'}
+            </GlassButton>
+          )}
+        </div>
+        <p className="mb-3 text-[11px] text-gray-500">
+          이 팀의 공격·수비·종합 능력치가 ±5 변하면 우승 확률이 어떻게 달라지는지 시뮬레이션합니다.
+        </p>
+        {!sensitivity ? (
+          <p className="text-sm text-gray-400">{sensitivityLoading ? '' : '분석을 실행해 보세요.'}</p>
+        ) : (
+          <div className="space-y-2">
+            {sensitivity.map((pt) => {
+              const maxPct = Math.max(...sensitivity.map((s) => s.championPct), 0.1)
+              const label = pt.delta === 0 ? '기본 능력치' : pt.delta > 0 ? `능력치 +${pt.delta}` : `능력치 ${pt.delta}`
+              return (
+                <div key={pt.delta} className="flex items-center gap-2 text-xs">
+                  <span className={`w-24 shrink-0 ${pt.delta === 0 ? 'font-bold text-gray-200' : 'text-gray-400'}`}>{label}</span>
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full bg-sky-400"
+                      style={{ width: `${(pt.championPct / maxPct) * 100}%` }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right font-bold tabular-nums text-sky-300">
+                    {pt.championPct.toFixed(1)}%
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
       </GlassCard>

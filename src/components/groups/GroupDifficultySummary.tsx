@@ -8,12 +8,34 @@ interface GroupDifficultySummaryProps {
   groupTeams: Record<GroupLetter, string[]>
 }
 
-function GroupMiniRow({ group, avgOverall, teamIds }: { group: GroupLetter; avgOverall: number; teamIds: string[] }) {
+function StarRating({ stars }: { stars: number }) {
+  return (
+    <span className="text-[10px] tracking-tight text-amber-300" aria-label={`난이도 ${stars}/5`} title={`난이도 ${stars}/5`}>
+      {'★'.repeat(stars)}
+      <span className="text-gray-600">{'★'.repeat(Math.max(0, 5 - stars))}</span>
+    </span>
+  )
+}
+
+function GroupMiniRow({
+  group,
+  avgOverall,
+  stars,
+  teamIds,
+}: {
+  group: GroupLetter
+  avgOverall: number
+  stars: number
+  teamIds: string[]
+}) {
   return (
     <div className="rounded-lg bg-white/5 p-2">
       <div className="mb-1 flex items-center justify-between">
         <span className="font-display text-xs font-semibold text-gray-200">GROUP {group}</span>
-        <span className="text-[10px] text-gray-500">평균 능력치 {avgOverall.toFixed(1)}</span>
+        <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
+          <StarRating stars={stars} />
+          평균 {avgOverall.toFixed(1)}
+        </span>
       </div>
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
         {teamIds.map((id) => (
@@ -36,7 +58,7 @@ export function GroupDifficultySummary({ analysis, groupTeams }: GroupDifficulty
         <h3 className="mb-3 text-sm font-bold text-red-300">🔥 죽음의 조 TOP 3</h3>
         <div className="space-y-2">
           {death.map((d) => (
-            <GroupMiniRow key={d.group} group={d.group} avgOverall={d.avgOverall} teamIds={groupTeams[d.group]} />
+            <GroupMiniRow key={d.group} group={d.group} avgOverall={d.avgOverall} stars={d.stars} teamIds={groupTeams[d.group]} />
           ))}
         </div>
       </GlassCard>
@@ -44,7 +66,7 @@ export function GroupDifficultySummary({ analysis, groupTeams }: GroupDifficulty
         <h3 className="mb-3 text-sm font-bold text-emerald-300">🍯 꿀조 TOP 3</h3>
         <div className="space-y-2">
           {easy.map((d) => (
-            <GroupMiniRow key={d.group} group={d.group} avgOverall={d.avgOverall} teamIds={groupTeams[d.group]} />
+            <GroupMiniRow key={d.group} group={d.group} avgOverall={d.avgOverall} stars={d.stars} teamIds={groupTeams[d.group]} />
           ))}
         </div>
       </GlassCard>

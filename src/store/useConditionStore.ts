@@ -1,13 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { TEAMS } from '../data/teams'
+import { ALL_NATIONS } from '../data/nations'
+import { CONDITION_RANGE } from '../engine/config'
 
-/** 대회(조추첨)마다 팀별 컨디션이 이 범위 안에서 무작위로 오르내린다(폼 능력치에 가감). */
-const CONDITION_RANGE = 8
-
+// 본선 48국뿐 아니라 예선 참가국까지 컨디션을 뽑아, 예선/본선 어디서든 팀별 컨디션이 반영되게 한다 (J2).
 function rollConditions(): Record<string, number> {
   const offsets: Record<string, number> = {}
-  for (const team of TEAMS) {
+  for (const team of ALL_NATIONS) {
     offsets[team.id] = Math.round((Math.random() * 2 - 1) * CONDITION_RANGE)
   }
   return offsets
@@ -18,6 +17,8 @@ interface ConditionStore {
   offsets: Record<string, number>
   /** 새 대회(조추첨)를 시작할 때 모든 팀의 컨디션을 다시 뽑는다. */
   reroll: () => void
+  /** 예선 폼(Elo 변동)을 컨디션에 추가로 반영한다 → 본선 전력·우승 확률에 예선 실황 반영. */
+  applyFormOffsets: (form: Record<string, number>) => void
 }
 
 /**
@@ -31,7 +32,16 @@ export const useConditionStore = create<ConditionStore>()(
     (set) => ({
       offsets: rollConditions(),
       reroll: () => set({ offsets: rollConditions() }),
+      applyFormOffsets: (form) =>
+        set((s) => {
+          const next = { ...s.offsets }
+          const cap = CONDITION_RANGE * 2
+          for (const id of Object.keys(form)) {
+            next[id] = Math.max(-cap, Math.min(cap, (next[id] ?? 0) + form[id]))
+          }
+          return { offsets: next }
+        }),
     }),
-    { name: 'wc2026-condition-store' },
+    { name: 'wc2026-condition-store', version: 1 },
   ),
 )

@@ -1,0 +1,201 @@
+import { nationsByConfederation, ALL_NATIONS_BY_ID } from '../../data/nations'
+import { SLOT_ALLOCATION } from '../../data/confederations'
+import { getCurrentHostIds } from '../hostContext'
+import type { AllQualificationResult } from './index'
+import type { QualMatch } from '../../types/qualification'
+import type { Confederation } from '../../types/team'
+
+const CONFEDS: Confederation[] = ['UEFA', 'CAF', 'AFC', 'CONMEBOL', 'CONCACAF', 'OFC']
+
+/** 대륙 예선 난이도(G4): 진출 자리 하나당 몇 팀이 경쟁하는가. */
+export interface ConfedDifficulty {
+  confederation: Confederation
+  /** 예선에 참가하는 팀 수(현재 대회 개최국은 소속 대륙에서 제외) */
+  participants: number
+  /** 경쟁으로 얻는 자리 수(직행 + 대륙간 PO행, 개최국 수만큼 직행 감소) */
+  spots: number
+  /** 자리당 경쟁 팀 수(높을수록 치열) */
+  ratio: number
+}
+
+/** 대륙별 예선 난이도 지수를 계산한다(현재 대회 개최국 반영, G4). ratio 내림차순.
+ *  커리어 모드로 개최국이 바뀌면 그 개최국 소속 대륙의 참가 팀·자리 수가 반영된다. */
+export function computeConfedDifficulty(): ConfedDifficulty[] {
+  const hostSet = new Set(getCurrentHostIds())
+  return CONFEDS.map((c) => {
+    const confedTeams = nationsByConfederation(c)
+    const hostsInConfed = confedTeams.filter((t) => hostSet.has(t.id)).length
+    const participants = confedTeams.filter((t) => !hostSet.has(t.id)).length
+    const slots = SLOT_ALLOCATION[c]
+    const spots = Math.max(0, slots.direct - hostsInConfed) + slots.playoff
+    return { confederation: c, participants, spots, ratio: spots > 0 ? participants / spots : participants }
+  }).sort((a, b) => b.ratio - a.ratio)
+}
+
+/** 한 팀의 예선 누적 성적. */
+export interface QualTeamStat {
+  teamId: string
+  played: number
+  wins: number
+  draws: number
+  losses: number
+  goalsFor: number
+  goalsAgainst: number
+}
+
+/** 예선 전체 통계(F5). 랭킹 리더보드 + 최다 점수차 경기. */
+export interface QualStats {
+  topScorers: QualTeamStat[]
+  bestDefense: QualTeamStat[]
+  mostWins: QualTeamStat[]
+  biggestWin: { match: QualMatch; margin: number } | null
+}
+
+/** 예선 명장면 항목(F3). */
+export interface QualHighlight {
+  match: QualMatch
+  confederation: string
+  category: '대이변' | '대승' | '골잔치' | '명승부'
+  score: number
+}
+
+/**
+ * 예선 명장면 피드(F3). 모든 경기를 '드라마 점수'(이변 격차 + 골 차 + 총 득점)로 매겨
+ * 상위 N개를 뽑고 유형을 분류한다. 같은 결과는 결정적으로 재현된다.
+ */
+export function computeQualHighlights(all: AllQualificationResult, topN = 6): QualHighlight[] {
+  const scored: QualHighlight[] = []
+  for (const confed of Object.keys(all.byConfederation)) {
+    for (const m of all.byConfederation[confed].matches) {
+      const isDraw = m.homeGoals === m.awayGoals
+      const winnerId = m.homeGoals >= m.awayGoals ? m.homeTeamId : m.awayTeamId
+      const loserId = m.homeGoals >= m.awayGoals ? m.awayTeamId : m.homeTeamId
+      const w = ALL_NATIONS_BY_ID[winnerId]
+      const l = ALL_NATIONS_BY_ID[loserId]
+      if (!w || !l) continue
+      const margin = Math.abs(m.homeGoals - m.awayGoals)
+      const total = m.homeGoals + m.awayGoals
+      const upset = isDraw ? 0 : Math.max(0, w.fifaRankApprox - l.fifaRankApprox) // 양수 = 약체 승
+      const score = upset + margin * 3 + total * 1.5
+      let category: QualHighlight['category']
+      if (upset >= 20) category = '대이변'
+      else if (margin >= 4) category = '대승'
+      else if (total >= 6) category = '골잔치'
+      else category = '명승부'
+      scored.push({ match: m, confederation: confed, category, score })
+    }
+  }
+  // 점수 내림차순, 동점은 결정적으로(팀 조합) 정렬
+  scored.sort((a, b) => b.score - a.score || (a.match.homeTeamId + a.match.awayTeamId).localeCompare(b.match.homeTeamId + b.match.awayTeamId))
+  return scored.slice(0, topN)
+}
+
+/**
+ * 표본 기반 진출 확률의 95% 신뢰구간 오차범위(±%)를 계산한다 (G2).
+ * 비율 p에 대한 표준오차 = sqrt(p(1-p)/n), 95% 신뢰수준은 ×1.96.
+ */
+export function probMarginPct(pct: number, n: number): number {
+  if (n <= 0) return 0
+  const p = Math.min(1, Math.max(0, pct / 100))
+  return 1.96 * Math.sqrt((p * (1 - p)) / n) * 100
+}
+
+/** 행운/불운 분석 항목(G5). */
+export interface LuckEntry {
+  teamId: string
+  probability: number
+}
+
+/** 진출 확률 대비 실제 결과(G5): 낮은 확률로 진출(행운) vs 높은 확률로 탈락(불운). */
+export interface LuckAnalysis {
+  lucky: LuckEntry[]
+  unlucky: LuckEntry[]
+}
+
+/**
+ * 진출 확률과 실제 결과를 대조해 "행운의 진출 / 아쉬운 탈락"을 뽑는다 (G5).
+ * lucky = 진출했지만 확률이 luckyMax 미만(낮은 확률로 뚫음, 확률 오름차순).
+ * unlucky = 탈락했지만 확률이 unluckyMin 초과(높은 확률인데 미끄러짐, 확률 내림차순).
+ * 개최국은 항상 100%라 제외한다.
+ */
+export function computeLuckAnalysis(
+  all: AllQualificationResult,
+  probabilities: Record<string, number>,
+  topN = 4,
+  luckyMax = 70,
+  unluckyMin = 30,
+): LuckAnalysis {
+  const qualified = new Set(all.qualified48)
+  const hosts = new Set(all.hosts)
+  const entries = Object.keys(probabilities)
+    .filter((id) => !hosts.has(id))
+    .map((id) => ({ teamId: id, probability: probabilities[id], qualified: qualified.has(id) }))
+
+  const lucky = entries
+    .filter((e) => e.qualified && e.probability < luckyMax)
+    .sort((a, b) => a.probability - b.probability)
+    .slice(0, topN)
+    .map(({ teamId, probability }) => ({ teamId, probability }))
+
+  const unlucky = entries
+    .filter((e) => !e.qualified && e.probability > unluckyMin)
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, topN)
+    .map(({ teamId, probability }) => ({ teamId, probability }))
+
+  return { lucky, unlucky }
+}
+
+function tallyMatch(map: Map<string, QualTeamStat>, teamId: string): QualTeamStat {
+  let s = map.get(teamId)
+  if (!s) {
+    s = { teamId, played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 }
+    map.set(teamId, s)
+  }
+  return s
+}
+
+/**
+ * 모든 대륙 예선 경기를 누적해 팀별 성적과 리더보드를 만든다 (F5).
+ * 각 팀은 자기 대륙 안에서만 경기하므로 대륙 구분 없이 팀 ID로 합산하면 된다.
+ */
+export function computeQualStats(all: AllQualificationResult, topN = 5): QualStats {
+  const map = new Map<string, QualTeamStat>()
+  let biggest: { match: QualMatch; margin: number } | null = null
+
+  for (const confed of Object.keys(all.byConfederation)) {
+    for (const m of all.byConfederation[confed].matches) {
+      const home = tallyMatch(map, m.homeTeamId)
+      const away = tallyMatch(map, m.awayTeamId)
+      home.played++
+      away.played++
+      home.goalsFor += m.homeGoals
+      home.goalsAgainst += m.awayGoals
+      away.goalsFor += m.awayGoals
+      away.goalsAgainst += m.homeGoals
+      if (m.homeGoals > m.awayGoals) {
+        home.wins++
+        away.losses++
+      } else if (m.homeGoals < m.awayGoals) {
+        away.wins++
+        home.losses++
+      } else {
+        home.draws++
+        away.draws++
+      }
+      const margin = Math.abs(m.homeGoals - m.awayGoals)
+      if (!biggest || margin > biggest.margin) biggest = { match: m, margin }
+    }
+  }
+
+  const stats = [...map.values()]
+  const topScorers = [...stats].sort((a, b) => b.goalsFor - a.goalsFor || a.goalsAgainst - b.goalsAgainst).slice(0, topN)
+  // 최소 실점: 경기 수가 지나치게 적은 팀(엣지)은 제외하려 최소 3경기 이상만
+  const bestDefense = [...stats]
+    .filter((s) => s.played >= 3)
+    .sort((a, b) => a.goalsAgainst - b.goalsAgainst || b.goalsFor - a.goalsFor)
+    .slice(0, topN)
+  const mostWins = [...stats].sort((a, b) => b.wins - a.wins || b.goalsFor - a.goalsFor).slice(0, topN)
+
+  return { topScorers, bestDefense, mostWins, biggestWin: biggest }
+}

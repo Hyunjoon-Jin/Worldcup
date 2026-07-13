@@ -1,5 +1,5 @@
 import { TeamLink } from '../common/TeamLink'
-import { TEAMS_BY_ID } from '../../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import type { GroupMatch } from '../../types/match'
 import type { QualificationStatus } from '../../engine/qualificationStatus'

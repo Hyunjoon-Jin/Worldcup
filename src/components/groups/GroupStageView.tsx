@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { GlassCard } from '../common/GlassCard'
 import { GroupDifficultySummary } from './GroupDifficultySummary'
+import { GroupHeatmap } from './GroupHeatmap'
+import { RulesHelp } from '../common/RulesHelp'
 import { GroupTable } from './GroupTable'
 import { GroupDetailPage } from './GroupDetailPage'
 import { ThirdPlaceTable } from './ThirdPlaceTable'
@@ -54,6 +56,8 @@ export function GroupStageView() {
 
   return (
     <div className="flex flex-col gap-5">
+      <RulesHelp />
+      <GroupHeatmap analysis={difficultyAnalysis} onSelect={setSelected} />
       <GroupDifficultySummary analysis={difficultyAnalysis} groupTeams={groupTeams} />
       <ThirdPlaceTable groupTeams={groupTeams} matches={groupMatches} statusByTeam={statusByTeam} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -1,5 +1,8 @@
-import { TEAMS_BY_ID, getTeamsByPot } from '../data/teams'
-import { GROUP_LETTERS, HOST_SLOTS } from '../data/hostSlots'
+import { getTeamsByPot } from '../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
+import { GROUP_LETTERS } from '../data/hostSlots'
+import { getCurrentHostIds } from './hostContext'
+import { createSeededRandom, shuffleWith, type RandomFn } from './rng'
 import type { GroupLetter } from '../types/group'
 import type { Pot } from '../types/team'
 
@@ -17,28 +20,57 @@ export interface DrawLogEntry {
   pot: Pot
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
+function shuffle<T>(arr: T[], rand: RandomFn = Math.random): T[] {
+  return shuffleWith(arr, rand)
 }
 
-export function createInitialDrawState(): DrawState {
+/**
+ * 48개국 필드로부터 포트(1~4)를 랭킹 기준으로 동적 계산한다 (지역예선 Q4).
+ * 실제 규정대로 포트1 = 개최 3국 + 최상위 9국, 이후 12국씩. 개최국은 슬롯에 사전 고정되므로
+ * 반환 풀에는 포함하지 않는다(비개최 45국을 9·12·12·12로 분배).
+ */
+export function computePots(
+  teamIds48: string[],
+  hostIds: string[] = getCurrentHostIds(),
+  rankPoints?: Record<string, number>,
+): PotPools {
+  const hostSet = new Set(hostIds)
+  // 정렬 키: 현재 FIFA 점수(rankPoints)가 있으면 점수 높은 순(상위 포트), 없으면 정적 근사 랭킹.
+  const sortKey = (id: string) =>
+    rankPoints && rankPoints[id] != null ? -rankPoints[id] : (TEAMS_BY_ID[id]?.fifaRankApprox ?? 999)
+  const nonHost = teamIds48.filter((id) => !hostSet.has(id)).sort((a, b) => sortKey(a) - sortKey(b))
+  // 개최국은 각 조 1번 시드로 고정되므로 포트1 비개최 인원 = 12 − 개최국 수, 나머지 포트는 12씩.
+  const pot1 = Math.max(0, 12 - hostIds.length)
+  return {
+    1: nonHost.slice(0, pot1),
+    2: nonHost.slice(pot1, pot1 + 12),
+    3: nonHost.slice(pot1 + 12, pot1 + 24),
+    4: nonHost.slice(pot1 + 24, pot1 + 36),
+  }
+}
+
+/** potPools 미지정 시 기본 구성. 개최국(현재 대회)을 각 조 1번 시드로 고정 배정한다. */
+export function createInitialDrawState(
+  rand: RandomFn = Math.random,
+  potPools?: PotPools,
+  hostIds: string[] = getCurrentHostIds(),
+): DrawState {
   const groups: GroupSlots = Object.fromEntries(GROUP_LETTERS.map((g) => [g, [null, null, null, null]])) as GroupSlots
 
-  for (const [teamId, group] of Object.entries(HOST_SLOTS)) {
-    groups[group][0] = teamId
-  }
+  // 개최국을 앞쪽 조부터 1번 시드로 고정한다(MEX→A, CAN→B, USA→C …).
+  const hostSet = new Set(hostIds)
+  hostIds.forEach((teamId, i) => {
+    if (i < GROUP_LETTERS.length) groups[GROUP_LETTERS[i]][0] = teamId
+  })
 
   const pots: PotPools = { 1: [], 2: [], 3: [], 4: [] }
   for (const pot of [1, 2, 3, 4] as Pot[]) {
-    const teams = getTeamsByPot(pot)
-      .filter((t) => !t.isHost)
-      .map((t) => t.id)
-    pots[pot] = shuffle(teams)
+    const teams = potPools
+      ? potPools[pot]
+      : getTeamsByPot(pot)
+          .filter((t) => !hostSet.has(t.id))
+          .map((t) => t.id)
+    pots[pot] = shuffle(teams, rand)
   }
   return { groups, pots }
 }
@@ -110,11 +142,14 @@ export interface DrawNextResult {
  * 완성 가능한 경우에만 확정하고, 그렇지 않으면(막다른 길) 다른 후보를 다시 뽑는다 —
  * 실제 드로우에서 조 배정 규정을 위반하면 재추첨하는 절차를 시뮬레이션한 것이다.
  */
-export function drawNext(state: DrawState): DrawNextResult | null {
+export function drawNext(state: DrawState, rand: RandomFn = Math.random): DrawNextResult | null {
   const slot = findNextSlot(state)
   if (!slot) return null
   const { pot, group } = slot
-  const candidates = shuffle(state.pots[pot].filter((teamId) => isValidPlacement(teamId, group, state.groups)))
+  const candidates = shuffle(
+    state.pots[pot].filter((teamId) => isValidPlacement(teamId, group, state.groups)),
+    rand,
+  )
 
   for (const teamId of candidates) {
     const probe = cloneState(state)
@@ -136,4 +171,28 @@ export function drawNext(state: DrawState): DrawNextResult | null {
 
 export function isDrawComplete(state: DrawState): boolean {
   return findNextSlot(state) === null
+}
+
+export interface SeededDrawResult {
+  state: DrawState
+  log: DrawLogEntry[]
+}
+
+/**
+ * 주어진 시드로 조추첨을 처음부터 끝까지 한 번에 결정론적으로 실행한다 (C6).
+ * 같은 시드는 항상 같은 조 편성을 만들어, 흥미로운 조추첨을 저장·공유·재현할 수 있다.
+ */
+export function runSeededDraw(seed: string, potPools?: PotPools): SeededDrawResult {
+  const rand = createSeededRandom(seed)
+  let state = createInitialDrawState(rand, potPools)
+  const log: DrawLogEntry[] = []
+  let guard = 0
+  while (!isDrawComplete(state) && guard < 100) {
+    const result = drawNext(state, rand)
+    if (!result) break
+    state = result.state
+    log.push(result.entry)
+    guard++
+  }
+  return { state, log }
 }

@@ -1,4 +1,4 @@
-import { TEAMS_BY_ID } from '../../data/teams'
+import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { FlagIcon } from './FlagIcon'
 
@@ -18,8 +18,10 @@ export function TeamLink({
   reverse = false,
   wrap = false,
 }: TeamLinkProps) {
-  const team = TEAMS_BY_ID[teamId]
+  const team = ALL_NATIONS_BY_ID[teamId]
   const selectTeam = useSelectionStore((s) => s.selectTeam)
+
+  if (!team) return <span className={className}>{teamId}</span>
 
   return (
     <button

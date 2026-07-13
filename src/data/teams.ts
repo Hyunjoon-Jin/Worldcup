@@ -1,4 +1,5 @@
 import type { Confederation, Pot, Team, TeamRatings } from '../types/team'
+import { RATINGS_FROM_RANK as R, clamp } from '../engine/config'
 
 interface RawTeam {
   id: string
@@ -17,6 +18,12 @@ interface RawTeam {
 
 // 2026 북중미 월드컵 실제 본선 진출 48개국. pot(1-4)은 2025.12.5 실제 드로우의 포트 구성을 따른다.
 // fifaRankApprox(rank)는 본 시뮬레이터용 근사치이며, 샌드박스 모드에서 조정 가능하다.
+//
+// [데이터 출처/기준] (G1)
+//   - 포트 구성: 2025-12-05 FIFA 공식 조추첨 포트(개최국 3팀 포트1 고정)
+//   - rank: FIFA 랭킹 근사치(기준일 2025-12) — 본선 진출 48팀 내 상대 서열용
+//   - styleBias: 공격/수비 성향 근사치(-10 수비적 ~ +10 공격적), 시뮬레이터 튜닝값
+//   갱신 시 이 블록의 기준일을 함께 수정할 것.
 const RAW_TEAMS: RawTeam[] = [
   // --- Pot 1: 개최국 3팀 + 랭킹 상위 9팀 ---
   { id: 'ARG', nameKo: '아르헨티나', nameEn: 'Argentina', code: 'ARG', iso2: 'AR', confederation: 'CONMEBOL', pot: 1, rank: 1, styleBias: 6 },
@@ -75,16 +82,31 @@ const RAW_TEAMS: RawTeam[] = [
   { id: 'CUW', nameKo: '퀴라소', nameEn: 'Curaçao', code: 'CUW', iso2: 'CW', confederation: 'CONCACAF', pot: 4, rank: 48, styleBias: -1 },
 ]
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
+/**
+ * 팀의 공수 성향(styleBias)을 정한다 (C3 전력 세분화). 명시값이 있으면 그대로,
+ * 없으면 대륙 평균 성향에 팀 ID 기반 결정적 편차를 더해 -6~+6으로 근사한다.
+ * overall(종합 전력)은 바뀌지 않고 공격/수비 배분에만 성향이 반영된다.
+ */
+export function resolveStyleBias(id: string, confederation: Confederation, explicit?: number): number {
+  if (explicit !== undefined) return explicit
+  // 대륙별 평균 공격 성향 근사(+ 공격적, - 수비적)
+  const lean: Record<Confederation, number> = {
+    CONMEBOL: 2, OFC: 2, CAF: 1, CONCACAF: 1, UEFA: 0, AFC: 0,
+  }
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0
+  const variation = (Math.abs(h) % 7) - 3 // -3~+3 결정적 편차
+  return Math.max(-6, Math.min(6, (lean[confederation] ?? 0) + variation))
 }
 
-function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
-  // rank 1 -> ~97, rank 48 -> ~46, roughly linear with a soft floor
-  const overall = clamp(Math.round(97 - (rank - 1) * 1.05), 46, 97)
-  const attack = clamp(overall + Math.round(styleBias * 1.4), 35, 99)
-  const defense = clamp(overall - Math.round(styleBias * 1.4), 35, 99)
-  const form = clamp(overall + Math.round(((rank * 37) % 11) - 5), 40, 99)
+export function ratingsFromRank(rank: number, styleBias = 0): TeamRatings {
+  // 거듭제곱 곡선: 상위권은 밀집, 하위로 갈수록 격차 확대 (C1)
+  const t = (rank - 1) / (R.totalRanks - 1)
+  const overall = clamp(Math.round(R.overallTop - R.overallSpan * Math.pow(t, R.overallExponent)), R.overallFloor, R.overallCap)
+  const styleShift = Math.round(styleBias * R.styleFactor)
+  const attack = clamp(overall + styleShift, R.attackFloor, R.attackCap)
+  const defense = clamp(overall - styleShift, R.attackFloor, R.attackCap)
+  const form = clamp(overall + Math.round(((rank * 37) % 11) - 5), R.formFloor, R.formCap)
   return { attack, defense, form, overall }
 }
 

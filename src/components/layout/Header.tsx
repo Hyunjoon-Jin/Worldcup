@@ -1,4 +1,5 @@
 import { GlassButton } from '../common/GlassButton'
+import { SettingsMenu } from './SettingsMenu'
 import { useSandboxStore } from '../../store/useSandboxStore'
 
 export function Header() {
@@ -15,13 +16,16 @@ export function Header() {
           조추첨부터 결승까지 — 실제 규정 기반 가상 시뮬레이션 (실제 대회 결과와 무관)
         </p>
       </div>
-      <GlassButton
-        variant={sandboxMode ? 'danger' : 'ghost'}
-        onClick={toggleSandbox}
-        className="shrink-0"
-      >
-        {sandboxMode ? '🧪 샌드박스 모드 ON' : '🧪 샌드박스 모드'}
-      </GlassButton>
+      <div className="flex shrink-0 items-center gap-2">
+        <GlassButton
+          variant={sandboxMode ? 'danger' : 'ghost'}
+          onClick={toggleSandbox}
+          aria-pressed={sandboxMode}
+        >
+          {sandboxMode ? '🧪 샌드박스 모드 ON' : '🧪 샌드박스 모드'}
+        </GlassButton>
+        <SettingsMenu />
+      </div>
     </header>
   )
 }

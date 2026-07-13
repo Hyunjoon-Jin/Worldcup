@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { GROUP_LETTERS } from '../data/hostSlots'
 import {
   FINAL_SLOT_ID,
@@ -46,6 +47,8 @@ interface ProgressStore {
   advanceDay: () => void
   /** 현재 날짜/일정에서 가장 이른 시간대 경기 한 타임만 진행한다. */
   advanceTimeSlot: () => void
+  /** 대회가 끝날 때까지(결승·3-4위전 완료) 남은 모든 경기를 한 번에 진행한다. */
+  advanceToEnd: () => void
   reset: () => void
 }
 
@@ -188,7 +191,9 @@ function simulateKnockoutFixtures(fixtures: ScheduledKnockoutMatch[], knockoutSl
   return { slots, results }
 }
 
-export const useProgressStore = create<ProgressStore>()((set, get) => ({
+export const useProgressStore = create<ProgressStore>()(
+  persist(
+    (set, get) => ({
   schedule: null,
   phase: 'idle',
   currentDay: 1,
@@ -294,6 +299,17 @@ export const useProgressStore = create<ProgressStore>()((set, get) => ({
     }
   },
 
+  advanceToEnd: () => {
+    // advanceDay를 반복 호출해 대회 종료까지 진행한다. 진행이 멈추면(상태 불변) 중단한다.
+    for (let guard = 0; guard < 500; guard++) {
+      const before = get()
+      if (before.phase === 'complete') break
+      before.advanceDay()
+      const after = get()
+      if (after.groupMatches === before.groupMatches && after.knockoutSlots === before.knockoutSlots) break
+    }
+  },
+
   advanceDay: () => {
     const state = get()
     if (!state.schedule) return
@@ -382,4 +398,27 @@ export const useProgressStore = create<ProgressStore>()((set, get) => ({
       })
     }
   },
-}))
+    }),
+    {
+      name: 'wc2026-progress-store',
+      version: 1,
+      // 액션 함수는 저장하지 않고, 진행 데이터만 영속화한다(A1). schedule은 결정론적이라
+      // 저장해도 무방하며, 복원 후 initSchedule이 존재하면 재생성하지 않는다.
+      partialize: (state) => ({
+        schedule: state.schedule,
+        phase: state.phase,
+        currentDay: state.currentDay,
+        groupMatches: state.groupMatches,
+        lastBatchDate: state.lastBatchDate,
+        lastBatchTimeSlot: state.lastBatchTimeSlot,
+        lastDayGroupResults: state.lastDayGroupResults,
+        lastDeltaByGroup: state.lastDeltaByGroup,
+        groupResults: state.groupResults,
+        qualifiedThirdGroups: state.qualifiedThirdGroups,
+        knockoutSlots: state.knockoutSlots,
+        lastKnockoutResults: state.lastKnockoutResults,
+        champion: state.champion,
+      }),
+    },
+  ),
+)

@@ -1,45 +1,54 @@
-import { TEAMS_BY_ID } from '../data/teams'
+import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../data/nations'
 import { useConditionStore } from '../store/useConditionStore'
+import { useMomentumStore } from '../store/useMomentumStore'
 import { useSandboxStore } from '../store/useSandboxStore'
+import { usePerformanceStore } from '../store/usePerformanceStore'
 import type { TeamRatings } from '../types/team'
+import { FORECAST_GOAL_CAP, UPSET_RATING_GAP, clamp } from './config'
+import { expectedGoals, hostAdvFor, poissonPmf, simulateKnockout, simulateScore } from './matchCore'
 
-const HOST_ADVANTAGE = 5
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
+// getRatings는 몬테카를로에서 수백만 번 호출되므로, 입력(컨디션·모멘텀·샌드박스)이 바뀌지 않는
+// 동안에는 결과를 캐시해 재계산을 피한다 (B4). 세 store 중 하나라도 바뀌면 버전을 올려 캐시를 비운다.
+let ratingsCache: Record<string, TeamRatings> = {}
+let cacheVersion = -1
+let storeVersion = 0
+const bump = () => {
+  storeVersion++
 }
+useConditionStore.subscribe(bump)
+useSandboxStore.subscribe(bump)
+useMomentumStore.subscribe(bump)
+usePerformanceStore.subscribe(bump)
 
-/** 이번 대회의 팀별 컨디션(useConditionStore)을 폼 능력치에 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다. */
+/**
+ * 이번 대회의 팀별 컨디션(useConditionStore)·진행 중 모멘텀(useMomentumStore)·성적 반영 보정
+ * (usePerformanceStore)을 능력치에 반영한 뒤, 샌드박스 수동 조정을 최종 적용한다.
+ * 성적 보정(perfDelta)은 공격·수비·종합에 소폭 더해 "잘 나가는 팀은 능력치가 살짝 오르고
+ * 부진하면 살짝 내려가도록" 한다. 결과는 store가 바뀌기 전까지 캐시된다(불변으로 취급).
+ */
 export function getRatings(teamId: string): TeamRatings {
+  if (cacheVersion !== storeVersion) {
+    ratingsCache = {}
+    cacheVersion = storeVersion
+  }
+  const cached = ratingsCache[teamId]
+  if (cached) return cached
+
   const team = TEAMS_BY_ID[teamId]
+  const base = team.baseRatings
   const conditionOffset = useConditionStore.getState().offsets[teamId] ?? 0
-  const conditioned: TeamRatings = { ...team.baseRatings, form: clamp(team.baseRatings.form + conditionOffset, 30, 99) }
+  const momentumOffset = useMomentumStore.getState().offsets[teamId] ?? 0
+  const perfDelta = usePerformanceStore.getState().deltas[teamId] ?? 0
+  const conditioned: TeamRatings = {
+    attack: clamp(base.attack + perfDelta, 1, 99),
+    defense: clamp(base.defense + perfDelta, 1, 99),
+    overall: clamp(base.overall + perfDelta, 1, 99),
+    form: clamp(base.form + conditionOffset + momentumOffset, 30, 99),
+  }
   const override = useSandboxStore.getState().overrides[teamId]
-  return override ? { ...conditioned, ...override } : conditioned
-}
-
-// 실제 축구 경기의 평균 득점(팀당 약 1.3골)에 가깝게 보정하고, 극단적인 능력치 차이에서도
-// 대량 득점 블로아웃이 지나치게 자주 나오지 않도록 민감도를 낮추고 상하한을 좁혔다.
-function expectedGoals(attacker: TeamRatings, defender: TeamRatings, isHostTeam: boolean): number {
-  const strengthDiff = attacker.attack - defender.defense + (attacker.form - 70) * 0.15 + (isHostTeam ? HOST_ADVANTAGE : 0)
-  return clamp(1.25 + strengthDiff / 38, 0.35, 3.1)
-}
-
-function samplePoisson(lambda: number): number {
-  const limit = Math.exp(-lambda)
-  let k = 0
-  let p = 1
-  do {
-    k += 1
-    p *= Math.random()
-  } while (p > limit)
-  return k - 1
-}
-
-function poissonPmf(lambda: number, k: number): number {
-  let factorial = 1
-  for (let i = 2; i <= k; i++) factorial *= i
-  return (Math.exp(-lambda) * lambda ** k) / factorial
+  const result = override ? { ...conditioned, ...override } : conditioned
+  ratingsCache[teamId] = result
+  return result
 }
 
 export interface MatchForecast {
@@ -47,8 +56,6 @@ export interface MatchForecast {
   drawPct: number
   awayWinPct: number
 }
-
-const FORECAST_GOAL_CAP = 8
 
 /**
  * 실제 무작위 표본추출 없이, simulateMatch와 동일한 득점 기대값(포아송 분포)을 정확한
@@ -59,10 +66,8 @@ const FORECAST_GOAL_CAP = 8
 export function forecastMatch(homeTeamId: string, awayTeamId: string): MatchForecast {
   const home = getRatings(homeTeamId)
   const away = getRatings(awayTeamId)
-  const homeIsHost = TEAMS_BY_ID[homeTeamId].isHost
-  const awayIsHost = TEAMS_BY_ID[awayTeamId].isHost
-  const homeLambda = expectedGoals(home, away, homeIsHost)
-  const awayLambda = expectedGoals(away, home, awayIsHost)
+  const homeLambda = expectedGoals(home, away, hostAdvFor(homeTeamId))
+  const awayLambda = expectedGoals(away, home, hostAdvFor(awayTeamId))
 
   let homeWin = 0
   let draw = 0
@@ -85,52 +90,15 @@ export interface SimulatedScore {
 }
 
 export function simulateMatch(homeTeamId: string, awayTeamId: string): SimulatedScore {
-  const home = getRatings(homeTeamId)
-  const away = getRatings(awayTeamId)
-  const homeIsHost = TEAMS_BY_ID[homeTeamId].isHost
-  const awayIsHost = TEAMS_BY_ID[awayTeamId].isHost
-
-  const homeLambda = expectedGoals(home, away, homeIsHost)
-  const awayLambda = expectedGoals(away, home, awayIsHost)
-
-  return {
-    homeGoals: samplePoisson(homeLambda),
-    awayGoals: samplePoisson(awayLambda),
-  }
+  return simulateScore(homeTeamId, getRatings(homeTeamId), awayTeamId, getRatings(awayTeamId), Math.random)
 }
 
-export interface SimulatedKnockoutScore extends SimulatedScore {
-  wentToPenalties: boolean
-  winnerTeamId: string
-}
+export type SimulatedKnockoutScore = ReturnType<typeof simulateKnockout>
 
 /** 무승부 시 승부차기로 승자를 결정한다(능력치 기반 확률 + 약간의 변수). */
 export function simulateKnockoutMatch(homeTeamId: string, awayTeamId: string): SimulatedKnockoutScore {
-  const { homeGoals, awayGoals } = simulateMatch(homeTeamId, awayTeamId)
-  if (homeGoals !== awayGoals) {
-    return {
-      homeGoals,
-      awayGoals,
-      wentToPenalties: false,
-      winnerTeamId: homeGoals > awayGoals ? homeTeamId : awayTeamId,
-    }
-  }
-
-  const home = getRatings(homeTeamId)
-  const away = getRatings(awayTeamId)
-  const homeStrength = home.overall + home.form * 0.2 + 50
-  const awayStrength = away.overall + away.form * 0.2 + 50
-  const homeWinProb = homeStrength / (homeStrength + awayStrength)
-
-  return {
-    homeGoals,
-    awayGoals,
-    wentToPenalties: true,
-    winnerTeamId: Math.random() < homeWinProb ? homeTeamId : awayTeamId,
-  }
+  return simulateKnockout(homeTeamId, getRatings(homeTeamId), awayTeamId, getRatings(awayTeamId), Math.random)
 }
-
-const UPSET_RATING_GAP = 8
 
 /** 승자의 종합 능력치가 패자보다 일정 격차 이상 낮으면 이변으로 판정한다. */
 export function isUpset(winnerTeamId: string, loserTeamId: string): boolean {
