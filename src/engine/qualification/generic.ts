@@ -44,6 +44,21 @@ function roundRobinRounds(teams: string[]): Array<{ home: string; away: string; 
   return out
 }
 
+/**
+ * 라운드로빈 한 사이클(홈&어웨이의 '홈' 절반)의 라운드 수 (D27 매치데이 계산 일반화).
+ * 짝수 팀이면 n−1, 홀수 팀이면 n(부전승 라운드 포함). 조 크기와 무관하게 일관 적용한다.
+ */
+export function roundRobinSingleRounds(teamCount: number): number {
+  return Math.max(1, teamCount % 2 === 0 ? teamCount - 1 : teamCount)
+}
+
+/** 한 조가 치르는 총 매치데이 수(단판=단일 사이클, 홈&어웨이=두 사이클). 일정·검증에 재사용. */
+export function roundRobinMatchdayCount(teamCount: number, doubleRound = false): number {
+  if (teamCount <= 1) return 0
+  const single = roundRobinSingleRounds(teamCount)
+  return doubleRound ? single * 2 : single
+}
+
 /** 실력(랭킹) 순으로 뱀 배정(serpentine)해 조를 균형 있게 나눈다. */
 export function snakeSeed(sorted: string[], numGroups: number): string[][] {
   const groups: string[][] = Array.from({ length: numGroups }, () => [])
@@ -85,7 +100,7 @@ export function playSingleGroup(
 ): { matches: QualMatch[]; ranking: string[]; lastMatchday: number } {
   const off = opts.matchdayOffset ?? 0
   const schedule = roundRobinRounds(teams)
-  const singleRounds = Math.max(1, teams.length % 2 === 0 ? teams.length - 1 : teams.length)
+  const singleRounds = roundRobinSingleRounds(teams.length)
   const gm: QualMatch[] = []
   let last = off
   for (const { home, away, matchday } of schedule) {
@@ -125,7 +140,17 @@ export function playSingleGroup(
  * 진행 중 잠정 순위 계산에도 재사용한다(전달하는 matches를 치른 경기로 한정).
  */
 export function rankAcrossGroups(groupRankings: string[][], matches: QualMatch[], teams: string[]): string[] {
-  const overall = computeStandings(teams, matches)
+  // 조 크기가 다르면(예: 5팀 조 vs 4팀 조) 횡단 비교가 불공정하다 — 큰 조의 팀이 더 많은 경기를
+  // 치르기 때문. FIFA 규정대로 각 조 최하위 팀과의 경기를 제외해 모든 팀을 (최소 조 크기−1)경기로
+  // 맞춘 뒤 비교한다(D26). 조 크기가 모두 같으면 제외 없이 전체 기록으로 비교한다.
+  const sizes = groupRankings.map((g) => g.length).filter((s) => s > 0)
+  const minSize = sizes.length ? Math.min(...sizes) : 0
+  const excluded = new Set<string>()
+  for (const g of groupRankings) for (const t of g.slice(minSize)) excluded.add(t)
+  const rankingMatches = excluded.size
+    ? matches.filter((m) => !excluded.has(m.homeTeamId) && !excluded.has(m.awayTeamId))
+    : matches
+  const overall = computeStandings(teams, rankingMatches)
   const byRecord = (a: string, b: string) => {
     const sa = overall[a]
     const sb = overall[b]
