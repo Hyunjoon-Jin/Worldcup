@@ -12,8 +12,12 @@ describe('개최국 로테이션 — 연속 개최 방지', () => {
     }
   })
 
-  it('실제 진행(edition 0..24)에서도 연속 대회 개최국이 겹치지 않는다', () => {
-    for (let ed = 0; ed < 24; ed++) {
+  it('순환 주기는 40대회다', () => {
+    expect(HOST_ROTATION.length).toBe(40)
+  })
+
+  it('실제 진행에서 순환 경계를 넘겨도(edition 0..44) 연속 대회 개최국이 겹치지 않는다', () => {
+    for (let ed = 0; ed < 44; ed++) {
       const cur = new Set(hostEditionAt(ed).hostIds)
       const next = hostEditionAt(ed + 1).hostIds
       const shared = next.filter((id) => cur.has(id))
@@ -21,8 +25,8 @@ describe('개최국 로테이션 — 연속 개최 방지', () => {
     }
   })
 
-  it('연도는 대회마다 4년씩 단조 증가한다', () => {
-    for (let ed = 0; ed < 24; ed++) {
+  it('연도는 대회마다 4년씩 단조 증가한다(순환 경계 포함)', () => {
+    for (let ed = 0; ed < 44; ed++) {
       expect(hostEditionAt(ed + 1).year - hostEditionAt(ed).year).toBe(4)
     }
   })
