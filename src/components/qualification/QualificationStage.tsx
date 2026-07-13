@@ -721,35 +721,45 @@ function MyTeamQualBanner({
   qualified48,
   hosts,
   probability,
+  fullyRevealed,
 }: {
   teamId: string
   qualified48: string[]
   hosts: string[]
   probability?: number
+  /** 예선이 전부 진행돼 결과가 확정됐는지. false면 진출 여부를 스포일러하지 않는다. */
+  fullyRevealed: boolean
 }) {
   const nation = ALL_NATIONS_BY_ID[teamId]
   if (!nation) return null
-  const isIn = qualified48.includes(teamId)
   const isHost = hosts.includes(teamId)
+  const isIn = qualified48.includes(teamId)
+  // 개최국은 예선과 무관하게 자동 진출이라 진행 중에도 알려도 무방. 그 외엔 예선을 다 봐야 결과 공개.
+  const decided = fullyRevealed || isHost
+  // 색: 확정 전엔 중립(진행 중), 확정 후엔 진출/실패로 구분.
+  const tone = !decided ? 'border-white/10 bg-white/5' : isIn || isHost ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-red-400/30 bg-red-500/10'
+  const statusText = isHost
+    ? '🏟️ 개최국 자동 진출!'
+    : !fullyRevealed
+      ? '🔄 예선 진행 중'
+      : isIn
+        ? '✅ 본선 진출!'
+        : '💔 본선 진출 실패'
+  const statusColor = !decided ? 'text-gray-200' : isIn || isHost ? 'text-emerald-200' : 'text-red-200'
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl border p-3 ${
-        isIn ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-red-400/30 bg-red-500/10'
-      }`}
-    >
+    <div className={`flex items-center gap-3 rounded-xl border p-3 ${tone}`}>
       <FlagIcon iso2={nation.iso2} className="h-6 w-9 shrink-0 rounded-sm" />
       <div className="min-w-0 flex-1">
         <p className="text-xs text-gray-400">
           내 팀 · {CONFEDERATION_LABEL_KO[nation.confederation]} · FIFA {nation.fifaRankApprox}위
         </p>
-        <p className={`text-sm font-bold ${isIn ? 'text-emerald-200' : 'text-red-200'}`}>
-          {nation.nameKo}{' '}
-          {isHost ? '🏟️ 개최국 자동 진출!' : isIn ? '✅ 본선 진출!' : '💔 본선 진출 실패'}
+        <p className={`text-sm font-bold ${statusColor}`}>
+          {nation.nameKo} {statusText}
         </p>
       </div>
       {probability != null && !isHost && (
         <div className="shrink-0 text-right">
-          <p className="text-[10px] text-gray-400">진출 확률</p>
+          <p className="text-[10px] text-gray-400">{fullyRevealed ? '진출 확률' : '진출 확률(예상)'}</p>
           <p className="text-lg font-bold tabular-nums text-sky-300">{probability.toFixed(0)}%</p>
           <p className="text-[9px] text-gray-500 tabular-nums">±{probMarginPct(probability, PROB_ITERATIONS).toFixed(1)}%</p>
         </div>
@@ -1281,13 +1291,20 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   // 예선이 전부 끝났는지(부분 진행이면 최종 결과 카드는 스포일러 방지로 숨긴다).
   const fullyRevealed = result ? !isPartialProgress(result, revealed) : false
 
-  // 내 팀 본선 진출 순간 효과음·햅틱 (E2). 결과가 새로 나올 때 한 번만 재생.
+  // 내 팀 본선 진출 순간 효과음·햅틱 (E2). 예선을 끝까지 봐야(스포일러 방지) 결과당 한 번만 재생.
   const playedFor = useRef<AllQualificationResult | null>(null)
   useEffect(() => {
-    if (!result || result === playedFor.current) return
-    playedFor.current = result
-    if (myTeamId && soundEnabled && result.qualified48.includes(myTeamId)) playVictory()
-  }, [result, myTeamId, soundEnabled])
+    if (!result) {
+      playedFor.current = null
+      return
+    }
+    if (result === playedFor.current) return
+    if (fullyRevealed && myTeamId && soundEnabled && result.qualified48.includes(myTeamId)) {
+      playedFor.current = result
+      playVictory()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, fullyRevealed, myTeamId, soundEnabled])
 
   // 오늘의 예선 시드 (E4 데일리 챌린지): 같은 날이면 전 세계가 같은 예선을 돌린다.
   const todaySeed = useMemo(() => `DAILY-${new Date().toISOString().slice(0, 10)}`, [])
@@ -1435,6 +1452,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               qualified48={result.qualified48}
               hosts={result.hosts}
               probability={probabilities ? probabilities[myTeamId] : undefined}
+              fullyRevealed={fullyRevealed}
             />
           )}
 
