@@ -148,7 +148,13 @@ export interface ThirdPlaceEntry {
   qualified: boolean
 }
 
-/** 12개 조 3위팀을 횡단 비교해 순위를 매기고 상위 8팀을 진출 처리한다(조 전체 기록 기준). */
+/**
+ * 32강에 진출하는 최다 3위 팀 수(D30). 48팀 본선: 12개 조 상위 2팀(24) + 최다 3위 8팀 = 32강.
+ * 조 수·32강 규모가 바뀌면 이 상수만 고치면 된다.
+ */
+export const THIRD_PLACE_QUALIFIERS = 8
+
+/** 12개 조 3위팀을 횡단 비교해 순위를 매기고 상위 THIRD_PLACE_QUALIFIERS팀을 진출 처리한다(조 전체 기록 기준). */
 export function rankThirdPlaceTeams(thirdPlaceByGroup: Partial<Record<GroupLetter, string>>, allMatches: GroupMatch[]): ThirdPlaceEntry[] {
   const entries = Object.entries(thirdPlaceByGroup) as [GroupLetter, string][]
   const withStats = entries.map(([group, teamId]) => {
@@ -169,6 +175,6 @@ export function rankThirdPlaceTeams(thirdPlaceByGroup: Partial<Record<GroupLette
 
   return sortedIds.map((teamId, idx) => {
     const entry = withStats.find((e) => e.teamId === teamId)!
-    return { ...entry, qualified: idx < 8 }
+    return { ...entry, qualified: idx < THIRD_PLACE_QUALIFIERS }
   })
 }

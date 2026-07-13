@@ -608,7 +608,7 @@ describe('다단계 대륙 구조 (개선 A3·A4)', () => {
     expect(r.groupLabels).toContain('3차 A조')
     expect(r.groupLabels).toContain('3차 C조')
     expect(r.groupLabels).toContain('4차 B조')
-    expect(r.groupLabels).toContain('5차 PO')
+    expect(r.groupLabels).toContain('5차 PO(2연전)')
     // 3차는 정확히 3개 조 × 6팀(18팀) — B8 불균형 정정
     expect(r.groups[r.groupLabels!.indexOf('3차 A조')]).toHaveLength(6)
     expect(r.qualified).toHaveLength(8) // 3차 6 + 4차 2
