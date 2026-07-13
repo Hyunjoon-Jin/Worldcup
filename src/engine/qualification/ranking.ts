@@ -225,6 +225,8 @@ export function editionEndRankingPoints(
     .flatMap((r) => r.matches)
     .sort((a, b) => a.matchday - b.matchday)
   for (const m of allQual) applyMatchElo(points, m)
+  // 대륙간 플레이오프 경기도 예선 중요도(I=25)로 반영한다(누락 시 대륙간 PO 승자의 랭킹 크레딧이 빠짐).
+  for (const m of all.interConfed.matches) applyMatchElo(points, m)
   applyFinalsElo(points, finals)
   return points
 }
@@ -261,7 +263,11 @@ export interface RankMover {
  * 경기 진행 상황(played)을 반영한 참가국 내부 랭킹과 변동을 계산한다.
  * baseRank/currentRank는 "참가국 집합 내 순위"(1=최강)로, 델타는 상승이 양수.
  */
-export function computeRankingMovers(all: AllQualificationResult, played: QualMatch[]): RankMover[] {
+export function computeRankingMovers(
+  all: AllQualificationResult,
+  played: QualMatch[],
+  carriedBase?: Record<string, number>,
+): RankMover[] {
   const teamIds = new Set<string>()
   for (const c of Object.keys(all.byConfederation)) {
     for (const m of all.byConfederation[c].matches) {
@@ -269,8 +275,10 @@ export function computeRankingMovers(all: AllQualificationResult, played: QualMa
       teamIds.add(m.awayTeamId)
     }
   }
+  if (carriedBase) for (const id of Object.keys(carriedBase)) teamIds.add(id)
   const ids = [...teamIds]
-  const base = initRankingPoints(ids)
+  // 대회 시작 점수 = 이월(carried) 점수(커리어 모드). 없으면 정적 시작 점수. computeLiveRanking과 기준 일치.
+  const base = resolveBasePoints(ids, carriedBase)
   const now = updateRankingPoints(base, played)
 
   const rankOf = (pts: Record<string, number>) => {
@@ -292,7 +300,7 @@ export function computeRankingMovers(all: AllQualificationResult, played: QualMa
       delta: baseRanks[id] - nowRanks[id], // 순위 숫자 감소 = 상승(+)
       points: now[id],
     }))
-    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || b.points - a.points)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || b.points - a.points || a.teamId.localeCompare(b.teamId))
 }
 
 /** 전체 예선 참가국 ID 목록. */

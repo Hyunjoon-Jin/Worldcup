@@ -30,7 +30,16 @@ export function extractQualDrama(all: AllQualificationResult, limit = 5): QualDr
     }
   }
 
-  const surpriseQualifiers = [...nonHostQualified].sort((a, b) => b.rank - a.rank).slice(0, limit)
-  const shockEliminations = [...eliminated].sort((a, b) => a.rank - b.rank).slice(0, limit)
+  // '깜짝'은 실제로 순위가 낮은 팀이 진출했을 때만(랭킹 30위권 밖), '충격 탈락'은 상위권(30위 이내) 팀이
+  // 떨어졌을 때만 태그한다. 랭킹 동률은 팀ID로 결정성 확보.
+  const SURPRISE_RANK = 30
+  const surpriseQualifiers = [...nonHostQualified]
+    .filter((t) => t.rank > SURPRISE_RANK)
+    .sort((a, b) => b.rank - a.rank || a.teamId.localeCompare(b.teamId))
+    .slice(0, limit)
+  const shockEliminations = [...eliminated]
+    .filter((t) => t.rank <= SURPRISE_RANK)
+    .sort((a, b) => a.rank - b.rank || a.teamId.localeCompare(b.teamId))
+    .slice(0, limit)
   return { surpriseQualifiers, shockEliminations }
 }

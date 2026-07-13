@@ -70,7 +70,10 @@ function byFairPlay(stats: Record<string, GroupStanding>): Comparator {
   // 페어플레이는 벌점이 적을수록 유리(오름차순)하므로 부호를 반대로 비교한다.
   return (a, b) => stats[a].fairPlayScore - stats[b].fairPlayScore
 }
-const byFifaRank: Comparator = (a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+const byFifaRank: Comparator = (a, b) => {
+  const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+  return rd !== 0 ? rd : a.localeCompare(b) // 랭킹까지 동률이면 팀ID로 결정성 확보(정렬 안정성 무관)
+}
 
 /**
  * 2026 월드컵부터 적용되는 조별리그 순위 결정 기준(월드컵 사상 최초로 전체 골득실보다
@@ -107,10 +110,17 @@ function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding
   const tierSet = new Set(tier)
   const h2hMatches = matches.filter((m) => tierSet.has(m.homeTeamId) && tierSet.has(m.awayTeamId))
   const expectedPairs = (tier.length * (tier.length - 1)) / 2
-  const playedPairs = new Set(h2hMatches.map((m) => [m.homeTeamId, m.awayTeamId].sort().join('-'))).size
-
-  // 동률팀 간 경기가 모두 끝나지 않았다면 상호전적을 적용할 수 없으므로 조 전체 기록으로만 비교한다.
-  const h2h = playedPairs === expectedPairs ? computeStandings(tier, h2hMatches) : null
+  // 쌍별로 치른 경기 수(홈&어웨이면 최종적으로 2, 단판이면 1).
+  const pairCounts = new Map<string, number>()
+  for (const m of h2hMatches) {
+    const k = [m.homeTeamId, m.awayTeamId].sort().join('-')
+    pairCounts.set(k, (pairCounts.get(k) ?? 0) + 1)
+  }
+  // 상호전적은 '동률팀 간 경기가 완결'됐을 때만 유효하다. 모든 쌍이 존재하고, 쌍마다 치른 경기 수가
+  // 균일해야 완결로 본다(진행 중 홈&어웨이 한 레그만 치른 경우를 상호전적에서 배제 — 잠정 순위 정확도).
+  const maxPerPair = pairCounts.size ? Math.max(...pairCounts.values()) : 0
+  const complete = pairCounts.size === expectedPairs && [...pairCounts.values()].every((c) => c === maxPerPair)
+  const h2h = complete ? computeStandings(tier, h2hMatches) : null
 
   const comparator = h2h
     ? chain(byPoints(h2h), byGoalDifference(h2h), byGoalsScored(h2h), byGoalDifference(overall), byGoalsScored(overall), byFairPlay(overall), byFifaRank)

@@ -221,7 +221,8 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
   )
   const chartIds = useMemo(() => {
     const top = ranking.slice(0, 5).map((r) => r.teamId)
-    if (myTeamId && ALL_NATIONS_BY_ID[myTeamId] && !top.includes(myTeamId)) top.push(myTeamId)
+    // 내 팀은 '랭킹에 실제로 존재하는 참가국'일 때만 추가한다(개최국 등 미참가 팀은 추이 데이터가 없어 NaN 방지).
+    if (myTeamId && !top.includes(myTeamId) && ranking.some((r) => r.teamId === myTeamId)) top.push(myTeamId)
     return top
   }, [ranking, myTeamId])
   const trend = useMemo(
@@ -1046,8 +1047,11 @@ function ConfederationStandings({
     ? selectedStage.groupIndices.flatMap((gi) => r.groups[gi] ?? []).sort((a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox)
     : []
   const stageNumGroups = selectedStage?.groupIndices.length ?? 0
-  const firstStageGroupSize = selectedStage ? (r.groups[selectedStage.groupIndices[0]]?.length ?? 0) : 0
-  const showDrawPots = !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3
+  const stageGroupSizes = selectedStage ? selectedStage.groupIndices.map((gi) => r.groups[gi]?.length ?? 0) : []
+  const firstStageGroupSize = stageGroupSizes[0] ?? 0
+  // 포트 재구성은 조 크기가 모두 같을 때만 정확하다(크기가 다르면 슬라이스가 어긋나므로 표시하지 않는다).
+  const uniformGroupSizes = stageGroupSizes.length > 0 && stageGroupSizes.every((n) => n === firstStageGroupSize)
+  const showDrawPots = !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes
   const drawPots: string[][] = showDrawPots
     ? Array.from({ length: firstStageGroupSize }, (_, p) => stageTeamsSorted.slice(p * stageNumGroups, (p + 1) * stageNumGroups))
     : []
@@ -1255,7 +1259,7 @@ function ConfederationStandings({
                 </li>
               ))}
             </ul>
-            <MatchList teams={groupTeams} matches={shownMatches} onSelectMatch={onSelectMatch} />
+            <MatchList teams={groupTeams} matches={groupMatches} onSelectMatch={onSelectMatch} />
           </div>
           )
         })}
@@ -1270,6 +1274,12 @@ function ConfederationStandings({
             ? '※ 진행 중 — 위 차수 탭으로 각 라운드를 전환하고, 라운드를 넘겨 순위 변화를 지켜보세요. 직행/PO는 전체 라운드 종료 후 확정됩니다.'
             : '※ 진행 중 — 점선 배지는 현재 순위 기준 잠정 진출 상황(확정 아님)입니다. 라운드를 넘기면 실시간으로 바뀝니다.'}
       </p>
+      {chainKeys.length > 1 && (
+        <p className="mt-1 text-[10px] text-gray-600">
+          ※ 각 열은 그 차수에 <strong>도달할 확률</strong>입니다. AFC 4·5차처럼 상위 차수에서 직행권을 놓친 팀이 가는
+          ‘패자 부활’ 라운드는 강팀일수록 도달 확률이 낮습니다(그 전에 본선 직행).
+        </p>
+      )}
     </GlassCard>
   )
 }
@@ -1576,8 +1586,10 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 <span className="text-gray-500 transition-transform group-open:rotate-180">▾</span>
               </summary>
               {(() => {
-                const pots = computePots(result.qualified48, undefined, potPoints)
+                // 이 예선 결과의 개최국(result.hosts)으로 포트를 계산해, 아래 포트1의 개최국 표기와 정확히 일치시킨다
+                // (커리어 모드에서 현재 개최국과 예선 시점 개최국이 다를 때 중복/누락 방지).
                 const potHostIds = result.hosts
+                const pots = computePots(result.qualified48, potHostIds, potPoints)
                 const potList: [string, string[]][] = [
                   ['포트 1 (개최국 + 최상위)', [...potHostIds, ...pots[1]]],
                   ['포트 2', pots[2]],
@@ -1613,7 +1625,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
 
           {fullyRevealed && <QualUpsetArticleCard result={result} />}
 
-          {probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
+          {fullyRevealed && probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
 
           {myTeamId && ALL_NATIONS_BY_ID[myTeamId] && !result.hosts.includes(myTeamId) && (
             <QualWhatIfCard teamId={myTeamId} seedBase={seed ?? 'WHATIF'} />

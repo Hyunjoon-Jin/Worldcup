@@ -37,7 +37,9 @@ export function runWhatIfScenarios(
         overall: clamp(orig.overall + delta),
       },
     }
-    const acc = createQualProbAccumulator(`${seedBase}-wi${delta}`, ratings)
+    // 공통난수(CRN): 모든 delta가 같은 시드 시퀀스를 쓰게 해, 차이가 오직 '내 팀 전력'에서만
+    // 오도록 한다(시드가 다르면 전력을 올려도 확률이 내려가는 노이즈가 생김). 재현성도 유지.
+    const acc = createQualProbAccumulator(`${seedBase}-wi`, ratings)
     acc.runBatch(iterations)
     return { delta, probability: acc.result()[teamId] ?? 0 }
   })
