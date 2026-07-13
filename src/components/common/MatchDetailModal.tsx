@@ -8,6 +8,13 @@ import { generateGoalTimeline, formatGoalMinute, type GoalEvent } from '../../en
 import { formatDecimalOdds } from '../../engine/odds'
 import { venueForMatchId } from '../../data/venues'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
+import {
+  applyMatchElo,
+  wcKnockoutImportance,
+  IMPORTANCE_WC_GROUP,
+  staticStartPoints,
+} from '../../engine/qualification/ranking'
+import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
 import { useMatchDetailStore } from '../../store/useMatchDetailStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useDrawStore } from '../../store/useDrawStore'
@@ -179,6 +186,7 @@ export function MatchDetailModal() {
   const selectTeam = useSelectionStore((s) => s.selectTeam)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const allGroupMatches = useProgressStore((s) => s.groupMatches)
+  const { pointsByTeam } = useLiveFifaRanking()
 
   const homeTeamId = selected ? (selected.kind === 'upcoming' ? selected.homeTeamId : selected.match.homeTeamId) : null
   const awayTeamId = selected ? (selected.kind === 'upcoming' ? selected.awayTeamId : selected.match.awayTeamId) : null
@@ -258,6 +266,18 @@ export function MatchDetailModal() {
   const upsetInfo = played ? classifyMatchUpset(homeTeamId, awayTeamId, homeGoals!, awayGoals!) : null
   const wentToPenalties = selected.kind === 'knockout' ? selected.match.wentToPenalties : false
   const winnerTeamId = selected.kind === 'knockout' ? selected.match.winnerTeamId : upsetInfo?.winnerTeamId
+
+  // FIFA 랭킹 ±점 기여(D21). 본선 경기만 — 조별 I=50, 8강 이후 60. 현재 라이브 점수 기준 근사.
+  const fifaImportance =
+    selected.kind === 'knockout' ? wcKnockoutImportance(selected.match.round) : selected.kind === 'group' ? IMPORTANCE_WC_GROUP : null
+  let fifaDelta: { home: number; away: number; importance: number } | null = null
+  if (played && fifaImportance != null && homeGoals != null && awayGoals != null) {
+    const hp = pointsByTeam[homeTeamId] ?? staticStartPoints(homeTeamId)
+    const ap = pointsByTeam[awayTeamId] ?? staticStartPoints(awayTeamId)
+    const tmp: Record<string, number> = { [homeTeamId]: hp, [awayTeamId]: ap }
+    applyMatchElo(tmp, { homeTeamId, awayTeamId, homeGoals, awayGoals, wentToPenalties: !!wentToPenalties, winnerTeamId }, fifaImportance)
+    fifaDelta = { home: tmp[homeTeamId] - hp, away: tmp[awayTeamId] - ap, importance: fifaImportance }
+  }
 
   const label =
     selected.kind === 'group'
@@ -370,6 +390,28 @@ export function MatchDetailModal() {
           <p className="mb-4 text-center text-xs text-emerald-300">
             {TEAMS_BY_ID[winnerTeamId].nameKo} 승리{wentToPenalties ? ' (승부차기)' : ''}
           </p>
+        )}
+
+        {fifaDelta && (
+          <div className="mb-4 rounded-lg bg-white/5 p-3">
+            <p className="mb-2 text-center text-[11px] font-bold text-gray-400">
+              🌐 FIFA 랭킹 반영 <span className="font-normal text-gray-500">(중요도 I={fifaDelta.importance})</span>
+            </p>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex-1 text-center">
+                <span className="text-gray-300">{homeTeam.nameKo} </span>
+                <span className={`font-bold tabular-nums ${fifaDelta.home >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {fifaDelta.home >= 0 ? '+' : ''}{fifaDelta.home.toFixed(1)}
+                </span>
+              </span>
+              <span className="flex-1 text-center">
+                <span className="text-gray-300">{awayTeam.nameKo} </span>
+                <span className={`font-bold tabular-nums ${fifaDelta.away >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {fifaDelta.away >= 0 ? '+' : ''}{fifaDelta.away.toFixed(1)}
+                </span>
+              </span>
+            </div>
+          </div>
         )}
 
         {goalTimeline.length > 0 && (

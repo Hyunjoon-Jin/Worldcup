@@ -557,12 +557,14 @@ describe('포맷 데이터 주도화 (개선 C4)', () => {
     const afc = QUAL_FORMAT.AFC
     if (afc.kind === 'afc') {
       const r = simulateConfederation('AFC', allRatings, createSeededRandom('fmt-afc'))
-      expect(r.groups.length).toBe(afc.round3Groups + afc.round4Groups + 1) // +5차 PO
+      // 1차 예선 + 2차 조 + 3차 조 + 4차 조 + 5차 PO
+      expect(r.groups.length).toBe(1 + afc.round2Groups + afc.round3Groups + afc.round4Groups + 1)
     }
     const ccf = QUAL_FORMAT.CONCACAF
     if (ccf.kind === 'concacaf') {
       const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('fmt-ccf'))
-      expect(r.groups.length).toBe(1 + ccf.finalGroups) // 1차 + 최종 조들
+      // 1차 예선 + 2차 조 + 최종 조
+      expect(r.groups.length).toBe(1 + ccf.round2Groups + ccf.finalGroups)
     }
   })
 })
@@ -598,11 +600,17 @@ describe('동적 개최국 (커리어 모드)', () => {
 describe('다단계 대륙 구조 (개선 A3·A4)', () => {
   const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
 
-  it('AFC는 3차·4차·5차 스테이지로 구성된다', () => {
+  it('AFC는 1차 예선 + 2·3·4차 조 + 5차 PO로 구성된다', () => {
     const r = simulateConfederation('AFC', allRatings, createSeededRandom('AFC-ms'))
-    // 3차 3개 조 + 4차 2개 조 + 5차 PO = 6개 조
-    expect(r.groups).toHaveLength(6)
-    expect(r.groupLabels).toEqual(['3차 A조', '3차 B조', '3차 C조', '4차 A조', '4차 B조', '5차 PO'])
+    // 1차 예선 + 2차 9조 + 3차 3조 + 4차 2조 + 5차 PO = 16개 "그룹"
+    expect(r.groupLabels?.[0]).toBe('1차 예선')
+    expect(r.groupLabels).toContain('2차 A조')
+    expect(r.groupLabels).toContain('3차 A조')
+    expect(r.groupLabels).toContain('3차 C조')
+    expect(r.groupLabels).toContain('4차 B조')
+    expect(r.groupLabels).toContain('5차 PO')
+    // 3차는 정확히 3개 조 × 6팀(18팀) — B8 불균형 정정
+    expect(r.groups[r.groupLabels!.indexOf('3차 A조')]).toHaveLength(6)
     expect(r.qualified).toHaveLength(8) // 3차 6 + 4차 2
     expect(r.playoff).toHaveLength(1) // 5차 승자
     // 스테이지가 매치데이로 이어진다(마지막 경기 matchday == 총 라운드 수)
@@ -611,11 +619,14 @@ describe('다단계 대륙 구조 (개선 A3·A4)', () => {
     expect(new Set([...r.qualified, ...r.playoff]).size).toBe(9)
   })
 
-  it('CONCACAF는 1차 예선 라운드 + 최종 3개 조로 구성되고 개최국을 제외한다', () => {
+  it('CONCACAF는 1차·2차 예비예선 + 최종 3개 조(4팀)로 구성되고 개최국을 제외한다', () => {
     const r = simulateConfederation('CONCACAF', allRatings, createSeededRandom('CCF-ms'))
-    expect(r.groupLabels?.[0]).toBe('1차 예선 라운드')
+    expect(r.groupLabels?.[0]).toBe('1차 예선')
+    expect(r.groupLabels).toContain('2차 A조')
     expect(r.groupLabels).toContain('최종 A조')
     expect(r.groupLabels).toContain('최종 C조')
+    // 최종 라운드는 3개 조 × 4팀(12팀) — B12 정정
+    expect(r.groups[r.groupLabels!.indexOf('최종 A조')]).toHaveLength(4)
     expect(r.qualified).toHaveLength(3) // 최종 각 조 1위
     expect(r.playoff).toHaveLength(2) // 최고 2위
     for (const host of ['MEX', 'USA', 'CAN']) {
@@ -718,8 +729,9 @@ describe('매치데이 구조 (개선 B1)', () => {
       expect(m.matchday).toBeLessThanOrEqual(18)
     }
   })
-  it('UEFA(4팀 조 홈&어웨이)는 6라운드 (A5)', () => {
-    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(6)
+  it('UEFA(54개국 12개 조, 4~5팀 홈&어웨이)는 최대 10라운드 (A5)', () => {
+    // 54팀 / 12조 = 5팀 6조 + 4팀 6조. 5팀 조(홀수)는 바이 라운드 포함 더블 라운드로빈 = 10라운드.
+    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(10)
   })
   it('groups 구조가 노출된다(H1)', () => {
     const all = simulateAllQualification('MD')

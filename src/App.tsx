@@ -20,8 +20,10 @@ const ProbabilityDashboard = lazy(() =>
 )
 const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
 const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
+const MyTeamTab = lazy(() => import('./components/team/MyTeamTab').then((m) => ({ default: m.MyTeamTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
+import { useQualificationStore } from './store/useQualificationStore'
 import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
@@ -30,10 +32,11 @@ import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
 
-type TabId = 'qualifiers' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
+type TabId = 'qualifiers' | 'myteam' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'qualifiers', label: '지역예선' },
+  { id: 'myteam', label: '내 팀' },
   { id: 'ranking', label: 'FIFA 랭킹' },
   { id: 'draw', label: '조추첨' },
   { id: 'schedule', label: '일정 진행' },
@@ -42,15 +45,24 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'probability', label: '확률 대시보드' },
 ]
 
-/** 조추첨 완료와 무관하게 언제나 접근 가능한 탭. */
-const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'ranking', 'draw']
+/** 조추첨 진행 여부와 무관하게 언제나 접근 가능한 탭. 조추첨은 예선을 거쳐야 열린다. */
+const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'myteam', 'ranking']
 
 function App() {
-  // 저장된 대회가 완료된 조추첨을 갖고 있으면(이어하기) 일정 탭에서 시작한다 (A3).
-  const [tab, setTab] = useState<TabId>(() => (useDrawStore.getState().isComplete ? 'schedule' : 'draw'))
+  // 시작은 지역예선부터. 저장된 대회를 이어가는 경우에만 조추첨/일정으로 진입한다.
+  const [tab, setTab] = useState<TabId>(() => {
+    const draw = useDrawStore.getState()
+    if (draw.isComplete) return 'schedule'
+    if (draw.fieldTeams) return 'draw' // 예선을 거쳐 조추첨 준비된 상태
+    return 'qualifiers'
+  })
   // 새로고침/재방문으로 저장된 대회를 이어가는 경우에만 안내 배너를 띄운다.
   const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
   const isDrawComplete = useDrawStore((s) => s.isComplete)
+  // 조추첨 진입 조건: 예선에서 본선 48개국 필드가 준비됐거나 이미 조추첨이 끝났을 때만.
+  const hasDrawField = useDrawStore((s) => s.fieldTeams !== null || s.isComplete)
+  // 확률 대시보드는 예선 진행 중에도(본선 진출 확률) 접근 가능하게 한다.
+  const hasQualResult = useQualificationStore((s) => s.result !== null)
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const reduceMotion = useA11yStore((s) => s.reduceMotion)
   const selectedTeamId = useSelectionStore((s) => s.selectedTeamId)
@@ -60,6 +72,14 @@ function App() {
   useEffect(() => {
     if (isDrawComplete) initSchedule()
   }, [isDrawComplete, initSchedule])
+
+  // 탭 접근 규칙: 예선·랭킹은 항상, 조추첨은 예선 필드가 준비돼야, 나머지는 조추첨 완료 후.
+  const tabDisabled = (id: TabId): boolean => {
+    if (ALWAYS_ENABLED.includes(id)) return false
+    if (id === 'draw') return !hasDrawField
+    if (id === 'probability') return !hasQualResult && !isDrawComplete
+    return !isDrawComplete
+  }
 
   // 키보드 단축키: 숫자 1~5로 탭 전환 (v2 #37). 입력 요소에 포커스가 있으면 무시한다.
   useEffect(() => {
@@ -71,7 +91,7 @@ function App() {
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < TABS.length) {
         const t = TABS[idx]
-        if (ALWAYS_ENABLED.includes(t.id) || isDrawComplete) {
+        if (!tabDisabled(t.id)) {
           clearTeam()
           setTab(t.id)
         }
@@ -79,7 +99,8 @@ function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [isDrawComplete, clearTeam])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDrawComplete, hasDrawField, hasQualResult, clearTeam])
 
   const isComputing = useSimulationStore((s) => s.isComputing)
 
@@ -133,7 +154,7 @@ function App() {
           <button
             onClick={() => {
               resetTournament()
-              setTab('draw')
+              setTab('qualifiers')
               setShowResume(false)
             }}
             className="rounded-lg bg-emerald-500/25 px-3 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-500/40"
@@ -151,7 +172,7 @@ function App() {
       )}
       <div className="sticky top-2 z-10 mb-6">
         <TabNav
-          tabs={TABS.map((t) => ({ ...t, disabled: !ALWAYS_ENABLED.includes(t.id) && !isDrawComplete }))}
+          tabs={TABS.map((t) => ({ ...t, disabled: tabDisabled(t.id) }))}
           active={tab}
           onChange={(id) => {
             clearTeam()
@@ -167,6 +188,7 @@ function App() {
         ) : (
           <>
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
+            {tab === 'myteam' && <MyTeamTab />}
             {tab === 'ranking' && <FifaRankingTab />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
             {tab === 'schedule' && (

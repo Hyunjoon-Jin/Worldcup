@@ -19,6 +19,8 @@ export interface Team {
   confederation: Confederation
   pot: Pot
   fifaRankApprox: number
+  /** 실측 FIFA 랭킹 포인트(선택, A2). 있으면 랭킹 엔진 시작 점수로 우선 사용하고, 없으면 순위 근사 곡선을 쓴다. */
+  fifaPointsApprox?: number
   isHost: boolean
   baseRatings: TeamRatings
 }

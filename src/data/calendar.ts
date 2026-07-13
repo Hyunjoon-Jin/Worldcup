@@ -15,12 +15,17 @@ export const ROUND_DATE_WINDOWS: Record<KnockoutRound, { start: string; end: str
   FINAL: { start: '2026-07-19', end: '2026-07-19', label: '결승' },
 }
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
-
+/**
+ * 조별리그 진행일(1~GROUP_STAGE_DAYS)을 실제 조별리그 기간[START, END]에 고르게 매핑한다.
+ * day 1 → START, 마지막 day → END. 12개 진행일을 6/11~6/27 창에 분산하므로 중간중간 휴식일이
+ * 생기고, 선언된 종료일(GROUP_STAGE_END)과 마지막 진행일 날짜가 일치한다.
+ */
 export function dateForGroupStageDay(day: number): string {
-  const start = new Date(GROUP_STAGE_START + 'T00:00:00Z')
-  const d = new Date(start.getTime() + (day - 1) * MS_PER_DAY)
-  return d.toISOString().slice(0, 10)
+  const startMs = new Date(GROUP_STAGE_START + 'T00:00:00Z').getTime()
+  const endMs = new Date(GROUP_STAGE_END + 'T00:00:00Z').getTime()
+  const frac = GROUP_STAGE_DAYS <= 1 ? 0 : (Math.min(Math.max(day, 1), GROUP_STAGE_DAYS) - 1) / (GROUP_STAGE_DAYS - 1)
+  const ms = startMs + Math.round(frac * (endMs - startMs))
+  return new Date(ms).toISOString().slice(0, 10)
 }
 
 export function formatKoreanDate(isoDate: string): string {

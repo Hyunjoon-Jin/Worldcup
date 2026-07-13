@@ -14,9 +14,11 @@ export interface GroupsFormat {
   doubleRound: boolean
 }
 
-/** AFC 다단계(A3): 3차 조 수 → 4차 조 수 → 5차 단판 PO. */
+/** AFC 다단계(A3): 1·2차 예비예선 → 3차 조 → 4차 조 → 5차 단판 PO. */
 export interface AfcFormat {
   kind: 'afc'
+  /** 2차 예비예선 조 수(각 조 1·2위가 3차행). 3차 진입 팀 수 = round2Groups × 2. */
+  round2Groups: number
   /** 3차 조 수(각 조 1·2위 직행, 3·4위 4차행) */
   round3Groups: number
   /** 4차 조 수(각 조 1위 직행, 2위 5차행) */
@@ -24,13 +26,11 @@ export interface AfcFormat {
   doubleRound: boolean
 }
 
-/** CONCACAF 다라운드(A4): 1차 예선 라운드 → 최종 조. */
+/** CONCACAF 다라운드(A4): 1차(하위 녹아웃) → 2차 조 → 최종 조. */
 export interface ConcacafFormat {
   kind: 'concacaf'
-  /** 최종 라운드 총 팀 수(3개 조 × 3팀 = 9 등) */
-  finalSize: number
-  /** 1차 예선 라운드에서 최종 라운드로 올라가는 팀 수 */
-  prelimSurvivors: number
+  /** 2차 예선 조 수(각 4팀, 1·2위 최종행). 최종 라운드 진입 팀 수 = round2Groups × 2. */
+  round2Groups: number
   /** 최종 라운드 조 수(각 조 1위 직행, 최고 2위들 PO) */
   finalGroups: number
 }
@@ -43,9 +43,10 @@ export const QUAL_FORMAT: Record<Confederation, QualFormat> = {
   CAF: { kind: 'groups', numGroups: 9, doubleRound: true },
   CONMEBOL: { kind: 'groups', numGroups: 1, doubleRound: true },
   OFC: { kind: 'groups', numGroups: 1, doubleRound: true },
-  // 다단계 대륙(A3·A4)
-  AFC: { kind: 'afc', round3Groups: 3, round4Groups: 2, doubleRound: true },
-  CONCACAF: { kind: 'concacaf', finalSize: 9, prelimSurvivors: 2, finalGroups: 3 },
+  // 다단계 대륙(A3·A4). AFC: 1차(하위 단판 녹아웃) → 2차(9개 조×4팀) → 3차(3개 조×6팀) → 4차 → 5차.
+  AFC: { kind: 'afc', round2Groups: 9, round3Groups: 3, round4Groups: 2, doubleRound: true },
+  // CONCACAF: 1차(하위 단판 녹아웃) → 2차 6개 조(4팀) → 최종 3개 조(4팀=12팀).
+  CONCACAF: { kind: 'concacaf', round2Groups: 6, finalGroups: 3 },
 }
 
 /** 조 표시용 알파벳(A~L). 다단계 스테이지 라벨 생성에 쓴다. */
