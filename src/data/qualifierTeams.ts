@@ -120,6 +120,41 @@ const RAW_QUALIFIERS: RawQualifier[] = [
   { id: 'IND', nameKo: '인도', nameEn: 'India', code: 'IND', iso2: 'IN', confederation: 'AFC', rank: 80 },
   { id: 'VIE', nameKo: '베트남', nameEn: 'Vietnam', code: 'VIE', iso2: 'VN', confederation: 'AFC', rank: 63, styleBias: 1 },
   { id: 'LBN', nameKo: '레바논', nameEn: 'Lebanon', code: 'LBN', iso2: 'LB', confederation: 'AFC', rank: 82 },
+
+  // --- UEFA 추가(실제 55개 회원국 채우기, 러시아 제외) ---
+  { id: 'IRL', nameKo: '아일랜드', nameEn: 'Republic of Ireland', code: 'IRL', iso2: 'IE', confederation: 'UEFA', rank: 60 },
+  { id: 'MNE', nameKo: '몬테네그로', nameEn: 'Montenegro', code: 'MNE', iso2: 'ME', confederation: 'UEFA', rank: 68 },
+  { id: 'ISR', nameKo: '이스라엘', nameEn: 'Israel', code: 'ISR', iso2: 'IL', confederation: 'UEFA', rank: 75 },
+  { id: 'NIR', nameKo: '북아일랜드', nameEn: 'Northern Ireland', code: 'NIR', iso2: 'GB_NIR', confederation: 'UEFA', rank: 78 },
+  { id: 'FRO', nameKo: '페로제도', nameEn: 'Faroe Islands', code: 'FRO', iso2: 'FO', confederation: 'UEFA', rank: 136 },
+  { id: 'LIE', nameKo: '리히텐슈타인', nameEn: 'Liechtenstein', code: 'LIE', iso2: 'LI', confederation: 'UEFA', rank: 200 },
+
+  // --- CAF 추가(실제 54개 회원국 채우기) ---
+  { id: 'MTN', nameKo: '모리타니', nameEn: 'Mauritania', code: 'MTN', iso2: 'MR', confederation: 'CAF', rank: 105 },
+  { id: 'NIG', nameKo: '니제르', nameEn: 'Niger', code: 'NIG', iso2: 'NE', confederation: 'CAF', rank: 112 },
+  { id: 'ZIM', nameKo: '짐바브웨', nameEn: 'Zimbabwe', code: 'ZIM', iso2: 'ZW', confederation: 'CAF', rank: 121 },
+  { id: 'GAM', nameKo: '감비아', nameEn: 'Gambia', code: 'GAM', iso2: 'GM', confederation: 'CAF', rank: 125 },
+  { id: 'RWA', nameKo: '르완다', nameEn: 'Rwanda', code: 'RWA', iso2: 'RW', confederation: 'CAF', rank: 133 },
+  { id: 'BDI', nameKo: '부룬디', nameEn: 'Burundi', code: 'BDI', iso2: 'BI', confederation: 'CAF', rank: 140 },
+  { id: 'LBR', nameKo: '라이베리아', nameEn: 'Liberia', code: 'LBR', iso2: 'LR', confederation: 'CAF', rank: 145 },
+  { id: 'BOT', nameKo: '보츠와나', nameEn: 'Botswana', code: 'BOT', iso2: 'BW', confederation: 'CAF', rank: 150 },
+  { id: 'LES', nameKo: '레소토', nameEn: 'Lesotho', code: 'LES', iso2: 'LS', confederation: 'CAF', rank: 152 },
+  { id: 'SWZ', nameKo: '에스와티니', nameEn: 'Eswatini', code: 'SWZ', iso2: 'SZ', confederation: 'CAF', rank: 155 },
+  { id: 'SSD', nameKo: '남수단', nameEn: 'South Sudan', code: 'SSD', iso2: 'SS', confederation: 'CAF', rank: 168 },
+  { id: 'MRI', nameKo: '모리셔스', nameEn: 'Mauritius', code: 'MRI', iso2: 'MU', confederation: 'CAF', rank: 175 },
+  { id: 'CHA', nameKo: '차드', nameEn: 'Chad', code: 'CHA', iso2: 'TD', confederation: 'CAF', rank: 185 },
+  { id: 'STP', nameKo: '상투메프린시페', nameEn: 'Sao Tome and Principe', code: 'STP', iso2: 'ST', confederation: 'CAF', rank: 188 },
+  { id: 'DJI', nameKo: '지부티', nameEn: 'Djibouti', code: 'DJI', iso2: 'DJ', confederation: 'CAF', rank: 192 },
+  { id: 'SOM', nameKo: '소말리아', nameEn: 'Somalia', code: 'SOM', iso2: 'SO', confederation: 'CAF', rank: 196 },
+  { id: 'SEY', nameKo: '세이셸', nameEn: 'Seychelles', code: 'SEY', iso2: 'SC', confederation: 'CAF', rank: 199 },
+  { id: 'ERI', nameKo: '에리트레아', nameEn: 'Eritrea', code: 'ERI', iso2: 'ER', confederation: 'CAF', rank: 204 },
+
+  // --- OFC 추가(오세아니아 회원국 채우기) ---
+  { id: 'PNG', nameKo: '파푸아뉴기니', nameEn: 'Papua New Guinea', code: 'PNG', iso2: 'PG', confederation: 'OFC', rank: 165 },
+  { id: 'SAM', nameKo: '사모아', nameEn: 'Samoa', code: 'SAM', iso2: 'WS', confederation: 'OFC', rank: 185 },
+  { id: 'TGA', nameKo: '통가', nameEn: 'Tonga', code: 'TGA', iso2: 'TO', confederation: 'OFC', rank: 190 },
+  { id: 'COK', nameKo: '쿡제도', nameEn: 'Cook Islands', code: 'COK', iso2: 'CK', confederation: 'OFC', rank: 200 },
+  { id: 'ASA', nameKo: '아메리칸사모아', nameEn: 'American Samoa', code: 'ASA', iso2: 'AS', confederation: 'OFC', rank: 205 },
 ]
 
 export const QUALIFIER_TEAMS: Team[] = RAW_QUALIFIERS.map((raw) => ({
