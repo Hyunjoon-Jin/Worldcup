@@ -343,7 +343,7 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 
 /** 일별 진행 (B2). 경기 일정(캘린더)을 날짜별로 넘기며 그날의 경기·결과를 보고,
  *  모든 대륙 순위표를 해당 날짜 기준으로 동기화한다. */
-function QualDailyProgress({ result, onSelectMatch }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void }) {
+function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void; confed: Confederation }) {
   const calendar = useMemo(() => buildQualCalendar(result), [result])
   // 대륙별 스테이지 구간을 미리 계산해, 그날 각 대륙이 어느 스테이지·라운드인지 표기한다(일정↔룰 연결).
   const stagesByConfed = useMemo(() => {
@@ -385,14 +385,18 @@ function QualDailyProgress({ result, onSelectMatch }: { result: AllQualification
     if (arr) arr.push(cm)
     else byConfed.set(cm.confederation, [cm])
   }
-  const confedOrder = CONFEDS.filter((c) => byConfed.has(c))
+  // 현재 선택된 대륙 탭의 경기만 선별해 보여준다.
+  const confedOrder = byConfed.has(confed) ? [confed] : []
+  const shownCount = byConfed.get(confed)?.length ?? 0
   const atEnd = dayIdx >= calendar.length - 1
   const atStart = dayIdx <= 0
 
   return (
     <GlassCard className="p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-emerald-300">📅 일별 진행</h3>
+        <h3 className="text-sm font-bold text-emerald-300">
+          📅 일별 진행 <span className="text-gray-400">· {CONFEDERATION_LABEL_KO[confed]}</span>
+        </h3>
         <span className="text-xs text-gray-400">
           경기일 <span className="font-bold text-emerald-300">{dayIdx + 1}</span> / {calendar.length}
         </span>
@@ -406,8 +410,16 @@ function QualDailyProgress({ result, onSelectMatch }: { result: AllQualification
           <button onClick={() => goTo(calendar.length - 1)} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
         </div>
       </div>
-      <p className="mb-2 text-[11px] text-gray-500">{confedOrder.length}개 대륙 · {day.matches.length}경기</p>
+      <p className="mb-2 text-[11px] text-gray-500">
+        {CONFEDERATION_LABEL_KO[confed]} · {shownCount}경기
+        <span className="ml-1 text-gray-600">(이 날 전체 {day.matches.length}경기 중)</span>
+      </p>
       <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+        {confedOrder.length === 0 && (
+          <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">
+            이 경기일에 {CONFEDERATION_LABEL_KO[confed]} 경기가 없습니다. <strong>다음 경기일 ▶</strong>로 넘겨보세요.
+          </p>
+        )}
         {confedOrder.map((c) => {
           const list = byConfed.get(c)!
           // 그날 이 대륙의 라운드·스테이지(모든 경기가 같은 라운드에 열림)를 표기해 일정을 룰과 연결한다.
@@ -956,7 +968,6 @@ function ConfederationStandings({
   myTeamId: string | null
 }) {
   const result = useQualificationStore((s) => s.result)
-  const probabilities = useQualificationStore((s) => s.probabilities)
   const stageProbs = useQualificationStore((s) => s.stageProbabilities)
   const revealedMap = useQualificationStore((s) => s.revealed)
   const setRevealed = useQualificationStore((s) => s.setRevealed)
@@ -1008,15 +1019,17 @@ function ConfederationStandings({
   // 아직 시작되지 않은 차수는 진출국이 스포일러가 되므로 조/순위를 감춘다.
   const selectedStageUpcoming = !!(useStageTabs && selectedStage && stageStatus(selectedStage, revealed) === 'upcoming')
 
-  // 단계별 진출 확률 — 선택 차수에서 '다음 차수'로 진출할 확률(마지막 차수면 없음). 실시간 조건부 값.
+  // 단계별 진출 확률 체인 — 선택 차수 이후 '남은 모든 차수 + 본선진출' 도달 확률을 실시간 조건부로 보여준다.
+  const QUALIFY_KEY = '본선진출'
   const stageOrder = stageProbs?.stageOrderByConfed[confed] ?? stages.map((s) => s.name)
   const selStageIdx = selectedStage ? stageOrder.indexOf(selectedStage.name) : -1
-  const nextStageName = selStageIdx >= 0 && selStageIdx < stageOrder.length - 1 ? stageOrder[selStageIdx + 1] : null
-  const showAdvanceCol = !!stageProbs && !!nextStageName && !selectedStageUpcoming
-  const advancePctFor = (teamId: string): number | null => {
-    if (!stageProbs || !nextStageName) return null
-    return stageProbs.byTeam[teamId]?.[nextStageName] ?? 0
-  }
+  // 남은 차수(현재 차수 다음부터) + 마지막에 본선진출. 단일리그(CONMEBOL 등)는 본선진출만.
+  const remainingStages = selStageIdx >= 0 ? stageOrder.slice(selStageIdx + 1) : []
+  const chainKeys: string[] = !!stageProbs && !selectedStageUpcoming ? [...remainingStages, QUALIFY_KEY] : []
+  const stagePctFor = (teamId: string, key: string): number => stageProbs?.byTeam[teamId]?.[key] ?? 0
+  // 컬럼 헤더용 짧은 라벨("3차 예선"→"3차", "본선진출"→"본선", "플레이오프"→"PO" 등).
+  const shortStageLabel = (name: string): string =>
+    name === QUALIFY_KEY ? '본선' : name.replace(/\s?예선$/, '').replace('플레이오프', 'PO').replace('최종 라운드', '최종')
 
   // FIFA 랭킹 시드 자동진출 판정: 이 차수보다 앞선 차수에 편성된 적 없는데 이 차수에 있으면
   // 하위 라운드를 건너뛰고 랭킹 시드로 자동진출한 국가다(예: AFC 상위국이 1차 없이 2차부터 참가).
@@ -1171,10 +1184,11 @@ function ConfederationStandings({
                     <th scope="col" className="w-10 py-1 text-center">경기</th>
                     <th scope="col" className="w-10 py-1 text-center">승점</th>
                     <th scope="col" className="w-12 py-1 text-center">득실</th>
-                    {showAdvanceCol && (
-                      <th scope="col" className="w-16 py-1 text-right" title={`${nextStageName} 진출 확률`}>{nextStageName} ↑</th>
-                    )}
-                    {probabilities && <th scope="col" className="w-14 py-1 text-right">본선</th>}
+                    {chainKeys.map((k) => (
+                      <th key={k} scope="col" className="w-12 py-1 text-right" title={`${k === QUALIFY_KEY ? '본선' : k} 진출 확률`}>
+                        {shortStageLabel(k)}
+                      </th>
+                    ))}
                     <th scope="col" className="py-1 text-right">결과</th>
                   </tr>
                 </thead>
@@ -1195,12 +1209,11 @@ function ConfederationStandings({
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                      {showAdvanceCol && (
-                        <td className="py-1.5 text-right text-amber-300 tabular-nums">{(advancePctFor(teamId) ?? 0).toFixed(0)}%</td>
-                      )}
-                      {probabilities && (
-                        <td className="py-1.5 text-right text-sky-300 tabular-nums">{(probabilities[teamId] ?? 0).toFixed(0)}%</td>
-                      )}
+                      {chainKeys.map((k) => (
+                        <td key={k} className={`py-1.5 text-right tabular-nums ${k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}`}>
+                          {stagePctFor(teamId, k).toFixed(0)}%
+                        </td>
+                      ))}
                       <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} /></td>
                     </tr>
                   ))}
@@ -1227,11 +1240,16 @@ function ConfederationStandings({
                       <span>{s.played}경기</span>
                       <span className="font-bold text-white">{s.points}점</span>
                       <span>{gd > 0 ? `+${gd}` : gd}</span>
-                      {showAdvanceCol && (
-                        <span className="text-amber-300" title={`${nextStageName} 진출`}>{nextStageName} {(advancePctFor(teamId) ?? 0).toFixed(0)}%</span>
-                      )}
-                      {probabilities && <span className="text-sky-300" title="본선 진출">본선 {(probabilities[teamId] ?? 0).toFixed(0)}%</span>}
                     </div>
+                    {chainKeys.length > 0 && (
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
+                        {chainKeys.map((k) => (
+                          <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
+                            {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} />
                 </li>
@@ -1467,7 +1485,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </p>
           )}
 
-          <QualDailyProgress result={result} onSelectMatch={setSelMatch} />
+          <QualDailyProgress result={result} onSelectMatch={setSelMatch} confed={confed} />
 
           <QualLiveRanking result={result} myTeamId={myTeamId} />
 
