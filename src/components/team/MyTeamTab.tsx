@@ -7,7 +7,7 @@ import { FlagIcon } from '../common/FlagIcon'
 import { ProbBar } from '../probability/ProbBar'
 import { STAGES, QUALIFY_STAGE } from '../probability/probabilityStages'
 import { useProbabilityChain } from '../probability/useProbabilityChain'
-import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { useMyTeamStore, MY_TEAM_BUFF_LEVELS, MY_TEAM_BUFF_LABEL } from '../../store/useMyTeamStore'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
@@ -95,6 +95,8 @@ export function MyTeamTab() {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const setMyTeam = useMyTeamStore((s) => s.setMyTeam)
   const clearMyTeam = useMyTeamStore((s) => s.clearMyTeam)
+  const buff = useMyTeamStore((s) => s.buff)
+  const setBuff = useMyTeamStore((s) => s.setBuff)
   const selectTeam = useSelectionStore((s) => s.selectTeam)
   const result = useQualificationStore((s) => s.result)
   const revealed = useQualificationStore((s) => s.revealed)
@@ -103,7 +105,9 @@ export function MyTeamTab() {
   const { rows, mode } = useProbabilityChain()
 
   const team = myTeamId ? ALL_NATIONS_BY_ID[myTeamId] : null
-  const ratings = useMemo(() => (myTeamId ? getRatings(myTeamId) : null), [myTeamId])
+  // buff 변경 시 표시 능력치도 갱신되도록 의존성에 buff 포함(getRatings가 store에서 버프를 읽음).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ratings = useMemo(() => (myTeamId ? getRatings(myTeamId) : null), [myTeamId, buff])
 
   // 예선 경기(내 팀, 공개된 라운드까지)
   const qualMatches = useMemo(() => {
@@ -170,6 +174,33 @@ export function MyTeamTab() {
             ))}
           </div>
         )}
+
+        {/* 내 팀 버프 — 응원 팀에 능력치 가점을 줘 유리하게 진행 */}
+        <div className="mt-4 rounded-lg bg-amber-400/[0.07] p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-amber-300">⚡ 내 팀 버프</span>
+            <span className="text-[10px] text-gray-500">공격·수비·종합에 가점(예선·본선·확률 전체 반영)</span>
+          </div>
+          <div className="flex rounded-lg bg-white/5 p-0.5" role="group" aria-label="내 팀 버프 단계">
+            {MY_TEAM_BUFF_LEVELS.map((lv) => (
+              <button
+                key={lv}
+                onClick={() => setBuff(lv)}
+                aria-pressed={buff === lv}
+                className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  buff === lv ? 'bg-amber-500/30 text-amber-100' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {MY_TEAM_BUFF_LABEL[lv]}
+              </button>
+            ))}
+          </div>
+          {buff > 0 && (
+            <p className="mt-1.5 text-[10px] text-amber-300/80">
+              현재 <strong>+{buff}</strong> 적용 중. 예선/확률에 반영하려면 재시뮬레이션·확률 재계산이 필요합니다.
+            </p>
+          )}
+        </div>
       </GlassCard>
 
       {/* 실시간 진출/우승 확률 */}

@@ -151,5 +151,6 @@ export function clearAllHistory(): void {
   useSandboxStore.getState().resetAll()
   usePerformanceStore.getState().reset()
   useCareerStore.getState().reset()
+  useHistoryStore.getState().reset() // 커리어 역대 기록(팀별 통산 성적)도 함께 삭제
   useConditionStore.getState().reroll()
 }
