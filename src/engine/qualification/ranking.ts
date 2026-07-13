@@ -91,9 +91,20 @@ export function expectedResult(teamPoints: number, oppPoints: number): number {
   return 1 / (Math.pow(10, -(teamPoints - oppPoints) / FIFA_DIVISOR) + 1)
 }
 
+/** 표시용 점수(A8): 내부 계산은 소수로 유지하고, 화면에는 이 함수로 정수 반올림해 일관 표기한다. */
+export function displayPoints(points: number): number {
+  return Math.round(points)
+}
+
 /**
  * 한 경기 결과로 두 팀의 FIFA 랭킹 점수를 제자리 갱신한다(실제 SUM 공식).
  * 정규 결과는 제로섬(W+W'=1), 승부차기는 W 0.75/0.5라 양팀 모두 상승할 수 있다.
+ *
+ * 규정 정밀화(Phase 2):
+ * - A3 무감점 특례: FIFA는 본선에서도 공식을 그대로 적용한다. 승리(W=1)면 dr에 무관하게
+ *   ΔP = I·(1−Wₑ) > 0 이므로 "이겨서 점수가 깎이는" 일은 구조적으로 없다(별도 캡 불필요).
+ * - A4 승부차기/연장: 골 차가 나면(연장 승리 포함) 정규 승/패(W 1/0), 무승부 후 승부차기면
+ *   wentToPenalties로 W 0.75/0.5. 본 시뮬은 무승부→승부차기로 모델링하므로 이 처리가 정확하다.
  */
 export function applyMatchElo(
   points: Record<string, number>,

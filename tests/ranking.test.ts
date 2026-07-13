@@ -13,7 +13,12 @@ import {
   staticStartPoints,
   initRankingPoints,
   resolveBasePoints,
+  displayPoints,
+  editionEndRankingPoints,
+  computeLiveRanking,
 } from '../src/engine/qualification/ranking'
+import { simulateAllQualification } from '../src/engine/qualification'
+import { flattenPlayed, collectPlayedByConfed } from '../src/engine/qualification/conditional'
 
 describe('FIFA 랭킹 — 중요도 계수(A1·A5)', () => {
   it('중요도 표가 실제 FIFA 규정값을 담는다', () => {
@@ -104,5 +109,59 @@ describe('FIFA 랭킹 — 시작 점수(A2·B12)', () => {
     const p = resolveBasePoints(['BRA', 'ARG'], carried)
     expect(p['BRA']).toBe(1999) // 이월 우선
     expect(p['ARG']).toBe(staticStartPoints('ARG')) // 없으면 정적
+  })
+})
+
+describe('FIFA 랭킹 — 규정 정밀화(Phase 2)', () => {
+  it('A3 무감점 특례: 강팀이 약팀을 이겨도 점수는 오른다(내려가지 않음)', () => {
+    const p = { STRONG: 1900, WEAK: 820 }
+    applyMatchElo(p, { homeTeamId: 'STRONG', awayTeamId: 'WEAK', homeGoals: 3, awayGoals: 0 })
+    expect(p.STRONG).toBeGreaterThan(1900) // 승리 시 항상 +
+    expect(p.WEAK).toBeLessThan(820)
+  })
+
+  it('A3: 강팀이 약팀과 비기면 점수가 내려간다(승리 아님 — 정상 규정)', () => {
+    const p = { STRONG: 1900, WEAK: 1300 }
+    applyMatchElo(p, { homeTeamId: 'STRONG', awayTeamId: 'WEAK', homeGoals: 1, awayGoals: 1 })
+    expect(p.STRONG).toBeLessThan(1900)
+  })
+
+  it('A4: 승부차기 승리는 정규 승리보다 적게 오르고, 패자는 감점되지 않는다', () => {
+    const reg = { A: 1500, B: 1500 }
+    applyMatchElo(reg, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 2, awayGoals: 0 })
+    const pk = { A: 1500, B: 1500 }
+    applyMatchElo(pk, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 1, awayGoals: 1, wentToPenalties: true, winnerTeamId: 'A' })
+    expect(pk.A - 1500).toBeGreaterThan(0)
+    expect(pk.A - 1500).toBeLessThan(reg.A - 1500) // 승부차기 승(0.75) < 정규 승(1)
+    expect(pk.B).toBeCloseTo(1500, 6) // 승부차기 패(0.5) — 동점 상대라 변화 0
+  })
+
+  it('A8·F30: 동점 팀끼리 예선 승리 = 정확히 ±12.5점(I=25, W−Wₑ=0.5)', () => {
+    const p = { A: 1500, B: 1500 }
+    applyMatchElo(p, { homeTeamId: 'A', awayTeamId: 'B', homeGoals: 1, awayGoals: 0 })
+    expect(p.A).toBeCloseTo(1512.5, 6)
+    expect(p.B).toBeCloseTo(1487.5, 6)
+    expect(displayPoints(p.A)).toBe(1513) // 표시용 정수 반올림
+  })
+
+  it('F30: 본선 8강(I=60), 1600이 1400을 이기면 ΔP = 60·(1−Wₑ)', () => {
+    const p = { C: 1600, D: 1400 }
+    const we = expectedResult(1600, 1400)
+    applyMatchElo(p, { homeTeamId: 'C', awayTeamId: 'D', homeGoals: 1, awayGoals: 0 }, IMPORTANCE_WC_KO)
+    expect(p.C).toBeCloseTo(1600 + 60 * (1 - we), 6)
+    expect(p.D).toBeCloseTo(1400 - 60 * (1 - we), 6)
+  })
+
+  it('C18: 에디션 종료 점수(editionEndRankingPoints)는 전체 공개 라이브 랭킹과 일치한다', () => {
+    const all = simulateAllQualification('P2-C18')
+    const revealed = Object.fromEntries(
+      Object.keys(all.byConfederation).map((c) => [c, all.byConfederation[c].matchdays]),
+    )
+    const endPts = editionEndRankingPoints(all, { groupMatches: [], knockoutMatches: [] })
+    const live = computeLiveRanking(all, flattenPlayed(collectPlayedByConfed(all, revealed)))
+    // 표본 팀의 라이브 점수(반올림)와 에디션 종료 점수(반올림)가 같아야 한다.
+    for (const row of live.slice(0, 5)) {
+      expect(displayPoints(endPts[row.teamId])).toBe(row.points)
+    }
   })
 })

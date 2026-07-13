@@ -128,12 +128,20 @@ export function FifaRankingTab() {
   return (
     <div className="flex flex-col gap-4">
       <GlassCard strong className="p-5 text-center">
-        <p className="mb-1 text-sm font-semibold text-white">🌐 FIFA 세계 랭킹</p>
+        <p className="mb-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-white">
+          🌐 FIFA 세계 랭킹
+          {result && (
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">잠정(실시간)</span>
+          )}
+        </p>
         <p className="text-xs text-gray-400">
           실제 FIFA 점수 산정 방식(P = P + I×(승점−기대승점))으로 경기 결과를 실시간 반영합니다. 중요도 I는
           예선 25 · 본선 조별리그·16강 50 · 8강 이후 60.
           {!result && <span className="text-amber-300"> 지역예선을 진행하면 경기 결과가 랭킹에 누적 반영됩니다.</span>}
           {hasFinals && <span className="text-amber-300"> 본선 진행 결과가 랭킹에 반영되고 있습니다.</span>}
+          <span className="mt-1 block text-[11px] text-gray-500">
+            실제 FIFA는 월 1회 공식 발표합니다. 여기 표시는 경기 즉시 반영되는 <strong>잠정 순위</strong>입니다.
+          </span>
         </p>
       </GlassCard>
 
