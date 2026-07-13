@@ -34,10 +34,13 @@ export function simulateInterConfedPlayoff(
     return r.winnerTeamId
   }
 
-  // 6팀 미만이면(엣지) 랭킹 상위부터 채워 2장 배정
-  const seeded = [...participants].sort(
-    (a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox,
-  )
+  // 시드: 현재 전력(ratings.overall — 예선 실황이 반영된 라이브 전력)이 높은 순. 동률이면 정적 랭킹→팀ID(E28·결정성).
+  const seeded = [...participants].sort((a, b) => {
+    const rd = (ratings[b]?.overall ?? 0) - (ratings[a]?.overall ?? 0)
+    if (rd !== 0) return rd
+    const sr = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+    return sr !== 0 ? sr : a.localeCompare(b)
+  })
   if (seeded.length < 4) {
     return { participants, winners: seeded.slice(0, 2), matches }
   }

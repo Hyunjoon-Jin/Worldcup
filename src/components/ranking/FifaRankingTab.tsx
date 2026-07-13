@@ -149,6 +149,20 @@ export function FifaRankingTab() {
     return computeRankingTrend(result, calendar.slice(0, dayCount), ids, carried)
   }, [result, calendar, dayCount, ranking, myTeamId, carried])
 
+  // 대륙별 1위 팀 집합(D22 배지용). ranking은 전역 순위순이라 각 대륙 첫 등장 팀이 대륙 1위.
+  const confedLeaders = useMemo(() => {
+    const seen = new Set<string>()
+    const leaders = new Set<string>()
+    for (const r of ranking) {
+      const c = ALL_NATIONS_BY_ID[r.teamId]?.confederation
+      if (c && !seen.has(c)) {
+        seen.add(c)
+        leaders.add(r.teamId)
+      }
+    }
+    return leaders
+  }, [ranking])
+
   // 대륙 필터 + 대륙 내 순위(D19). ranking은 전역 순위순이라 필터 후 인덱스가 곧 대륙 내 순위.
   const confedRanked = useMemo(() => {
     const base = confed === 'ALL' ? ranking : ranking.filter((r) => ALL_NATIONS_BY_ID[r.teamId]?.confederation === confed)
@@ -270,7 +284,11 @@ export function FifaRankingTab() {
                     </td>
                     <th scope="row" className="py-1.5 font-normal">
                       <span className="inline-flex items-center gap-1.5">
+                        {row.rank === 1 && <span title="세계 1위">🥇</span>}
                         <TeamLink teamId={row.teamId} />
+                        {confed === 'ALL' && row.rank !== 1 && confedLeaders.has(row.teamId) && (
+                          <span className="rounded bg-amber-500/20 px-1 text-[9px] font-bold text-amber-300">대륙 1위</span>
+                        )}
                         {row.teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
                       </span>
                     </th>

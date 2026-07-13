@@ -16,6 +16,10 @@ import type { TeamRatings } from '../../types/team'
  * - Wₑ: 기대 승점 = 1 / (10^(−dr/600) + 1),  dr = 팀 점수 − 상대 점수.
  * FIFA 실제 방식대로 골 득실차는 반영하지 않는다(승/무/패만). 승부차기 규칙까지 반영한다.
  * 시작 점수(basePointsFromRank)만 근사이고, 갱신 방식은 FIFA 공식 그대로다.
+ *
+ * A7(홈/중립 미적용): 실제 FIFA 랭킹은 홈/원정·중립지 여부를 점수 산정에 반영하지 않는다.
+ * 경기 시뮬레이션의 홈 이점(hostAdvantage)은 "경기 결과"에만 영향을 주며, 여기 랭킹 점수 갱신
+ * 공식에는 홈 보정이 전혀 들어가지 않는다(승/무/패와 점수차만 사용).
  */
 
 /**
@@ -156,6 +160,30 @@ export function resolveBasePoints(teamIds: string[], carried?: Record<string, nu
     p[id] = carried?.[id] ?? staticStartPoints(id)
   }
   return p
+}
+
+/**
+ * 비활동 감쇠(옵션, C17). 실제 FIFA엔 없는 규칙이라 기본 factor=0(무동작)이다. 장기 미경기 팀의
+ * 점수를 아주 천천히 시작 점수 쪽으로 되돌리고 싶을 때만 factor>0으로 켠다(playedCount=0 팀만 대상).
+ * 원본 불변 — 새 맵을 반환한다.
+ */
+export function applyInactivityDecay(
+  points: Record<string, number>,
+  playedCount: Record<string, number>,
+  factor = 0,
+): Record<string, number> {
+  if (factor <= 0) return { ...points }
+  const f = Math.min(1, factor)
+  const out: Record<string, number> = {}
+  for (const [id, p] of Object.entries(points)) {
+    if ((playedCount[id] ?? 0) > 0) {
+      out[id] = p
+    } else {
+      const base = staticStartPoints(id)
+      out[id] = p + (base - p) * f // 미경기 팀만 시작 점수 쪽으로 f만큼 회귀
+    }
+  }
+  return out
 }
 
 /** 초기 점수에서 경기들을 순서대로 적용한 새 점수 맵을 만든다(원본 불변). */

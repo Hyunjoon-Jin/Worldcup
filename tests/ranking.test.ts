@@ -16,6 +16,7 @@ import {
   displayPoints,
   editionEndRankingPoints,
   computeLiveRanking,
+  applyInactivityDecay,
 } from '../src/engine/qualification/ranking'
 import { simulateAllQualification } from '../src/engine/qualification'
 import { flattenPlayed, collectPlayedByConfed } from '../src/engine/qualification/conditional'
@@ -150,6 +151,21 @@ describe('FIFA 랭킹 — 규정 정밀화(Phase 2)', () => {
     applyMatchElo(p, { homeTeamId: 'C', awayTeamId: 'D', homeGoals: 1, awayGoals: 0 }, IMPORTANCE_WC_KO)
     expect(p.C).toBeCloseTo(1600 + 60 * (1 - we), 6)
     expect(p.D).toBeCloseTo(1400 - 60 * (1 - we), 6)
+  })
+
+  it('C17 비활동 감쇠: factor=0이면 무동작(실제 FIFA 기본)', () => {
+    const p = { A: 1700, B: 1200 }
+    const played = { A: 0, B: 5 }
+    expect(applyInactivityDecay(p, played, 0)).toEqual(p)
+  })
+
+  it('C17 비활동 감쇠: factor>0이면 미경기 팀만 시작 점수 쪽으로 회귀', () => {
+    // BRA를 인위적으로 시작 점수보다 높게 두고, 미경기(played=0)로 감쇠시킨다.
+    const start = staticStartPoints('BRA')
+    const p = { BRA: start + 200, ARG: start + 200 }
+    const decayed = applyInactivityDecay(p, { BRA: 0, ARG: 3 }, 0.5)
+    expect(decayed.BRA).toBeCloseTo(start + 100, 6) // 미경기 → 절반 회귀
+    expect(decayed.ARG).toBe(start + 200) // 경기함 → 불변
   })
 
   it('C18: 에디션 종료 점수(editionEndRankingPoints)는 전체 공개 라이브 랭킹과 일치한다', () => {
