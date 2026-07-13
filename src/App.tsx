@@ -22,6 +22,7 @@ const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then
 const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
+import { useQualificationStore } from './store/useQualificationStore'
 import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
@@ -58,6 +59,8 @@ function App() {
   const isDrawComplete = useDrawStore((s) => s.isComplete)
   // 조추첨 진입 조건: 예선에서 본선 48개국 필드가 준비됐거나 이미 조추첨이 끝났을 때만.
   const hasDrawField = useDrawStore((s) => s.fieldTeams !== null || s.isComplete)
+  // 확률 대시보드는 예선 진행 중에도(본선 진출 확률) 접근 가능하게 한다.
+  const hasQualResult = useQualificationStore((s) => s.result !== null)
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const reduceMotion = useA11yStore((s) => s.reduceMotion)
   const selectedTeamId = useSelectionStore((s) => s.selectedTeamId)
@@ -72,6 +75,7 @@ function App() {
   const tabDisabled = (id: TabId): boolean => {
     if (ALWAYS_ENABLED.includes(id)) return false
     if (id === 'draw') return !hasDrawField
+    if (id === 'probability') return !hasQualResult && !isDrawComplete
     return !isDrawComplete
   }
 
@@ -94,7 +98,7 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDrawComplete, hasDrawField, clearTeam])
+  }, [isDrawComplete, hasDrawField, hasQualResult, clearTeam])
 
   const isComputing = useSimulationStore((s) => s.isComputing)
 
