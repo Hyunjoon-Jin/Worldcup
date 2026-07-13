@@ -2,16 +2,21 @@ import type { AllQualificationResult } from './index'
 import type { QualMatch } from '../../types/qualification'
 
 /**
- * 예선 경기 일정(캘린더, B2). 대륙마다 라운드(matchday) 수가 다르므로, 공통 FIFA 매치 윈도우
- * 배열에 각 대륙의 라운드를 균등 매핑해 "경기일" 단위로 모은다. 그러면 한 경기일에 여러 대륙의
- * 경기가 함께 열려(실제 A매치 기간처럼) 날짜별로 진행·관전할 수 있다. 순수 함수(결정적).
+ * 예선 경기 일정(캘린더, B2). 대륙마다 라운드(matchday) 수가 다르므로, 각 대륙의 라운드(matchday)를
+ * 매치 윈도우에 1:1로 매핑한다(matchday k → 윈도우 k−1). 윈도우 수는 전체 대륙 최대 라운드 수만큼
+ * 동적으로 잡고, 실제 예선 기간(2025-03 ~ 2026-03)에 균등 분산해 날짜를 부여한다. 그러면 라운드가
+ * 뭉개지거나 건너뛰지 않고, 한 경기일에 여러 대륙 경기가 함께 열린다. 순수 함수(결정적).
  */
-const WINDOW_DATES = [
-  '2025-03-21', '2025-06-06', '2025-06-10', '2025-09-05',
-  '2025-09-09', '2025-10-10', '2025-10-14', '2025-11-14',
-  '2025-11-18', '2026-03-26', '2026-03-31', '2026-06-06',
-] as const
-const W = WINDOW_DATES.length
+const QUAL_WINDOW_START = '2025-03-21'
+const QUAL_WINDOW_END = '2026-03-31'
+
+/** 윈도우 인덱스 w(0..total-1)를 실제 예선 기간에 균등 매핑한 ISO 날짜로 변환한다. */
+function windowDate(w: number, total: number): string {
+  const s = new Date(QUAL_WINDOW_START + 'T00:00:00Z').getTime()
+  const e = new Date(QUAL_WINDOW_END + 'T00:00:00Z').getTime()
+  const frac = total <= 1 ? 0 : w / (total - 1)
+  return new Date(s + Math.round(frac * (e - s))).toISOString().slice(0, 10)
+}
 
 export interface CalendarMatch {
   confederation: string
@@ -31,12 +36,6 @@ export interface CalendarDay {
   revealedByConfed: Record<string, number>
 }
 
-/** 라운드 k(1..M)를 매치 윈도우 인덱스(0..W-1)로 매핑한다. k=1→첫 윈도우, k=M→마지막 윈도우. */
-function windowIndexFor(matchday: number, maxMatchday: number): number {
-  if (maxMatchday <= 1) return 0
-  return Math.round(((matchday - 1) * (W - 1)) / (maxMatchday - 1))
-}
-
 function koLabel(iso: string): string {
   const [y, m, d] = iso.split('-')
   return `${y}년 ${Number(m)}월 ${Number(d)}일`
@@ -47,12 +46,13 @@ export function buildQualCalendar(all: AllQualificationResult): CalendarDay[] {
   const confeds = Object.keys(all.byConfederation)
   const maxMd: Record<string, number> = {}
   for (const c of confeds) maxMd[c] = all.byConfederation[c].matchdays
+  // 윈도우 수 = 전체 대륙 최대 라운드 수(라운드 1:1 매핑이라 뭉개지지 않는다).
+  const totalWindows = Math.max(1, ...confeds.map((c) => maxMd[c]))
 
   const byWindow = new Map<number, CalendarMatch[]>()
   for (const c of confeds) {
-    const M = maxMd[c]
     for (const m of all.byConfederation[c].matches) {
-      const w = windowIndexFor(m.matchday, M)
+      const w = m.matchday - 1 // matchday k → 윈도우 k−1
       const arr = byWindow.get(w)
       if (arr) arr.push({ confederation: c, match: m })
       else byWindow.set(w, [{ confederation: c, match: m }])
@@ -62,17 +62,12 @@ export function buildQualCalendar(all: AllQualificationResult): CalendarDay[] {
   const windows = [...byWindow.keys()].sort((a, b) => a - b)
   return windows.map((w) => {
     const revealedByConfed: Record<string, number> = {}
-    for (const c of confeds) {
-      const M = maxMd[c]
-      let reveal = 0
-      for (let k = 1; k <= M; k++) {
-        if (windowIndexFor(k, M) <= w) reveal = k
-      }
-      revealedByConfed[c] = reveal
-    }
+    // 윈도우 w까지 각 대륙은 라운드 1..(w+1)을 소화(자기 총 라운드로 상한).
+    for (const c of confeds) revealedByConfed[c] = Math.min(w + 1, maxMd[c])
+    const date = windowDate(w, totalWindows)
     return {
-      date: WINDOW_DATES[w],
-      label: koLabel(WINDOW_DATES[w]),
+      date,
+      label: koLabel(date),
       windowIndex: w,
       matches: byWindow.get(w)!,
       revealedByConfed,

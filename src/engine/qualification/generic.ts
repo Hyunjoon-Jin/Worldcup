@@ -134,7 +134,8 @@ export function rankAcrossGroups(groupRankings: string[][], matches: QualMatch[]
     const gdb = sb.goalsFor - sb.goalsAgainst
     if (gdb !== gda) return gdb - gda
     if (sb.goalsFor !== sa.goalsFor) return sb.goalsFor - sa.goalsFor
-    return ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+    const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+    return rd !== 0 ? rd : a.localeCompare(b) // 랭킹 동률 시 팀ID로 결정성 확보
   }
   const maxLen = groupRankings.length ? Math.max(...groupRankings.map((r) => r.length)) : 0
   const standings: string[] = []
@@ -153,9 +154,10 @@ export function simulateGroupQualification(
   cfg: QualConfig,
   locked?: LockedLookup,
 ): QualificationResult {
-  const sorted = [...teams].sort(
-    (a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox,
-  )
+  const sorted = [...teams].sort((a, b) => {
+    const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+    return rd !== 0 ? rd : a.localeCompare(b) // 랭킹 동률 시 팀ID로 결정성 확보
+  })
   const groups = snakeSeed(sorted, cfg.numGroups)
   const matches: QualMatch[] = []
   const groupRankings: string[][] = []

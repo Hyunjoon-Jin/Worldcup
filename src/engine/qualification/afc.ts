@@ -6,8 +6,10 @@ import { QUAL_FORMAT, GROUP_LETTERS, type AfcFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
 
-const byRank = (a: string, b: string) =>
-  ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+const byRank = (a: string, b: string) => {
+  const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
+  return rd !== 0 ? rd : a.localeCompare(b) // 랭킹 동률 시 팀ID로 결정성 확보
+}
 
 /**
  * AFC 다단계 예선 근사 (A3). 실제 3차~5차 라운드 구조를 재현한다.
