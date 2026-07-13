@@ -20,9 +20,10 @@ describe('참가국 로스터 확충', () => {
 
   it('CAF는 9개 조 6팀으로 채워진다(실제 2026 포맷)', () => {
     const all = simulateAllQualification('ROSTER')
-    const sizes = all.byConfederation.CAF.groups.map((g) => g.length)
-    expect(sizes).toHaveLength(9)
-    for (const s of sizes) expect(s).toBe(6)
+    // 앞 9개는 조별리그(각 6팀), 10번째는 최고 2위 미니토너먼트(B15).
+    const groupStage = all.byConfederation.CAF.groups.slice(0, 9)
+    expect(groupStage).toHaveLength(9)
+    for (const g of groupStage) expect(g.length).toBe(6)
   })
 
   it('국가를 늘려도 본선 진출은 정확히 48개국(중복 없음)이다', () => {

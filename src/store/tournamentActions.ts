@@ -8,8 +8,10 @@ import { useSaveSlotsStore } from './useSaveSlotsStore'
 import { useSandboxStore } from './useSandboxStore'
 import { usePerformanceStore } from './usePerformanceStore'
 import { useCareerStore } from './useCareerStore'
+import { useHistoryStore } from './useHistoryStore'
 import { finalsFormDeltas } from '../engine/finalsForm'
 import { editionEndRankingPoints, type FinalsResults } from '../engine/qualification/ranking'
+import { buildEditionSnapshot } from '../engine/history'
 
 const NO_FINALS: FinalsResults = { groupMatches: [], knockoutMatches: [] }
 
@@ -104,6 +106,23 @@ export function advanceToNextEdition(): void {
       .filter((m): m is NonNullable<typeof m> => m != null),
   }
   const endPoints = qualResult ? editionEndRankingPoints(qualResult, finals, carriedArg) : carried
+
+  // 방금 끝난 대회를 역대 기록에 스냅샷으로 축적(국가별 전적·최종 성적·종료 시점 FIFA 순위).
+  if (qualResult) {
+    const career = useCareerStore.getState()
+    useHistoryStore.getState().recordEdition(
+      buildEditionSnapshot({
+        year: career.year,
+        hostIds: career.hostIds,
+        champion: progress.champion,
+        qualified48: qualResult.qualified48,
+        groupMatches: finals.groupMatches,
+        knockoutMatches: finals.knockoutMatches,
+        endPoints,
+      }),
+    )
+  }
+
   // 다음 대회 개최국 선정 + 커리어 폼 누적(감쇠) + FIFA 점수 이월. 이후 시뮬레이션이 새 개최국을 참조한다.
   useCareerStore.getState().advanceEdition(deltas, endPoints)
 

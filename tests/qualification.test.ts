@@ -14,6 +14,8 @@ import { pickQualUpset } from '../src/engine/qualification/upset'
 import { runWhatIfScenarios } from '../src/engine/qualification/whatif'
 import { buildQualCalendar } from '../src/engine/qualification/calendar'
 import { collectPlayedByConfed, buildLockedLookups, isPartialProgress } from '../src/engine/qualification/conditional'
+import { rankAcrossGroups, roundRobinMatchdayCount, roundRobinSingleRounds } from '../src/engine/qualification/generic'
+import type { QualMatch } from '../src/types/qualification'
 import {
   basePointsFromRank,
   effectiveRankFromPoints,
@@ -544,13 +546,36 @@ describe('대륙 난이도 지수 (개선 G4)', () => {
 describe('포맷 데이터 주도화 (개선 C4)', () => {
   const allRatings = baseRatingsMap(ALL_NATIONS.map((t) => t.id))
 
-  it('단일 조별 대륙의 조 수는 QUAL_FORMAT.numGroups를 따른다', () => {
-    for (const c of ['UEFA', 'CAF', 'CONMEBOL', 'OFC'] as const) {
-      const fmt = QUAL_FORMAT[c]
-      if (fmt.kind !== 'groups') continue
-      const r = simulateConfederation(c, allRatings, createSeededRandom(`fmt-${c}`))
-      expect(r.groups.length).toBe(fmt.numGroups)
-    }
+  it('CONMEBOL(단일리그)은 조 수가 QUAL_FORMAT.numGroups를 따른다', () => {
+    // CONMEBOL만 순수 단일리그. UEFA·CAF·OFC는 플레이오프/녹아웃 경로가 붙으므로 별도 검증(아래).
+    const fmt = QUAL_FORMAT.CONMEBOL
+    if (fmt.kind !== 'groups') throw new Error('CONMEBOL은 groups 포맷')
+    const r = simulateConfederation('CONMEBOL', allRatings, createSeededRandom('fmt-conmebol'))
+    expect(r.groups.length).toBe(fmt.numGroups)
+  })
+
+  it('UEFA는 조별 12개 조 + 플레이오프 4개 경로 = 16 (B14)', () => {
+    const fmt = QUAL_FORMAT.UEFA
+    if (fmt.kind !== 'groups') throw new Error('UEFA는 groups 포맷')
+    const r = simulateConfederation('UEFA', allRatings, createSeededRandom('fmt-uefa'))
+    expect(r.groups.length).toBe(fmt.numGroups + 4)
+    expect(r.groupLabels?.slice(-4)).toEqual(['PO 경로 A', 'PO 경로 B', 'PO 경로 C', 'PO 경로 D'])
+  })
+
+  it('CAF는 9개 조 + 최고 2위 미니토너먼트 = 10 (B15)', () => {
+    const r = simulateConfederation('CAF', allRatings, createSeededRandom('fmt-caf'))
+    expect(r.groups.length).toBe(10)
+    expect(r.groupLabels?.[9]).toBe('최고 2위 PO')
+    expect(r.qualified).toHaveLength(SLOT_ALLOCATION.CAF.direct)
+    expect(r.playoff).toHaveLength(SLOT_ALLOCATION.CAF.playoff)
+  })
+
+  it('OFC는 2개 조 + 녹아웃 = 3, 결승 승자 직행·패자 PO (B16)', () => {
+    const r = simulateConfederation('OFC', allRatings, createSeededRandom('fmt-ofc'))
+    expect(r.groups.length).toBe(3)
+    expect(r.groupLabels?.[2]).toBe('녹아웃')
+    expect(r.qualified).toHaveLength(SLOT_ALLOCATION.OFC.direct)
+    expect(r.playoff).toHaveLength(SLOT_ALLOCATION.OFC.playoff)
   })
 
   it('AFC/CONCACAF 스테이지 조 수가 포맷 파라미터와 일치한다', () => {
@@ -717,6 +742,85 @@ describe('예선 진출 확률 (지역예선 Q5)', () => {
     b.runBatch(20)
     expect(a.result().ARG).toBe(b.result().ARG)
   })
+
+  it('진출국뿐 아니라 회원군 전체(210개국)를 확률에 포함한다 — 한 번도 진출 못 해도 0%로 표시', () => {
+    const acc = createQualProbAccumulator('ALL')
+    acc.runBatch(30)
+    const probs = acc.result()
+    // 6개 대륙 회원국 전체가 결과에 들어간다(약체는 0%라도 대시보드에 나타나야 함).
+    expect(Object.keys(probs).length).toBe(210)
+    // 최소 한 팀은 0%(한 번도 진출 못 함)로 존재한다.
+    expect(Object.values(probs).some((p) => p === 0)).toBe(true)
+    // 모든 확률은 0~100 범위.
+    for (const p of Object.values(probs)) {
+      expect(p).toBeGreaterThanOrEqual(0)
+      expect(p).toBeLessThanOrEqual(100)
+    }
+  })
+})
+
+describe('횡단 순위 — 불균등 조 크기 보정 (D26)', () => {
+  const m = (home: string, away: string, hg: number, ag: number, matchday: number, group: number): QualMatch => ({
+    homeTeamId: home,
+    awayTeamId: away,
+    homeGoals: hg,
+    awayGoals: ag,
+    matchday,
+    group,
+  })
+
+  it('큰 조의 최하위 팀과의 경기를 제외해 공정하게 비교한다', () => {
+    // 조0(3팀): ARG > BRA > BOL(최하위). 조1(2팀): FRA, GER.
+    // BRA는 BOL을 크게 이겨 기록이 부풀려졌지만(5-0), 최하위전 제외 시 GER보다 아래여야 한다.
+    const groupRankings = [
+      ['ARG', 'BRA', 'BOL'],
+      ['FRA', 'GER'],
+    ]
+    const matches: QualMatch[] = [
+      m('ARG', 'BRA', 1, 0, 1, 0),
+      m('ARG', 'BOL', 1, 0, 2, 0),
+      m('BRA', 'BOL', 5, 0, 3, 0), // 최하위전 — 제외 대상
+      m('FRA', 'GER', 0, 0, 1, 1),
+    ]
+    const teams = ['ARG', 'BRA', 'BOL', 'FRA', 'GER']
+    const order = rankAcrossGroups(groupRankings, matches, teams)
+    // 최하위전(BRA-BOL) 제외로 BRA는 승점이 사라져 GER(무승부 1점)보다 아래.
+    expect(order.indexOf('GER')).toBeLessThan(order.indexOf('BRA'))
+    expect(order[order.length - 1]).toBe('BOL')
+  })
+
+  it('조 크기가 모두 같으면 전체 기록 그대로 비교한다', () => {
+    const groupRankings = [
+      ['ARG', 'BRA'],
+      ['FRA', 'GER'],
+    ]
+    const matches: QualMatch[] = [m('ARG', 'BRA', 3, 0, 1, 0), m('FRA', 'GER', 1, 0, 1, 1)]
+    const order = rankAcrossGroups(groupRankings, matches, ['ARG', 'BRA', 'FRA', 'GER'])
+    // 1위끼리(ARG,FRA) 먼저, 2위끼리(BRA,GER) 뒤. 승점 동률이라 기록/랭킹으로 정렬.
+    expect(order.indexOf('ARG')).toBeLessThan(order.indexOf('BRA'))
+    expect(order.indexOf('FRA')).toBeLessThan(order.indexOf('GER'))
+  })
+})
+
+describe('라운드로빈 매치데이 계산 일반화 (D27)', () => {
+  it('짝수 팀은 n−1, 홀수 팀은 n 라운드(단판)', () => {
+    expect(roundRobinSingleRounds(4)).toBe(3)
+    expect(roundRobinSingleRounds(5)).toBe(5)
+    expect(roundRobinSingleRounds(6)).toBe(5)
+    expect(roundRobinSingleRounds(10)).toBe(9)
+  })
+
+  it('홈&어웨이는 단일 사이클의 2배', () => {
+    expect(roundRobinMatchdayCount(4, true)).toBe(6)
+    expect(roundRobinMatchdayCount(5, true)).toBe(10)
+    expect(roundRobinMatchdayCount(6, true)).toBe(10)
+    expect(roundRobinMatchdayCount(10, true)).toBe(18)
+  })
+
+  it('엔진 실제 매치데이와 일치한다 — CONMEBOL(10팀 홈&어웨이)=18', () => {
+    const all = simulateAllQualification('MDGEN')
+    expect(all.byConfederation.CONMEBOL.matchdays).toBe(roundRobinMatchdayCount(10, true))
+  })
 })
 
 describe('매치데이 구조 (개선 B1)', () => {
@@ -729,13 +833,14 @@ describe('매치데이 구조 (개선 B1)', () => {
       expect(m.matchday).toBeLessThanOrEqual(18)
     }
   })
-  it('UEFA(54개국 12개 조, 4~5팀 홈&어웨이)는 최대 10라운드 (A5)', () => {
-    // 54팀 / 12조 = 5팀 6조 + 4팀 6조. 5팀 조(홀수)는 바이 라운드 포함 더블 라운드로빈 = 10라운드.
-    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(10)
+  it('UEFA(54개국 12개 조 홈&어웨이 + 플레이오프)는 12라운드 (A5·B14)', () => {
+    // 조별리그 10라운드(5팀 조 더블 라운드로빈) + 플레이오프 준결승·결승 2라운드 = 12.
+    expect(simulateAllQualification('MD').byConfederation.UEFA.matchdays).toBe(12)
   })
   it('groups 구조가 노출된다(H1)', () => {
     const all = simulateAllQualification('MD')
-    expect(all.byConfederation.UEFA.groups.length).toBe(12)
+    // UEFA: 12개 조 + 플레이오프 4개 경로 = 16.
+    expect(all.byConfederation.UEFA.groups.length).toBe(16)
     expect(all.byConfederation.CONMEBOL.groups.length).toBe(1)
   })
 })

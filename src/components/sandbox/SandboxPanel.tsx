@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { TEAMS, CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { ALL_NATIONS } from '../../data/nations'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
@@ -10,11 +11,16 @@ export function SandboxPanel() {
   const { overrides, setOverride, resetTeam, resetAll } = useSandboxStore()
   const [query, setQuery] = useState('')
 
+  // 모든 참가국(본선 후보 48개국 + 예선 참가국 = 210개국)을 랭킹순으로 노출한다.
+  const allNations = useMemo(
+    () => [...ALL_NATIONS].sort((a, b) => a.fifaRankApprox - b.fifaRankApprox),
+    [],
+  )
   const filteredTeams = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return TEAMS
-    return TEAMS.filter((t) => t.nameKo.includes(q) || t.nameEn.toLowerCase().includes(q))
-  }, [query])
+    if (!q) return allNations
+    return allNations.filter((t) => t.nameKo.includes(q) || t.nameEn.toLowerCase().includes(q))
+  }, [query, allNations])
 
   return (
     <GlassCard strong className="mb-6 p-4">

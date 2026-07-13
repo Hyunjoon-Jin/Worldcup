@@ -84,7 +84,7 @@ export function ProbabilityDashboard() {
               </>
             ) : mode === 'qualification' ? (
               <>
-                <strong className="text-emerald-300">지역예선 진행 중</strong> — 국가별 <strong className="text-white">본선 진출 확률</strong>입니다.
+                <strong className="text-emerald-300">지역예선 진행 중</strong> — 예선 참가 <strong className="text-white">회원국 전체</strong>의 <strong className="text-white">본선 진출 확률</strong>입니다.
                 32강~우승 확률은 조추첨 후 표시됩니다.
               </>
             ) : (
