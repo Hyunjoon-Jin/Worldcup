@@ -4,6 +4,7 @@ import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { titlesFor } from '../../data/history'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { isCurrentHost } from '../../engine/hostContext'
+import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
 import { formatKoreanDate } from '../../data/calendar'
 import { FlagIcon } from '../common/FlagIcon'
 import { GlassButton } from '../common/GlassButton'
@@ -117,6 +118,9 @@ export function TeamDetailPage() {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const toggleMyTeam = useMyTeamStore((s) => s.toggleMyTeam)
   const perfDeltas = usePerformanceStore((s) => s.deltas)
+  const { rankByTeam: liveRankByTeam, pointsByTeam: livePointsByTeam } = useLiveFifaRanking()
+  const liveRank = teamId ? liveRankByTeam[teamId] : undefined
+  const livePoints = teamId ? livePointsByTeam[teamId] : undefined
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const { schedule, groupMatches, knockoutSlots } = useProgressStore()
@@ -326,8 +330,9 @@ export function TeamDetailPage() {
               </button>
             </div>
             <p className="text-xs text-gray-400">
-              {team.nameEn} · FIFA 랭킹 {team.fifaRankApprox}위 · {CONFEDERATION_LABEL_KO[team.confederation]} · 포트{' '}
-              {team.pot}
+              {team.nameEn} · FIFA 랭킹 {liveRank ?? team.fifaRankApprox}위
+              {livePoints != null && <span className="text-gray-500"> ({livePoints}점)</span>} ·{' '}
+              {CONFEDERATION_LABEL_KO[team.confederation]} · 포트 {team.pot}
               {group && ` · 조 ${group}`}
               {isCurrentHost(team.id) && ' · 개최국'}
             </p>

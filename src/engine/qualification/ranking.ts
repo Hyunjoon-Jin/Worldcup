@@ -18,23 +18,63 @@ import type { TeamRatings } from '../../types/team'
  * 시작 점수(basePointsFromRank)만 근사이고, 갱신 방식은 FIFA 공식 그대로다.
  */
 
+/**
+ * 실제 FIFA/코카콜라 랭킹 경기 중요도 계수 I 전체 표(A1). 현재 시뮬레이션은 월드컵 예선·본선만
+ * 치르므로 qualifier·worldCup* 만 사용하지만, 친선·네이션스리그·대륙 본선까지 규정값을 한곳에
+ * 정의해 두어 향후 확장 시 이 표만 참조하면 되도록 한다(상수 단일 출처, A5).
+ */
+export const MATCH_IMPORTANCE = {
+  /** 친선(A매치 기간 밖) */
+  friendlyOutsideWindow: 5,
+  /** 친선(A매치 기간 안) */
+  friendlyInWindow: 10,
+  /** 네이션스리그 조별 */
+  nationsLeagueGroup: 15,
+  /** 네이션스리그 결선(플레이오프·결승) */
+  nationsLeagueKnockout: 25,
+  /** 월드컵·대륙 예선 */
+  qualifier: 25,
+  /** 대륙 본선 ~16강 */
+  continentalGroup: 35,
+  /** 대륙 본선 8강~ */
+  continentalKnockout: 40,
+  /** 월드컵 본선 조별·16강 */
+  worldCupGroup: 50,
+  /** 월드컵 본선 8강~ */
+  worldCupKnockout: 60,
+} as const
+export type MatchImportanceKey = keyof typeof MATCH_IMPORTANCE
+
 /** 경기 중요도 계수 I (월드컵 예선). */
-export const IMPORTANCE_QUALIFIER = 25
+export const IMPORTANCE_QUALIFIER = MATCH_IMPORTANCE.qualifier
 /** 월드컵 본선 조별리그·16강까지의 중요도(실제 FIFA 규정값). */
-export const IMPORTANCE_WC_GROUP = 50
+export const IMPORTANCE_WC_GROUP = MATCH_IMPORTANCE.worldCupGroup
 /** 월드컵 본선 8강 이후(준결승·결승 등)의 중요도(실제 FIFA 규정값). */
-export const IMPORTANCE_WC_KO = 60
+export const IMPORTANCE_WC_KO = MATCH_IMPORTANCE.worldCupKnockout
 
 /** 본선 토너먼트 라운드별 중요도. 8강(QF)부터 60, 그 전(32강·16강)은 50. */
 export function wcKnockoutImportance(round: KnockoutRound): number {
   return round === 'QF' || round === 'SF' || round === 'THIRD' || round === 'FINAL' ? IMPORTANCE_WC_KO : IMPORTANCE_WC_GROUP
 }
-/** 기대 승점 산정 분모(FIFA 규정값). */
-const FIFA_DIVISOR = 600
-/** 랭킹 1위 근사 점수와 랭킹당 하락폭(시작 점수 근사). */
-const TOP_POINTS = 1850
-const POINTS_PER_RANK = 5
-const FLOOR_POINTS = 820
+
+/**
+ * 점수 산정 상수(A5 단일 출처). FIFA_DIVISOR는 실제 규정값(600). 시작 점수 곡선(TOP/PER_RANK/FLOOR)은
+ * 실제 FIFA 포인트 분포에 대한 보정 근사이며, 팀별 실측 포인트가 있으면 A2 오버라이드가 우선한다.
+ */
+export const RANKING_CONSTANTS = {
+  /** 기대 승점 산정 분모(FIFA 규정값). */
+  fifaDivisor: 600,
+  /** 랭킹 1위 근사 점수. */
+  topPoints: 1850,
+  /** 랭킹당 하락폭(선형 근사). */
+  pointsPerRank: 5,
+  /** 하위권 시작 점수 하한. */
+  floorPoints: 820,
+} as const
+const FIFA_DIVISOR = RANKING_CONSTANTS.fifaDivisor
+const TOP_POINTS = RANKING_CONSTANTS.topPoints
+const POINTS_PER_RANK = RANKING_CONSTANTS.pointsPerRank
+const FLOOR_POINTS = RANKING_CONSTANTS.floorPoints
 
 /** FIFA 랭킹(숫자 작을수록 강함) → 시작 랭킹 점수(높을수록 강함). 실제 상위권 분포에 근사. */
 export function basePointsFromRank(rank: number): number {
@@ -58,7 +98,7 @@ export function expectedResult(teamPoints: number, oppPoints: number): number {
 export function applyMatchElo(
   points: Record<string, number>,
   m: { homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number; wentToPenalties?: boolean; winnerTeamId?: string },
-  importance = IMPORTANCE_QUALIFIER,
+  importance: number = IMPORTANCE_QUALIFIER,
 ): void {
   const h = points[m.homeTeamId]
   const a = points[m.awayTeamId]
@@ -77,22 +117,32 @@ export function applyMatchElo(
   points[m.awayTeamId] = a + importance * (wAway - expectedResult(a, h))
 }
 
-/** 참가국들의 초기 Elo 점수 맵(정적 FIFA 랭킹 근사). */
+/**
+ * 한 팀의 정적 시작 점수(A2·B12). 실측 FIFA 포인트(fifaPointsApprox)가 있으면 그대로 쓰고,
+ * 없으면 순위 근사 곡선(basePointsFromRank)으로 채운다. 순위 데이터도 없으면 100위로 방어한다.
+ */
+export function staticStartPoints(teamId: string): number {
+  const nation = ALL_NATIONS_BY_ID[teamId]
+  if (nation?.fifaPointsApprox != null) return nation.fifaPointsApprox
+  return basePointsFromRank(nation?.fifaRankApprox ?? 100)
+}
+
+/** 참가국들의 초기 Elo 점수 맵(실측 포인트 우선, 없으면 순위 근사). */
 export function initRankingPoints(teamIds: string[]): Record<string, number> {
   const p: Record<string, number> = {}
-  for (const id of teamIds) p[id] = basePointsFromRank(ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 100)
+  for (const id of teamIds) p[id] = staticStartPoints(id)
   return p
 }
 
 /**
  * 시작 점수 맵을 만든다. carried(이전 대회에서 이월된 FIFA 점수)가 있으면 그 값을 우선 쓰고,
- * 없는 팀만 정적 근사(fifaRankApprox)로 채운다. 커리어 모드에서 대회를 거듭해도 FIFA 점수가
- * 이어지도록(본선 성적이 다음 대회로 회귀하지 않도록) 한다.
+ * 없는 팀만 정적 시작 점수(실측 포인트 → 순위 근사)로 채운다. 커리어 모드에서 대회를 거듭해도
+ * FIFA 점수가 이어지도록(본선 성적이 다음 대회로 회귀하지 않도록) 한다.
  */
 export function resolveBasePoints(teamIds: string[], carried?: Record<string, number>): Record<string, number> {
   const p: Record<string, number> = {}
   for (const id of teamIds) {
-    p[id] = carried?.[id] ?? basePointsFromRank(ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 100)
+    p[id] = carried?.[id] ?? staticStartPoints(id)
   }
   return p
 }
@@ -185,7 +235,9 @@ export function computeRankingMovers(all: AllQualificationResult, played: QualMa
   const now = updateRankingPoints(base, played)
 
   const rankOf = (pts: Record<string, number>) => {
-    const sorted = [...ids].sort((a, b) => pts[b] - pts[a] || ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox)
+    const sorted = [...ids].sort(
+      (a, b) => pts[b] - pts[a] || ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox || a.localeCompare(b),
+    )
     const r: Record<string, number> = {}
     sorted.forEach((id, i) => (r[id] = i + 1))
     return r
@@ -218,7 +270,7 @@ export function qualParticipantIds(all: AllQualificationResult): string[] {
 
 function rankMap(ids: string[], pts: Record<string, number>): Record<string, number> {
   const sorted = [...ids].sort(
-    (a, b) => pts[b] - pts[a] || ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox,
+    (a, b) => pts[b] - pts[a] || ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox || a.localeCompare(b),
   )
   const r: Record<string, number> = {}
   sorted.forEach((id, i) => (r[id] = i + 1))
