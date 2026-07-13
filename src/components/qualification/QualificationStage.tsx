@@ -1008,6 +1008,27 @@ function ConfederationStandings({
     return stageProbs.byTeam[teamId]?.[nextStageName] ?? 0
   }
 
+  // FIFA 랭킹 시드 자동진출 판정: 이 차수보다 앞선 차수에 편성된 적 없는데 이 차수에 있으면
+  // 하위 라운드를 건너뛰고 랭킹 시드로 자동진출한 국가다(예: AFC 상위국이 1차 없이 2차부터 참가).
+  const priorStageTeams = new Set<string>()
+  for (const st of stages) {
+    if (st === selectedStage) break
+    for (const gi of st.groupIndices) for (const t of r.groups[gi] ?? []) priorStageTeams.add(t)
+  }
+  const isSeedAdvanced = (teamId: string): boolean =>
+    useStageTabs && selStageIdx > 0 && !selectedStageUpcoming && !priorStageTeams.has(teamId)
+
+  // 이 차수 조추첨 포트(랭킹 시드) — 조가 2개 이상인 조별 차수만. 조 크기만큼 포트를 만든다.
+  const stageTeamsSorted = selectedStage
+    ? selectedStage.groupIndices.flatMap((gi) => r.groups[gi] ?? []).sort((a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox)
+    : []
+  const stageNumGroups = selectedStage?.groupIndices.length ?? 0
+  const firstStageGroupSize = selectedStage ? (r.groups[selectedStage.groupIndices[0]]?.length ?? 0) : 0
+  const showDrawPots = !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3
+  const drawPots: string[][] = showDrawPots
+    ? Array.from({ length: firstStageGroupSize }, (_, p) => stageTeamsSorted.slice(p * stageNumGroups, (p + 1) * stageNumGroups))
+    : []
+
   return (
     <GlassCard className="p-4">
       <QualRulesPanel confed={confed} />
@@ -1047,6 +1068,42 @@ function ConfederationStandings({
             )
           })}
         </div>
+      )}
+
+      {/* 이 차수 조추첨 포트(랭킹 시드) — 조가 어떻게 편성됐는지 보여준다 */}
+      {showDrawPots && (
+        <details className="group mb-3 rounded-lg border border-violet-400/20 bg-violet-500/[0.06]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-bold text-violet-200">
+            <span>🎩 {selectedStage?.name} 조추첨 포트 (FIFA 랭킹 시드 {stageNumGroups}개 조)</span>
+            <span className="text-gray-400 transition-transform group-open:rotate-180">▾</span>
+          </summary>
+          <div className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-4">
+            {drawPots.map((pot, pi) => (
+              <div key={pi}>
+                <p className="mb-1 text-[10px] font-bold text-violet-300">포트 {pi + 1}</p>
+                <div className="space-y-0.5">
+                  {pot.map((id) => (
+                    <div key={id} className="flex items-center gap-1 text-[10px] text-gray-300">
+                      <FlagIcon iso2={ALL_NATIONS_BY_ID[id]?.iso2 ?? ''} className="h-2 w-3" />
+                      <span className="truncate">{ALL_NATIONS_BY_ID[id]?.nameKo ?? id}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="px-3 pb-2 text-[10px] text-gray-500">
+            ※ FIFA 랭킹 순으로 포트를 나눠 각 조에 한 팀씩 배정(뱀 배정)합니다. 상위 포트일수록 강팀입니다.
+          </p>
+        </details>
+      )}
+
+      {/* 랭킹 시드 자동진출 안내 — 이 차수에 하위 라운드 없이 자동진출한 국가가 있으면 표시 */}
+      {useStageTabs && selStageIdx > 0 && !selectedStageUpcoming && stageTeamsSorted.some((id) => isSeedAdvanced(id)) && (
+        <p className="mb-3 rounded-lg bg-sky-500/10 px-3 py-2 text-[10px] text-sky-200">
+          🎖️ FIFA 랭킹 상위국은 하위 라운드를 건너뛰고 <strong>{selectedStage?.name}부터 자동 진출</strong>합니다
+          (순위표에 <span className="rounded bg-sky-500/25 px-1 font-bold">시드 자동진출</span> 표시).
+        </p>
       )}
 
       {/* 라운드별 진행 컨트롤 (B1) */}
@@ -1122,6 +1179,7 @@ function ConfederationStandings({
                         <span className="inline-flex items-center gap-1.5">
                           <NationLabel teamId={teamId} />
                           {teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+                          {isSeedAdvanced(teamId) && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200" title="FIFA 랭킹 시드로 하위 라운드 없이 자동진출">시드 자동진출</span>}
                         </span>
                       </th>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
@@ -1153,6 +1211,7 @@ function ConfederationStandings({
                     <span className="inline-flex items-center gap-1.5">
                       <NationLabel teamId={teamId} />
                       {teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+                      {isSeedAdvanced(teamId) && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">시드 자동진출</span>}
                     </span>
                     <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400 tabular-nums">
                       <span>{s.played}경기</span>
