@@ -542,7 +542,7 @@ function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult
 function QualShareButton({ seed, result, myTeamId }: { seed: string | null; result: AllQualificationResult; myTeamId: string | null }) {
   const [copied, setCopied] = useState(false)
   const summary = useMemo(() => {
-    const lines = ['🌍 2026 북중미 월드컵 지역예선 시뮬레이션', `예선 시드: ${seed ?? '(무작위)'}`, '본선 진출 48개국 확정!']
+    const lines = ['🌍 월드컵 시뮬레이터 — 지역예선', `예선 시드: ${seed ?? '(무작위)'}`, '본선 진출 48개국 확정!']
     if (myTeamId && ALL_NATIONS_BY_ID[myTeamId]) {
       const inFinals = result.qualified48.includes(myTeamId)
       lines.push(`내 팀 ${ALL_NATIONS_BY_ID[myTeamId].nameKo}: ${inFinals ? '✅ 본선 진출' : '💔 본선 진출 실패'}`)

@@ -55,7 +55,7 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
     const runnerUp = finalSlot.winnerTeamId === finalSlot.homeTeamId ? finalSlot.awayTeamId : finalSlot.homeTeamId
     const name = (id?: string) => (id ? TEAMS_BY_ID[id]?.nameKo ?? id : '-')
     const lines = [
-      '🏆 2026 북중미 월드컵 시뮬레이션 결과',
+      '🏆 월드컵 시뮬레이터 — 대회 결과',
       `🥇 우승: ${name(champion)}`,
       `🥈 준우승: ${name(runnerUp)}`,
       thirdSlot ? `🥉 3위: ${name(thirdSlot.winnerTeamId)}` : '',
