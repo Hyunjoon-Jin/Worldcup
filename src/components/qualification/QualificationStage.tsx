@@ -937,6 +937,15 @@ function MyTeamQualBanner({
   )
 }
 
+// 진출 확정/완전 탈락 판정. 화면에 표시되는 '본선 X%'(정수 반올림)와 일치시켜, 100%로 표시되면 '진출',
+// 0%로 표시되면(대륙간 PO도 0%) '탈락'으로 본다.
+function isQualClinched(qualifyPct: number): boolean {
+  return Math.round(qualifyPct) >= 100
+}
+function isQualEliminated(qualifyPct: number, poPct?: number | null): boolean {
+  return Math.round(qualifyPct) <= 0 && Math.round(poPct ?? 0) <= 0
+}
+
 /** 직행/PO/탈락 상태 배지 (색+아이콘+텍스트 병행, I4). 진행 중이면 '—'. */
 function ResultBadge({
   full,
@@ -960,9 +969,10 @@ function ResultBadge({
 }) {
   if (!full) {
     // 진출/탈락은 본선 진출 확정/완전 탈락 기준, 위기는 '본선 진출 확률 50% 미만' 기준으로 판정한다.
+    // 판정 기준을 화면에 표시되는 반올림 값(본선 X%)과 일치시켜, '본선 100%'인데 배지가 안 뜨는 불일치를 없앤다.
     if (qualifyPct != null) {
-      if (qualifyPct >= 99.95) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>✅ 진출</span>
-      if (qualifyPct <= 0.05 && (poPct ?? 0) <= 0.05) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>❌ 탈락</span>
+      if (isQualClinched(qualifyPct)) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>✅ 진출</span>
+      if (isQualEliminated(qualifyPct, poPct)) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>❌ 탈락</span>
       if (qualifyPct < 50) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>⚠️ 위기</span>
     }
     // 확률이 없거나 안정권(≥50%)이면 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
@@ -1468,7 +1478,7 @@ function ConfederationStandings({
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                      {chainKeys.length > 1 && stagePctFor(teamId, QUALIFY_KEY) >= 99.95 ? (
+                      {chainKeys.length > 1 && isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) ? (
                         // 이미 본선 진출을 확정지은 팀은 이후 녹아웃/추가 예선 확률 대신 '이전 차수에서 진출 확정'을 표시.
                         <>
                           <td colSpan={chainKeys.length - 1} className="py-1.5 text-center text-[10px] font-medium text-emerald-300/80">
@@ -1512,7 +1522,7 @@ function ConfederationStandings({
                     </div>
                     {chainKeys.length > 0 && (
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
-                        {stagePctFor(teamId, QUALIFY_KEY) >= 99.95 && chainKeys.length > 1 ? (
+                        {isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) && chainKeys.length > 1 ? (
                           <>
                             <span className="font-medium text-emerald-300/80">이전 차수에서 진출 확정</span>
                             <span className="font-bold text-sky-300">본선 100%</span>

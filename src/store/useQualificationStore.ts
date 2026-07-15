@@ -66,9 +66,14 @@ function recordRankMonths(result: AllQualificationResult, windows: number[], cal
   if (valid.length === 0) return
   const base = useCareerStore.getState().rankingBase
   const carried = Object.keys(base).length > 0 ? base : undefined
+  const friendlies = useQualificationStore.getState().friendlies
   const entries = valid.map((w) => {
-    const played = flattenPlayed(collectPlayedByConfed(result, calendar[w - 1].revealedByConfed))
-    const rows = computeLiveRanking(result, played, { groupMatches: [], knockoutMatches: [] }, carried)
+    const revByConfed = calendar[w - 1].revealedByConfed
+    const played = flattenPlayed(collectPlayedByConfed(result, revByConfed))
+    // 그 시점까지 치른 친선전도 반영(대륙 무관 → 전 대륙 중 가장 앞선 경기일 기준).
+    const globalRevealed = Math.max(0, ...Object.values(revByConfed))
+    const playedFriendlies = friendlies.filter((f) => f.matchday <= globalRevealed)
+    const rows = computeLiveRanking(result, played, { groupMatches: [], knockoutMatches: [] }, carried, playedFriendlies)
     const rankByTeam: Record<string, number> = {}
     for (const row of rows) rankByTeam[row.teamId] = row.rank
     return { date: calendar[w - 1].date, rankByTeam }
