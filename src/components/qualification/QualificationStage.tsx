@@ -902,9 +902,10 @@ function ResultBadge({
   if (!full) {
     // 진행 중: 조건부 진출 확률로 진출(확정 유력)/탈락/위기를 먼저 판정한다(확률이 있을 때만).
     if (nextPct != null) {
-      if (nextPct >= 99.5) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>✅ 진출</span>
-      if (nextPct <= 0.5) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>❌ 탈락</span>
-      if (nextPct < 25) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>⚠️ 위기</span>
+      // 진출/탈락은 확정(100%/0%)일 때만, 위기는 진출 확률 50% 미만일 때 표시한다.
+      if (nextPct >= 99.95) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>✅ 진출</span>
+      if (nextPct <= 0.05) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>❌ 탈락</span>
+      if (nextPct < 50) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>⚠️ 위기</span>
     }
     // 확률이 없거나 경합 구간이면 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
     if (provDirect) return <span className="rounded border border-dashed border-emerald-400/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300/90">잠정 직행</span>
