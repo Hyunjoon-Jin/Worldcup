@@ -28,6 +28,7 @@ import { CONFEDERATION_LABEL_KO } from '../../data/teams'
 import { computePots } from '../../engine/drawEngine'
 import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
+import { QualDrawReveal } from './QualDrawReveal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
 import type { QualificationResult } from '../../types/qualification'
@@ -952,9 +953,15 @@ function ConfederationStandings({
   // 새 예선(다음 대회 등, 시드 변경)이 시작되면 리셋해, 이전 대회의 상위 차수 탭이 남아
   // 이제 막 시작한 새 예선을 'upcoming'으로 잘못 보여주지 않게 한다 (#22).
   const [selectedStageName, setSelectedStageName] = useState<string | null>(null)
+  // 조추첨 애니메이션 리빌 열림 여부. 대륙/차수/시드가 바뀌면 닫는다.
+  const [drawRevealOpen, setDrawRevealOpen] = useState(false)
   useEffect(() => {
     setSelectedStageName(null)
+    setDrawRevealOpen(false)
   }, [confed, qualSeed])
+  useEffect(() => {
+    setDrawRevealOpen(false)
+  }, [selectedStageName])
   const r = result?.byConfederation[confed]
   if (!r) return null
   const total = r.matchdays
@@ -1035,6 +1042,15 @@ function ConfederationStandings({
   const drawPots: string[][] = showDrawPots
     ? Array.from({ length: firstStageGroupSize }, (_, p) => stageTeamsSorted.slice(p * stageNumGroups, (p + 1) * stageNumGroups))
     : []
+  // 조추첨 리빌용: 각 조 멤버를 FIFA 랭킹순(=포트 순)으로 정렬. groupsByPot[g][p] = g조의 포트 p 팀.
+  const drawGroupsByPot: string[][] = showDrawPots && selectedStage
+    ? selectedStage.groupIndices.map((gi) =>
+        [...(r.groups[gi] ?? [])].sort((a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox),
+      )
+    : []
+  const drawGroupLabels: string[] = showDrawPots && selectedStage
+    ? selectedStage.groupIndices.map((gi, i) => r.groupLabels?.[gi] ?? `${GROUP_LETTERS[selectedStage.groupIndices[i]] ?? i + 1}조`)
+    : []
 
   return (
     <GlassCard className="p-4">
@@ -1077,9 +1093,28 @@ function ConfederationStandings({
         </div>
       )}
 
+      {/* 조추첨 애니메이션 리빌 (직접 조추첨) */}
+      {showDrawPots && drawRevealOpen && (
+        <QualDrawReveal
+          confedLabel={CONFEDERATION_LABEL_KO[confed]}
+          stageName={selectedStage?.name ?? '조별리그'}
+          groupsByPot={drawGroupsByPot}
+          groupLabels={drawGroupLabels}
+          potCount={firstStageGroupSize}
+          onClose={() => setDrawRevealOpen(false)}
+        />
+      )}
+
       {/* 이 차수 조추첨 포트(랭킹 시드) — 조가 어떻게 편성됐는지 보여준다 */}
-      {showDrawPots && (
-        <details className="group mb-3 rounded-lg border border-violet-400/20 bg-violet-500/[0.06]">
+      {showDrawPots && !drawRevealOpen && (
+        <div className="mb-3">
+          <button
+            onClick={() => setDrawRevealOpen(true)}
+            className="mb-2 w-full rounded-lg border border-violet-400/30 bg-violet-500/15 px-3 py-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/25"
+          >
+            🎬 {selectedStage?.name} 직접 조추첨 진행 (포트별 한 팀씩 뽑기)
+          </button>
+          <details className="group rounded-lg border border-violet-400/20 bg-violet-500/[0.06]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-bold text-violet-200">
             <span>🎩 {selectedStage?.name} 조추첨 포트 (FIFA 랭킹 시드 {stageNumGroups}개 조)</span>
             <span className="text-gray-400 transition-transform group-open:rotate-180">▾</span>
@@ -1102,7 +1137,8 @@ function ConfederationStandings({
           <p className="px-3 pb-2 text-[10px] text-gray-500">
             ※ FIFA 랭킹 순으로 포트를 나눠 각 조에 한 팀씩 배정(뱀 배정)합니다. 상위 포트일수록 강팀입니다.
           </p>
-        </details>
+          </details>
+        </div>
       )}
 
       {/* 랭킹 시드 자동진출 안내 — 이 차수에 하위 라운드 없이 자동진출한 국가가 있으면 표시 */}
