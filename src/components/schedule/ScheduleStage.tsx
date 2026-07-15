@@ -71,10 +71,16 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
     initSchedule()
   }, [initSchedule])
 
+  // 진행된 경기 수(그룹 + 결정된 녹아웃)를 지표로 삼아, 하루/시간대가 진행될 때마다
+  // 실시간 우승 확률을 다시 계산한다. buildSnapshot이 이미 확정된 결과를 조건으로 반영하므로
+  // 재계산 결과가 현재까지의 실황을 그대로 담는다 (Phase 1 #3·#4: 확률 고착/노후화 방지).
+  const playedCount = useProgressStore(
+    (s) => s.groupMatches.length + Object.values(s.knockoutSlots).filter((k) => k.result).length,
+  )
   useEffect(() => {
-    if (!simResult) runSimulation()
+    runSimulation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [playedCount])
 
   const top3Champion = useMemo(() => {
     if (!simResult) return []
@@ -130,7 +136,7 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
                 <GlassButton onClick={withClick(advanceTimeSlot)} disabled={!nextSlotPreview}>
                   ⏱ 다음 시간대 진행{nextSlotPreview && ` (${nextSlotPreview.timeSlot})`}
                 </GlassButton>
-                <GlassButton variant="ghost" onClick={withClick(advanceDay)}>
+                <GlassButton variant="ghost" onClick={withClick(advanceDay)} disabled={!nextSlotPreview}>
                   ▶ 다음 날 전체 진행
                 </GlassButton>
                 <GlassButton variant="ghost" onClick={withClick(advanceToEnd)} disabled={!nextSlotPreview}>

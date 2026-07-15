@@ -346,51 +346,26 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
  *  모든 대륙 순위표를 해당 날짜 기준으로 동기화한다. */
 function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void; confed: Confederation }) {
   const calendar = useMemo(() => buildQualCalendar(result), [result])
-  // 대륙별 스테이지 구간을 미리 계산해, 그날 각 대륙이 어느 스테이지·라운드인지 표기한다(일정↔룰 연결).
-  const stagesByConfed = useMemo(() => {
-    const out: Record<string, ReturnType<typeof deriveQualStages>> = {}
-    for (const c of Object.keys(result.byConfederation)) out[c] = deriveQualStages(result.byConfederation[c])
-    return out
-  }, [result])
+  const stages = useMemo(() => deriveQualStages(result.byConfederation[confed]), [result, confed])
+  const setRevealed = useQualificationStore((s) => s.setRevealed)
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
   const revealed = useQualificationStore((s) => s.revealed)
-  // 현재 공개 상태(revealed)와 정확히 일치하는 경기일을 찾는다(시뮬 직후엔 1일차). 없으면 1일차.
-  const initialIdx = useMemo(() => {
-    const i = calendar.findIndex((d) =>
-      Object.keys(d.revealedByConfed).every((c) => (revealed[c] ?? -1) === d.revealedByConfed[c]),
-    )
-    return i >= 0 ? i : 0
-    // revealed는 시뮬/네비게이션 시점의 값만 필요 → calendar 변경에만 재계산
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendar])
-  const [dayIdx, setDayIdx] = useState(initialIdx)
 
-  // 새 시뮬레이션(캘린더 교체) 시 해당 경기일로 초기화(기본 1일차부터 진행).
-  useEffect(() => {
-    setDayIdx(initialIdx)
-  }, [initialIdx])
+  const r = result.byConfederation[confed]
+  if (!r || calendar.length === 0) return null
+  const total = r.matchdays
+  // 현재 라운드 = 이 대륙의 공개 라운드. revealed에서 직접 파생하므로 별도 state와의 디싱크가 없다.
+  // 대륙별 라운드 컨트롤(순위표)과 이 네비게이션이 모두 setRevealed(confed)를 써서 서로 덮어쓰지 않는다.
+  const round = Math.max(1, Math.min(revealed[confed] ?? total, total))
+  const date = calendar[round - 1]
+  const matches = r.matches.filter((m) => m.matchday === round)
+  const stageName = stageNameAt(stages, round)
+  const atStart = round <= 1
+  const atEnd = round >= total
 
-  if (calendar.length === 0) return null
-  const day = calendar[Math.max(0, Math.min(dayIdx, calendar.length - 1))]
-
-  const goTo = (i: number) => {
-    const clamped = Math.max(0, Math.min(calendar.length - 1, i))
-    setDayIdx(clamped)
-    setRevealedMany(calendar[clamped].revealedByConfed)
-  }
-
-  // 그날 경기를 대륙별로 묶기
-  const byConfed = new Map<string, typeof day.matches>()
-  for (const cm of day.matches) {
-    const arr = byConfed.get(cm.confederation)
-    if (arr) arr.push(cm)
-    else byConfed.set(cm.confederation, [cm])
-  }
-  // 현재 선택된 대륙 탭의 경기만 선별해 보여준다.
-  const confedOrder = byConfed.has(confed) ? [confed] : []
-  const shownCount = byConfed.get(confed)?.length ?? 0
-  const atEnd = dayIdx >= calendar.length - 1
-  const atStart = dayIdx <= 0
+  const goTo = (rd: number) => setRevealed(confed, Math.max(1, Math.min(total, rd)))
+  const revealAllToEnd = () =>
+    setRevealedMany(Object.fromEntries(Object.entries(result.byConfederation).map(([c, cr]) => [c, cr.matchdays])))
 
   return (
     <GlassCard className="p-4">
@@ -399,61 +374,49 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
           📅 일별 진행 <span className="text-gray-400">· {CONFEDERATION_LABEL_KO[confed]}</span>
         </h3>
         <span className="text-xs text-gray-400">
-          경기일 <span className="font-bold text-emerald-300">{dayIdx + 1}</span> / {calendar.length}
+          라운드 <span className="font-bold text-emerald-300">{round}</span> / {total}
         </span>
       </div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="font-display text-base font-bold text-white">{day.label}</span>
+        <span className="font-display text-base font-bold text-white">
+          {date?.label ?? ''}
+          {stageName && <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-medium text-emerald-300">{stageName}</span>}
+        </span>
         <div className="flex items-center gap-1">
-          <button onClick={() => goTo(0)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
-          <button onClick={() => goTo(dayIdx - 1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀ 이전</button>
-          <button onClick={() => goTo(dayIdx + 1)} disabled={atEnd} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">다음 경기일 ▶</button>
-          <button onClick={() => goTo(calendar.length - 1)} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
+          <button onClick={() => goTo(1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
+          <button onClick={() => goTo(round - 1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀ 이전</button>
+          <button onClick={() => goTo(round + 1)} disabled={atEnd} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">다음 라운드 ▶</button>
+          <button onClick={() => goTo(total)} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
         </div>
       </div>
-      <p className="mb-2 text-[11px] text-gray-500">
-        {CONFEDERATION_LABEL_KO[confed]} · {shownCount}경기
-        <span className="ml-1 text-gray-600">(이 날 전체 {day.matches.length}경기 중)</span>
-      </p>
-      <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
-        {confedOrder.length === 0 && (
-          <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">
-            이 경기일에 {CONFEDERATION_LABEL_KO[confed]} 경기가 없습니다. <strong>다음 경기일 ▶</strong>로 넘겨보세요.
-          </p>
-        )}
-        {confedOrder.map((c) => {
-          const list = byConfed.get(c)!
-          // 그날 이 대륙의 라운드·스테이지(모든 경기가 같은 라운드에 열림)를 표기해 일정을 룰과 연결한다.
-          const roundMd = list[0]?.match.matchday
-          const stageName = roundMd != null ? stageNameAt(stagesByConfed[c] ?? [], roundMd) : null
-          return (
-            <div key={c}>
-              <p className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-gray-300">
-                {CONFEDERATION_LABEL_KO[c as Confederation] ?? c} <span className="text-gray-500">({list.length})</span>
-                {stageName && (
-                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-300">
-                    {stageName} · R{roundMd}
-                  </span>
-                )}
-              </p>
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {list.map((cm, i) => (
-                  <button
-                    key={i}
-                    onClick={() => onSelectMatch(cm.match)}
-                    className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1 text-[11px] hover:bg-white/10"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-right text-gray-300">{ALL_NATIONS_BY_ID[cm.match.homeTeamId]?.nameKo ?? cm.match.homeTeamId}</span>
-                    <span className="shrink-0 font-bold tabular-nums text-white">{cm.match.homeGoals}-{cm.match.awayGoals}</span>
-                    <span className="min-w-0 flex-1 truncate text-gray-300">{ALL_NATIONS_BY_ID[cm.match.awayTeamId]?.nameKo ?? cm.match.awayTeamId}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+        <p className="text-[11px] text-gray-500">{CONFEDERATION_LABEL_KO[confed]} · {matches.length}경기</p>
+        <button onClick={revealAllToEnd} className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-gray-300 hover:bg-white/20" title="6개 대륙을 모두 마지막 라운드까지 공개해 최종 결과를 봅니다">
+          ⏭⏭ 모든 대륙 끝까지
+        </button>
       </div>
-      <p className="mt-2 text-[10px] text-gray-500">※ 경기일을 넘기면 아래 대륙별 순위표가 그 날짜 기준으로 함께 갱신됩니다.</p>
+      <div className="max-h-72 overflow-y-auto pr-1">
+        {matches.length === 0 ? (
+          <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">이 라운드에 경기가 없습니다.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {matches.map((m, i) => (
+              <button
+                key={i}
+                onClick={() => onSelectMatch(m)}
+                className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1 text-[11px] hover:bg-white/10"
+              >
+                <span className="min-w-0 flex-1 truncate text-right text-gray-300">{ALL_NATIONS_BY_ID[m.homeTeamId]?.nameKo ?? m.homeTeamId}</span>
+                <span className="shrink-0 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
+                <span className="min-w-0 flex-1 truncate text-gray-300">{ALL_NATIONS_BY_ID[m.awayTeamId]?.nameKo ?? m.awayTeamId}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="mt-2 text-[10px] text-gray-500">
+        ※ 라운드를 넘기면 아래 {CONFEDERATION_LABEL_KO[confed]} 순위표가 함께 갱신됩니다. 대륙 탭을 바꿔 각 대륙을 독립적으로 진행하세요.
+      </p>
     </GlassCard>
   )
 }
@@ -1299,7 +1262,10 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const editionYear = useCareerStore((s) => s.year)
   const editionIndex = useCareerStore((s) => s.editionIndex)
   const hostIds = useCareerStore((s) => s.hostIds)
-  const finalsComplete = useProgressStore((s) => s.phase === 'complete')
+  const finalsPhase = useProgressStore((s) => s.phase)
+  const finalsComplete = finalsPhase === 'complete'
+  // 조추첨 이후(진행 중이거나 종료된 본선)에는 "조추첨으로 이동" 재클릭이 진행을 날려버린다.
+  const finalsUnderway = finalsPhase !== 'idle'
   const champion = useProgressStore((s) => s.champion)
   const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
@@ -1546,13 +1512,26 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 <QualShareButton seed={seed} result={result} myTeamId={myTeamId} />
                 <GlassButton
                   onClick={() => {
+                    // 이미 조추첨/본선이 진행 중이면 재클릭이 진행 상황을 초기화하므로 확인을 받는다 (Phase 1 #6).
+                    if (
+                      finalsUnderway &&
+                      !window.confirm(
+                        finalsComplete
+                          ? '이미 종료된 본선이 있습니다. 조추첨을 다시 하면 이번 대회 결과가 초기화됩니다. 계속할까요?'
+                          : '본선이 진행 중입니다. 조추첨을 다시 하면 현재까지의 진행이 모두 사라집니다. 계속할까요?',
+                      )
+                    ) {
+                      // 진행 중인 본선을 이어가려면 조추첨을 다시 하지 않고 일정 탭으로만 이동한다.
+                      onStartFinals?.()
+                      return
+                    }
                     // 예선 폼(Elo 변동)을 본선 컨디션에 반영 → 우승 확률이 예선 실황을 반영.
                     // 조추첨을 즉시 끝내지 않고 "준비"만 해, 조추첨 화면에서 순서대로 진행하게 한다.
                     prepareFinalsDrawFromQualification(result.qualified48, formOffsetsFromResults(result))
                     onStartFinals?.()
                   }}
                 >
-                  🎲 본선 조추첨으로 이동 →
+                  {finalsUnderway ? '🎲 조추첨 다시하기 (진행 초기화) →' : '🎲 본선 조추첨으로 이동 →'}
                 </GlassButton>
               </div>
             </div>
