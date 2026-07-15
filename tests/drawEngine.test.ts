@@ -49,6 +49,15 @@ describe('computePots — 현재 FIFA 점수 반영', () => {
     // 포트1의 최하위 랭킹이 포트2의 최상위 랭킹보다 앞선다(정렬 유지).
     expect(pot1Worst).toBeLessThanOrEqual(pot2Best)
   })
+
+  it('입력에 중복 팀이 있어도 같은 팀이 두 포트에 배정되지 않는다 (#9)', () => {
+    const dupField = [...field.slice(0, 47), field[0]] // 마지막 자리에 BRA를 중복으로
+    const pots = computePots(dupField, [])
+    const all = [...pots[1], ...pots[2], ...pots[3], ...pots[4]]
+    // 어떤 팀도 두 번 이상 나타나지 않는다.
+    expect(new Set(all).size).toBe(all.length)
+    expect(all.filter((id) => id === field[0])).toHaveLength(1)
+  })
 })
 
 describe('drawEngine — 배정 규칙', () => {

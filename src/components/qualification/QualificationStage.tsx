@@ -397,7 +397,10 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
       </div>
       <div className="max-h-72 overflow-y-auto pr-1">
         {matches.length === 0 ? (
-          <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">이 라운드에 경기가 없습니다.</p>
+          <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">
+            {round}라운드에는 {CONFEDERATION_LABEL_KO[confed]} 예정 경기가 없습니다
+            {round >= total ? ' (예선 종료).' : ' — 일부 조가 이미 이 라운드를 마쳤습니다. 다음 라운드로 넘어가 보세요.'}
+          </p>
         ) : (
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {matches.map((m, i) => (
@@ -935,11 +938,14 @@ function ConfederationStandings({
   const stageProbs = useQualificationStore((s) => s.stageProbabilities)
   const revealedMap = useQualificationStore((s) => s.revealed)
   const setRevealed = useQualificationStore((s) => s.setRevealed)
-  // 선택된 예선 차수(스테이지) 탭. null이면 '현재 진행 중인 차수'를 따라간다. 대륙을 바꾸면 리셋.
+  const qualSeed = useQualificationStore((s) => s.seed)
+  // 선택된 예선 차수(스테이지) 탭. null이면 '현재 진행 중인 차수'를 따라간다. 대륙을 바꾸거나
+  // 새 예선(다음 대회 등, 시드 변경)이 시작되면 리셋해, 이전 대회의 상위 차수 탭이 남아
+  // 이제 막 시작한 새 예선을 'upcoming'으로 잘못 보여주지 않게 한다 (#22).
   const [selectedStageName, setSelectedStageName] = useState<string | null>(null)
   useEffect(() => {
     setSelectedStageName(null)
-  }, [confed])
+  }, [confed, qualSeed])
   const r = result?.byConfederation[confed]
   if (!r) return null
   const total = r.matchdays

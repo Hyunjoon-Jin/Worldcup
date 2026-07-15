@@ -70,9 +70,12 @@ function byFairPlay(stats: Record<string, GroupStanding>): Comparator {
   // 페어플레이는 벌점이 적을수록 유리(오름차순)하므로 부호를 반대로 비교한다.
   return (a, b) => stats[a].fairPlayScore - stats[b].fairPlayScore
 }
+// 최종 타이브레이크. 실제 2026 규정의 8순위는 'FIFA 추첨(drawing of lots)'이지만, 본 시뮬레이터는
+// 재현성(같은 시드=같은 결과, 잠금 리플레이)을 최우선으로 하므로 무작위 추첨 대신 FIFA 랭킹을
+// 결정적 대체 기준으로 사용한다. 랭킹까지 동률이면 팀ID로 총순서를 확정한다(도달 확률 극히 희박) (#25).
 const byFifaRank: Comparator = (a, b) => {
   const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
-  return rd !== 0 ? rd : a.localeCompare(b) // 랭킹까지 동률이면 팀ID로 결정성 확보(정렬 안정성 무관)
+  return rd !== 0 ? rd : a.localeCompare(b)
 }
 
 /**
