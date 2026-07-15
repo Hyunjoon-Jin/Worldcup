@@ -38,7 +38,9 @@ export function computePots(
   // 정렬 키: 현재 FIFA 점수(rankPoints)가 있으면 점수 높은 순(상위 포트), 없으면 정적 근사 랭킹.
   const sortKey = (id: string) =>
     rankPoints && rankPoints[id] != null ? -rankPoints[id] : (TEAMS_BY_ID[id]?.fifaRankApprox ?? 999)
-  const nonHost = teamIds48.filter((id) => !hostSet.has(id)).sort((a, b) => sortKey(a) - sortKey(b))
+  // 입력에 중복 팀이 있으면 같은 팀이 두 조에 배정될 수 있으므로 먼저 중복을 제거한다 (#9).
+  const uniqueField = [...new Set(teamIds48)]
+  const nonHost = uniqueField.filter((id) => !hostSet.has(id)).sort((a, b) => sortKey(a) - sortKey(b))
   // 개최국은 각 조 1번 시드로 고정되므로 포트1 비개최 인원 = 12 − 개최국 수, 나머지 포트는 12씩.
   const pot1 = Math.max(0, 12 - hostIds.length)
   return {

@@ -356,7 +356,7 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
   const total = r.matchdays
   // 현재 라운드 = 이 대륙의 공개 라운드. revealed에서 직접 파생하므로 별도 state와의 디싱크가 없다.
   // 대륙별 라운드 컨트롤(순위표)과 이 네비게이션이 모두 setRevealed(confed)를 써서 서로 덮어쓰지 않는다.
-  const round = Math.max(1, Math.min(revealed[confed] ?? total, total))
+  const round = Math.max(1, Math.min(revealed[confed] ?? 0, total))
   const date = calendar[round - 1]
   const matches = r.matches.filter((m) => m.matchday === round)
   const stageName = stageNameAt(stages, round)

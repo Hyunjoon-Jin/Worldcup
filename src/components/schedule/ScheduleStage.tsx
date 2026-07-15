@@ -59,7 +59,9 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
       `🥇 우승: ${name(champion)}`,
       `🥈 준우승: ${name(runnerUp)}`,
       thirdSlot ? `🥉 3위: ${name(thirdSlot.winnerTeamId)}` : '',
-      seed ? `🎲 조추첨 시드: ${seed}` : '',
+      // 시드는 "조 편성"을 재현한다. 경기 결과는 매 진행마다 새로 시뮬레이션되므로 시드로 우승팀까지
+      // 그대로 재현되지는 않는다는 점을 분명히 밝힌다 (#7: 시드=재현 가능이라는 오해 방지).
+      seed ? `🎲 조추첨 시드: ${seed} (같은 시드=같은 조 편성 · 경기 결과는 매번 새로 시뮬레이션)` : '',
     ].filter(Boolean)
     void navigator.clipboard?.writeText(lines.join('\n')).then(() => {
       setShared(true)
