@@ -219,7 +219,18 @@ export const useQualificationStore = create<QualificationStore>()(
       partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed, friendlies: s.friendlies }),
       onRehydrateStorage: () => (state) => {
         // 새로고침 후 저장된 진행 상황으로 성적 반영 능력치 보정을 복원한다.
-        if (state?.result) syncPerformanceDeltas(state.result, state.revealed)
+        if (state?.result) {
+          syncPerformanceDeltas(state.result, state.revealed)
+          // 친선전은 (결과+시드)에서 파생되므로, 예전 빌드에서 만들어진 저장본이 있어도 현재 규칙(전력 차 50위 이내)으로
+          // 항상 다시 계산해 덮어쓴다. 이렇게 하면 오래된 저장 상태의 잘못된 친선전 매칭이 새로고침 시 교정된다.
+          if (state.seed) {
+            try {
+              state.friendlies = buildFriendlies(state.result, buildQualRatings(), state.seed)
+            } catch {
+              /* 능력치 계산 실패 시 저장본 유지 */
+            }
+          }
+        }
       },
     },
   ),

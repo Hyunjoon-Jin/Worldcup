@@ -148,6 +148,8 @@ export function TeamDetailPage() {
     }
     return null
   }, [teamId, drawGroups])
+  // 본선(조추첨 완료 후) 대진에 이 팀이 들어가 있는지. 지역예선 중엔 false → 본선 전용 섹션은 안내로 대체.
+  const inFinals = group != null
 
   const groupTeams = useMemo(
     () =>
@@ -620,16 +622,21 @@ export function TeamDetailPage() {
       {teamId && <TeamQualificationSection teamId={teamId} />}
 
       <GlassCard className="p-4">
-        <h3 className="mb-3 text-sm font-bold text-emerald-300">라운드별 진출 확률</h3>
+        <h3 className="mb-3 text-sm font-bold text-emerald-300">본선 라운드별 진출 확률</h3>
         {teamProbabilities ? (
           <div className="space-y-2">
             {STAGES.map((s) => (
               <ProbBar key={s.key} pct={teamProbabilities[s.key]} color={s.color} label={s.label} />
             ))}
           </div>
+        ) : !inFinals ? (
+          <p className="text-sm text-gray-400">
+            🗓 아직 본선에 진출하지 않았습니다. 지역예선을 통과하고 <strong className="text-emerald-300">본선 조추첨</strong>이 끝나면
+            32강~우승 라운드별 진출 확률이 표시됩니다. (예선 진출 확률은 위 <strong className="text-sky-300">‘지역예선 현황’</strong>에서 확인하세요.)
+          </p>
         ) : (
           <p className="text-sm text-gray-400">
-            "확률 대시보드" 탭에서 먼저 시뮬레이션을 실행하면 이 팀의 라운드별 진출 확률이 표시됩니다.
+            "확률 대시보드" 탭에서 먼저 시뮬레이션을 실행하면 이 팀의 본선 라운드별 진출 확률이 표시됩니다.
           </p>
         )}
       </GlassCard>
@@ -690,8 +697,12 @@ export function TeamDetailPage() {
       )}
 
       <GlassCard className="p-4">
-        <h3 className="mb-3 text-sm font-bold text-violet-300">라운드별 예상 상대</h3>
-        {forecastLoading || !forecast ? (
+        <h3 className="mb-3 text-sm font-bold text-violet-300">본선 라운드별 예상 상대</h3>
+        {!inFinals ? (
+          <p className="text-sm text-gray-400">
+            🗓 지역예선 진행 중입니다. 본선에 진출해 <strong className="text-violet-300">조추첨</strong>이 끝나면 라운드별 예상 상대가 표시됩니다.
+          </p>
+        ) : forecastLoading || !forecast ? (
           <p className="text-sm text-gray-400">분석 중…</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -726,8 +737,8 @@ export function TeamDetailPage() {
 
       <GlassCard className="p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-sky-300">능력치 민감도 분석</h3>
-          {teamId && (
+          <h3 className="text-sm font-bold text-sky-300">본선 능력치 민감도 분석</h3>
+          {teamId && inFinals && (
             <GlassButton
               variant="ghost"
               disabled={sensitivityLoading}
@@ -747,7 +758,9 @@ export function TeamDetailPage() {
         <p className="mb-3 text-[11px] text-gray-500">
           이 팀의 공격·수비·종합 능력치가 ±5 변하면 우승 확률이 어떻게 달라지는지 시뮬레이션합니다.
         </p>
-        {!sensitivity ? (
+        {!inFinals ? (
+          <p className="text-sm text-gray-400">🗓 본선에 진출해 조추첨이 끝나면 우승 확률 민감도를 분석할 수 있습니다.</p>
+        ) : !sensitivity ? (
           <p className="text-sm text-gray-400">{sensitivityLoading ? '' : '분석을 실행해 보세요.'}</p>
         ) : (
           <div className="space-y-2">
