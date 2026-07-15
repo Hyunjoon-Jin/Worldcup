@@ -53,4 +53,12 @@ describe('scheduleEngine', () => {
       seen.add(key)
     }
   })
+
+  it('토너먼트: 결승·3·4위전·4강 빅매치는 프라임타임(18:00)에 킥오프한다 (#13·#17)', () => {
+    const ko = buildKnockoutSchedule()
+    const showcase = ko.filter((m) => m.round === 'FINAL' || m.round === 'THIRD' || m.round === 'SF')
+    for (const m of showcase) expect(m.timeSlot).toBe('18:00')
+    // 어떤 녹아웃 경기도 정오(12:00)에 열리지 않는다(프라임타임 우선 배정).
+    expect(ko.some((m) => m.timeSlot === '12:00')).toBe(false)
+  })
 })

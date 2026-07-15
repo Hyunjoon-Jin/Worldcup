@@ -9,8 +9,13 @@ import { FIXTURE_ROTATION } from './groupFixtureTemplate'
 const GROUPS_PER_DAY = 3
 const KNOCKOUT_ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL']
 
-/** 하루 안에서의 킥오프 시간대(현지시간). 같은 조의 두 경기는 항상 같은 시간대를 공유한다. */
+/** 하루 안에서의 킥오프 시간대(현지시간). 조별리그는 12:00~21:00 4개 슬롯에 분산 배정한다. */
 export const TIME_SLOTS = ['12:00', '15:00', '18:00', '21:00']
+
+// 녹아웃(32강~결승)은 하루 경기 수가 적으므로 저녁 프라임타임을 우선한다. 하루의 첫(또는 유일한)
+// 경기가 18:00에 열리도록 해, 결승·4강·3·4위전 같은 빅매치가 정오가 아니라 프라임타임에 킥오프한다
+// (#13·#17). 하루에 경기가 여러 개면 18:00 → 21:00 → 15:00 → 12:00 순으로 채운다.
+const KNOCKOUT_SLOT_PREFERENCE = ['18:00', '21:00', '15:00', '12:00']
 
 function groupBlockDay(group: GroupLetter, matchday: 1 | 2 | 3): number {
   const groupIndex = GROUP_LETTERS.indexOf(group) // 0..11
@@ -59,12 +64,15 @@ export function buildGroupStageSchedule(): ScheduledGroupMatch[] {
 /** 그룹스테이지 종료 후 32강부터의 라운드별 날짜창에 경기를 균등 배분하고 시간대를 부여한다. */
 export function buildKnockoutSchedule(): ScheduledKnockoutMatch[] {
   const matches: ScheduledKnockoutMatch[] = []
-  // 날짜별로 이미 배정된 시간대를 라운드 경계를 넘어 전역 추적한다(C24). 결승·3·4위전이 한 날짜에
-  // 겹치더라도 같은 시간대에 중복 편성되지 않도록, 그 날짜의 빈 시간대를 우선 배정한다.
+  // 날짜별로 이미 배정된 시간대를 라운드 경계를 넘어 전역 추적한다(C24). 서로 다른 라운드(예: 3·4위전과
+  // 결승)가 같은 날짜에 놓이더라도 같은 시간대에 중복 편성되지 않도록, 그 날짜의 빈 시간대를 우선 배정한다.
+  // 프라임타임 우선 순서로 채워 빅매치가 저녁에 열리게 한다(#13·#17).
   const usedSlotsByDate: Record<string, Set<string>> = {}
   const assignSlot = (date: string): string => {
     const used = usedSlotsByDate[date] ?? (usedSlotsByDate[date] = new Set())
-    const free = TIME_SLOTS.find((s) => !used.has(s)) ?? TIME_SLOTS[used.size % TIME_SLOTS.length]
+    const free =
+      KNOCKOUT_SLOT_PREFERENCE.find((s) => !used.has(s)) ??
+      KNOCKOUT_SLOT_PREFERENCE[used.size % KNOCKOUT_SLOT_PREFERENCE.length]
     used.add(free)
     return free
   }
