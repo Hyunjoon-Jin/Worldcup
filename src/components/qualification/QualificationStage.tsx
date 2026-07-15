@@ -48,8 +48,8 @@ function MatchList({
   if (groupMatches.length === 0) return null
   return (
     <details className="group mt-1.5">
-      <summary className="cursor-pointer list-none text-[11px] text-gray-500 hover:text-gray-300">
-        ⚽ 경기 결과 {groupMatches.length}경기 ▾
+      <summary className="cursor-pointer list-none rounded bg-white/5 px-2 py-1 text-[11px] text-gray-300 hover:bg-white/10">
+        ⚽ 이 조 경기 실황·전적 보기 ({groupMatches.length}경기) ▾
       </summary>
       <div className="mt-1.5 grid grid-cols-1 gap-1 sm:grid-cols-2">
         {groupMatches.map((m, i) => (
@@ -754,6 +754,7 @@ function ResultBadge({
   po,
   provDirect,
   provPo,
+  nextPct,
 }: {
   full: boolean
   direct: boolean
@@ -761,9 +762,17 @@ function ResultBadge({
   /** 진행 중 잠정 진출 상황(현재 순위 기준) */
   provDirect?: boolean
   provPo?: boolean
+  /** 진행 중 '바로 다음 관문' 진출 확률(%). 확률이 계산돼 있을 때만 값이 들어온다. */
+  nextPct?: number | null
 }) {
   if (!full) {
-    // 진행 중: 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
+    // 진행 중: 조건부 진출 확률로 진출(확정 유력)/탈락/위기를 먼저 판정한다(확률이 있을 때만).
+    if (nextPct != null) {
+      if (nextPct >= 99.5) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>✅ 진출</span>
+      if (nextPct <= 0.5) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>❌ 탈락</span>
+      if (nextPct < 25) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>⚠️ 위기</span>
+    }
+    // 확률이 없거나 경합 구간이면 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
     if (provDirect) return <span className="rounded border border-dashed border-emerald-400/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300/90">잠정 직행</span>
     if (provPo) return <span className="rounded border border-dashed border-amber-400/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-300/90">잠정 PO</span>
     return <span className="text-[10px] text-gray-600">—</span>
@@ -996,6 +1005,8 @@ function ConfederationStandings({
   // 남은 차수(현재 차수 다음부터) + 마지막에 본선진출. 단일리그(CONMEBOL 등)는 본선진출만.
   const remainingStages = selStageIdx >= 0 ? stageOrder.slice(selStageIdx + 1) : []
   const chainKeys: string[] = !!stageProbs && !selectedStageUpcoming ? [...remainingStages, QUALIFY_KEY] : []
+  // 현재 보고 있는 차수 기준 "바로 다음 관문"(다음 라운드 또는 본선진출). 진출/탈락/위기 배지의 신호값.
+  const nextMilestoneKey: string | null = chainKeys[0] ?? null
   const stagePctFor = (teamId: string, key: string): number => stageProbs?.byTeam[teamId]?.[key] ?? 0
   // 컬럼 헤더용 짧은 라벨("3차 예선"→"3차", "본선진출"→"본선", "플레이오프"→"PO" 등).
   const shortStageLabel = (name: string): string =>
@@ -1138,6 +1149,9 @@ function ConfederationStandings({
               gd: s.goalsFor - s.goalsAgainst,
               direct: full && qSet.has(teamId),
               po: full && pSet.has(teamId),
+              // 진행 중 다음 단계(다음 라운드 또는 본선) 진출 확률 — 진출/탈락/위기 배지 판정에 쓴다.
+              // stageProbs가 계산돼 있을 때만(=chainKeys 존재) 값이 잡히고, 아니면 배지를 표시하지 않는다.
+              nextPct: !full && nextMilestoneKey ? stagePctFor(teamId, nextMilestoneKey) : null,
             }
           })
           const groupLabel = r.groupLabels?.[gi] ?? (single ? '단일리그' : `${GROUP_LETTERS[gi]}조`)
@@ -1166,7 +1180,7 @@ function ConfederationStandings({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ teamId, idx, s, gd, direct, po }) => (
+                  {rows.map(({ teamId, idx, s, gd, direct, po, nextPct }) => (
                     <tr
                       key={teamId}
                       className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : ''}`}
@@ -1187,7 +1201,7 @@ function ConfederationStandings({
                           {stagePctFor(teamId, k).toFixed(0)}%
                         </td>
                       ))}
-                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} /></td>
+                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} nextPct={nextPct} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1195,7 +1209,7 @@ function ConfederationStandings({
             </div>
             {/* 모바일: 카드형 순위표 (I2) */}
             <ul className="space-y-1.5 sm:hidden" aria-label={`${CONFEDERATION_LABEL_KO[confed]} ${groupLabel} 순위표`}>
-              {rows.map(({ teamId, idx, s, gd, direct, po }) => (
+              {rows.map(({ teamId, idx, s, gd, direct, po, nextPct }) => (
                 <li
                   key={teamId}
                   className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
@@ -1224,7 +1238,7 @@ function ConfederationStandings({
                       </div>
                     )}
                   </div>
-                  <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} />
+                  <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} nextPct={nextPct} />
                 </li>
               ))}
             </ul>
