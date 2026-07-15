@@ -545,10 +545,19 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
         <div className="flex flex-wrap items-center justify-center gap-3">
           {drawPending != null ? (
             <GlassButton onClick={advanceQual}>🎬 조추첨 완료 · {drawPending}경기일 진행 →</GlassButton>
+          ) : atEnd ? (
+            // 예선이 끝났으면 자동진행 대신 '본선진출국 확인하기'를 띄우고, 누르면 진출국·조추첨 구역으로 스크롤.
+            <GlassButton
+              onClick={() => document.getElementById('qual-finals-field')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              🏆 본선진출국 확인하기 →
+            </GlassButton>
           ) : (
-            <GlassButton onClick={advanceQual} disabled={atEnd}>▶ 다음 경기일 진행</GlassButton>
+            <>
+              <GlassButton onClick={advanceQual}>▶ 다음 경기일 진행</GlassButton>
+              <GlassButton variant="ghost" onClick={advanceQualToEnd}>⏭ 예선 끝까지 자동 진행</GlassButton>
+            </>
           )}
-          <GlassButton variant="ghost" onClick={advanceQualToEnd} disabled={atEnd}>⏭ 예선 끝까지 자동 진행</GlassButton>
         </div>
         {nextLabel && <p className="text-[11px] text-gray-500">다음 경기일: {nextLabel}</p>}
       </div>
@@ -1818,7 +1827,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </p>
           </GlassCard>
 
-          <GlassCard className="p-4">
+          <GlassCard id="qual-finals-field" className="scroll-mt-4 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-bold text-emerald-300">
                 🏆 본선 진출 48개국 <span className="text-gray-500">({result.qualified48.length})</span>
@@ -1846,7 +1855,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                     onStartFinals?.()
                   }}
                 >
-                  {finalsUnderway ? '🎲 조추첨 다시하기 (진행 초기화) →' : '🎲 본선 조추첨으로 이동 →'}
+                  {finalsUnderway ? '🎲 조추첨 다시하기 (진행 초기화) →' : '🎲 조추첨 진행하기 →'}
                 </GlassButton>
               </div>
             </div>

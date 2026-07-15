@@ -26,6 +26,9 @@ import { getRatings } from '../engine/matchEngine'
 import { getCurrentHostIds } from '../engine/hostContext'
 import { usePerformanceStore } from './usePerformanceStore'
 import { useCareerStore } from './useCareerStore'
+import { useProgressStore } from './useProgressStore'
+import { useDrawStore } from './useDrawStore'
+import { useSimulationStore } from './useSimulationStore'
 import { ALL_NATIONS } from '../data/nations'
 import type { TeamRatings } from '../types/team'
 import type { QualWorkerOut } from '../workers/qualWorker'
@@ -207,6 +210,11 @@ export const useQualificationStore = create<QualificationStore>()(
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
         set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies, drawPending: null })
+        // 새 예선을 시작하면 이전 대회의 본선 조추첨·진행은 이 예선 결과와 무관하므로 초기화한다.
+        // (초기화하지 않으면 '조추첨 하지도 않았는데 다시하기'로 표시되는 문제가 생긴다. 팀 선택은 유지.)
+        useDrawStore.getState().reset()
+        useProgressStore.getState().reset()
+        useSimulationStore.getState().reset()
         syncPerformanceDeltas(result, revealed)
         recordRankMonths(result, [1], calendar) // 첫 경기일(월) 순위 스냅샷 기록
       },
