@@ -128,9 +128,18 @@ export function TeamHistorySection({ teamId }: { teamId: string }) {
       ? { rank: stats.worstRank.rank, sub: String(stats.worstRank.year) }
       : null
   const avgRank = monthly.avg ?? stats.avgRank
+  // 순위 추이 그래프는 최근 ~6년(월별)만 표시한다. 최고/최저/평균 통계는 전체 이력 그대로 유지.
+  const recentTrend = (() => {
+    const t = monthly.trend
+    if (t.length === 0) return t
+    const lastYm = t[t.length - 1].date.slice(0, 7) // yyyy-mm
+    const [ly, lm] = lastYm.split('-').map(Number)
+    const cutoffYm = `${String(ly - 6).padStart(4, '0')}-${String(lm).padStart(2, '0')}`
+    return t.filter((p) => p.date.slice(0, 7) >= cutoffYm)
+  })()
   const rankTrend =
-    monthly.trend.length >= 2
-      ? monthly.trend.map((t) => ({ label: monthLabel(t.date), rank: t.rank }))
+    recentTrend.length >= 2
+      ? recentTrend.map((t) => ({ label: monthLabel(t.date), rank: t.rank }))
       : stats.rankTrend.map((t) => ({ label: String(t.year), rank: t.rank }))
 
   return (
