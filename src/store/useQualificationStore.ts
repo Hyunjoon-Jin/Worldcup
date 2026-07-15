@@ -17,7 +17,9 @@ import {
   updateRankingPoints,
   updatedRatingsFromPoints,
   overallDeltasFromResults,
+  computeLiveRanking,
 } from '../engine/qualification/ranking'
+import { useRankHistoryStore } from './useRankHistoryStore'
 import type { LockedLookup } from '../engine/qualification/generic'
 import { generateSeed } from '../engine/rng'
 import { getRatings } from '../engine/matchEngine'
@@ -53,6 +55,25 @@ function computeDrawWindows(result: AllQualificationResult): Set<number> {
     }
   }
   return windows
+}
+
+/**
+ * 지정한 경기일(윈도우)들의 '그 시점 전체 FIFA 순위'를 계산해 월별 랭킹 이력에 기록한다.
+ * 각 윈도우는 캘린더 날짜(≈월)에 대응하므로, 대회 단위가 아니라 월별로 최고·최저·평균 순위를 낼 수 있다.
+ */
+function recordRankMonths(result: AllQualificationResult, windows: number[], calendar: ReturnType<typeof buildQualCalendar>): void {
+  const valid = windows.filter((w) => w >= 1 && w <= calendar.length)
+  if (valid.length === 0) return
+  const base = useCareerStore.getState().rankingBase
+  const carried = Object.keys(base).length > 0 ? base : undefined
+  const entries = valid.map((w) => {
+    const played = flattenPlayed(collectPlayedByConfed(result, calendar[w - 1].revealedByConfed))
+    const rows = computeLiveRanking(result, played, { groupMatches: [], knockoutMatches: [] }, carried)
+    const rankByTeam: Record<string, number> = {}
+    for (const row of rows) rankByTeam[row.teamId] = row.rank
+    return { date: calendar[w - 1].date, rankByTeam }
+  })
+  useRankHistoryStore.getState().recordMany(entries)
 }
 
 /**
@@ -182,6 +203,7 @@ export const useQualificationStore = create<QualificationStore>()(
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
         set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies, drawPending: null })
         syncPerformanceDeltas(result, revealed)
+        recordRankMonths(result, [1], calendar) // 첫 경기일(월) 순위 스냅샷 기록
       },
       advanceQual: () => {
         const { result, revealed, drawPending } = get()
@@ -190,9 +212,11 @@ export const useQualificationStore = create<QualificationStore>()(
         if (cal.length === 0) return
         if (drawPending != null) {
           // 조추첨을 봤으니 그 경기일 경기를 공개한다.
-          const rev = cal[Math.min(drawPending, cal.length) - 1].revealedByConfed
+          const w = Math.min(drawPending, cal.length)
+          const rev = cal[w - 1].revealedByConfed
           set({ revealed: rev, drawPending: null })
           syncPerformanceDeltas(result, rev)
+          recordRankMonths(result, [w], cal)
           return
         }
         const cur = Math.max(0, ...Object.values(revealed))
@@ -205,14 +229,18 @@ export const useQualificationStore = create<QualificationStore>()(
           const rev = cal[next - 1].revealedByConfed
           set({ revealed: rev, drawPending: null })
           syncPerformanceDeltas(result, rev)
+          recordRankMonths(result, [next], cal)
         }
       },
       advanceQualToEnd: () => {
         const { result } = get()
         if (!result) return
+        const cal = buildQualCalendar(result, useCareerStore.getState().year)
         const rev = Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
         set({ revealed: rev, drawPending: null })
         syncPerformanceDeltas(result, rev)
+        // 건너뛰어도 월별 이력이 비지 않도록 모든 경기일 스냅샷을 채운다.
+        recordRankMonths(result, Array.from({ length: cal.length }, (_, i) => i + 1), cal)
       },
       setRevealed: (confed, matchday) => {
         set({ revealed: { ...get().revealed, [confed]: matchday } })
@@ -267,6 +295,7 @@ export const useQualificationStore = create<QualificationStore>()(
           probWorker = null
         }
         usePerformanceStore.getState().reset()
+        // 월별 랭킹 이력(useRankHistoryStore)은 대회 간 누적이므로 여기서 지우지 않는다(전체 삭제는 clearAllHistory).
         set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {}, friendlies: [], drawPending: null })
       },
     }),
