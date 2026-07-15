@@ -471,23 +471,32 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void; confed: Confederation }) {
   const calendar = useMemo(() => buildQualCalendar(result), [result])
   const stages = useMemo(() => deriveQualStages(result.byConfederation[confed]), [result, confed])
-  const setRevealed = useQualificationStore((s) => s.setRevealed)
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
   const revealed = useQualificationStore((s) => s.revealed)
 
   const r = result.byConfederation[confed]
   if (!r || calendar.length === 0) return null
   const total = r.matchdays
-  // 현재 라운드 = 이 대륙의 공개 라운드. revealed에서 직접 파생하므로 별도 state와의 디싱크가 없다.
-  // 대륙별 라운드 컨트롤(순위표)과 이 네비게이션이 모두 setRevealed(confed)를 써서 서로 덮어쓰지 않는다.
-  const round = Math.max(1, Math.min(revealed[confed] ?? 0, total))
-  const date = calendar[round - 1]
+  const totalWindows = calendar.length
+  // 전역 진행(모든 대륙 공통) 경기일 = 가장 멀리 공개된 대륙 라운드. 예선 전체를 하루씩 함께 진행하므로,
+  // 마지막 경기일에 도달하면 모든 대륙이 종료돼 '예선 완료'가 성립한다(→ 본선 진출 48 자동 표시).
+  const globalWindow = Math.max(
+    1,
+    Math.min(totalWindows, Math.max(0, ...Object.keys(result.byConfederation).map((c) => revealed[c] ?? 0))),
+  )
+  // 이 경기일에 선택 대륙이 소화한 라운드(= 캘린더가 정한 대륙별 공개 라운드).
+  const round = Math.min(globalWindow, total)
+  const date = calendar[globalWindow - 1]
   const matches = r.matches.filter((m) => m.matchday === round)
   const stageName = stageNameAt(stages, round)
-  const atStart = round <= 1
-  const atEnd = round >= total
+  const atStart = globalWindow <= 1
+  const atEnd = globalWindow >= totalWindows
 
-  const goTo = (rd: number) => setRevealed(confed, Math.max(1, Math.min(total, rd)))
+  // 경기일 이동은 모든 대륙을 함께 진행한다(캘린더가 창별 대륙 공개 라운드를 이미 담고 있다).
+  const goToWindow = (w: number) => {
+    const clamped = Math.max(1, Math.min(totalWindows, w))
+    setRevealedMany(calendar[clamped - 1].revealedByConfed)
+  }
   const revealAllToEnd = () =>
     setRevealedMany(Object.fromEntries(Object.entries(result.byConfederation).map(([c, cr]) => [c, cr.matchdays])))
 
@@ -495,22 +504,22 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
     <GlassCard className="p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-emerald-300">
-          📅 일별 진행 <span className="text-gray-400">· {CONFEDERATION_LABEL_KO[confed]}</span>
+          📅 일별 진행 <span className="text-gray-400">· 전 대륙 공통</span>
         </h3>
         <span className="text-xs text-gray-400">
-          라운드 <span className="font-bold text-emerald-300">{round}</span> / {total}
+          경기일 <span className="font-bold text-emerald-300">{globalWindow}</span> / {totalWindows}
         </span>
       </div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="font-display text-base font-bold text-white">
           {date?.label ?? ''}
-          {stageName && <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-medium text-emerald-300">{stageName}</span>}
+          {stageName && <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-medium text-emerald-300">{CONFEDERATION_LABEL_KO[confed]} {stageName}</span>}
         </span>
         <div className="flex items-center gap-1">
-          <button onClick={() => goTo(1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
-          <button onClick={() => goTo(round - 1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀ 이전</button>
-          <button onClick={() => goTo(round + 1)} disabled={atEnd} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">다음 라운드 ▶</button>
-          <button onClick={() => goTo(total)} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
+          <button onClick={() => goToWindow(1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
+          <button onClick={() => goToWindow(globalWindow - 1)} disabled={atStart} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀ 이전</button>
+          <button onClick={() => goToWindow(globalWindow + 1)} disabled={atEnd} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">다음 경기일 ▶</button>
+          <button onClick={() => goToWindow(totalWindows)} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
         </div>
       </div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
@@ -542,7 +551,8 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
         )}
       </div>
       <p className="mt-2 text-[10px] text-gray-500">
-        ※ 라운드를 넘기면 아래 {CONFEDERATION_LABEL_KO[confed]} 순위표가 함께 갱신됩니다. 대륙 탭을 바꿔 각 대륙을 독립적으로 진행하세요.
+        ※ 경기일을 넘기면 6개 대륙이 함께 진행됩니다(마지막 경기일에 도달하면 예선이 종료돼 본선 진출 48개국이
+        확정됩니다). 위 목록은 <strong>{CONFEDERATION_LABEL_KO[confed]}</strong> 경기만 보여주며, 대륙 탭으로 볼 대륙을 바꿀 수 있습니다.
       </p>
     </GlassCard>
   )
@@ -1070,7 +1080,6 @@ function ConfederationStandings({
   const result = useQualificationStore((s) => s.result)
   const stageProbs = useQualificationStore((s) => s.stageProbabilities)
   const revealedMap = useQualificationStore((s) => s.revealed)
-  const setRevealed = useQualificationStore((s) => s.setRevealed)
   const qualSeed = useQualificationStore((s) => s.seed)
   // 선택된 예선 차수(스테이지) 탭. null이면 '현재 진행 중인 차수'를 따라간다. 대륙을 바꾸거나
   // 새 예선(다음 대회 등, 시드 변경)이 시작되면 리셋해, 이전 대회의 상위 차수 탭이 남아
@@ -1275,18 +1284,15 @@ function ConfederationStandings({
         </p>
       )}
 
-      {/* 라운드별 진행 컨트롤 (B1) */}
+      {/* 이 대륙의 진행 상태(읽기 전용). 실제 진행은 위 '📅 일별 진행'에서 전 대륙 공통으로 한다
+          (개별 대륙만 되감으면 예선 '완료' 상태가 풀려 본선 진출 표시가 사라지므로, 여기서는 표시만 한다). */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-gray-300">
           라운드 <span className="text-emerald-300">{revealed}</span> / {total}
           {!full && <span className="ml-1 text-[10px] font-normal text-amber-300">진행 중</span>}
+          {full && <span className="ml-1 text-[10px] font-normal text-emerald-300">완료</span>}
         </span>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setRevealed(confed, 1)} disabled={revealed <= 1} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏮ 처음</button>
-          <button onClick={() => setRevealed(confed, Math.max(1, revealed - 1))} disabled={revealed <= 1} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">◀</button>
-          <button onClick={() => setRevealed(confed, Math.min(total, revealed + 1))} disabled={full} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">▶ 다음</button>
-          <button onClick={() => setRevealed(confed, total)} disabled={full} className="rounded bg-emerald-500/20 px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">⏭ 전체</button>
-        </div>
+        <span className="text-[10px] text-gray-500">📅 일별 진행에서 ‘다음 경기일 ▶’로 진행</span>
       </div>
 
       {selectedStageUpcoming ? (
