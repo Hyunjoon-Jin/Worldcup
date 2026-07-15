@@ -266,6 +266,10 @@ export function MatchDetailModal() {
   const upsetInfo = played ? classifyMatchUpset(homeTeamId, awayTeamId, homeGoals!, awayGoals!) : null
   const wentToPenalties = selected.kind === 'knockout' ? selected.match.wentToPenalties : false
   const winnerTeamId = selected.kind === 'knockout' ? selected.match.winnerTeamId : upsetInfo?.winnerTeamId
+  const pkLabel =
+    selected.kind === 'knockout' && selected.match.wentToPenalties && selected.match.homePenalties != null && selected.match.awayPenalties != null
+      ? `승부차기 ${selected.match.homePenalties}-${selected.match.awayPenalties}`
+      : '승부차기'
 
   // FIFA 랭킹 ±점 기여(D21). 본선 경기만 — 조별 I=50, 8강 이후 60. 현재 라이브 점수 기준 근사.
   const fifaImportance =
@@ -365,7 +369,7 @@ export function MatchDetailModal() {
             ) : (
               <div className="text-lg font-bold text-gray-500">VS</div>
             )}
-            {wentToPenalties && <div className="mt-1 text-[10px] text-gray-400">승부차기</div>}
+            {wentToPenalties && <div className="mt-1 text-[10px] text-gray-400">{pkLabel}</div>}
           </div>
           <button
             type="button"
@@ -388,7 +392,7 @@ export function MatchDetailModal() {
 
         {played && winnerTeamId && (
           <p className="mb-4 text-center text-xs text-emerald-300">
-            {TEAMS_BY_ID[winnerTeamId].nameKo} 승리{wentToPenalties ? ' (승부차기)' : ''}
+            {TEAMS_BY_ID[winnerTeamId].nameKo} 승리{wentToPenalties ? ` (${pkLabel})` : ''}
           </p>
         )}
 

@@ -132,7 +132,11 @@ export function DayResultFeed() {
                     {m.homeGoals} - {m.awayGoals}
                   </span>
                   <TeamLink teamId={m.awayTeamId} reverse wrap className="min-w-0" />
-                  {m.wentToPenalties && <span className="text-[10px] text-gray-500">(승부차기)</span>}
+                  {m.wentToPenalties && (
+                    <span className="text-[10px] text-gray-500">
+                      (승부차기{m.homePenalties != null && m.awayPenalties != null ? ` ${m.homePenalties}-${m.awayPenalties}` : ''})
+                    </span>
+                  )}
                 </span>
                 <span className="hidden w-24 shrink-0 items-center justify-end gap-1.5 sm:flex">
                   <UpsetBadge upset={isUpsetResult} />

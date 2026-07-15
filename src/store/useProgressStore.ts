@@ -188,6 +188,8 @@ function simulateKnockoutFixtures(fixtures: ScheduledKnockoutMatch[], knockoutSl
       awayGoals: sim.awayGoals,
       wentToPenalties: sim.wentToPenalties,
       winnerTeamId: sim.winnerTeamId,
+      homePenalties: sim.homePenalties,
+      awayPenalties: sim.awayPenalties,
     }
     slots[m.slotId] = { ...slot, result: km }
     results.push(km)

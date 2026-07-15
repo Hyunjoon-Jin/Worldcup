@@ -19,4 +19,7 @@ export interface KnockoutMatch extends MatchResult {
   slotId: string
   wentToPenalties: boolean
   winnerTeamId: string
+  /** 승부차기 성공 개수(승부차기까지 간 경우만). */
+  homePenalties?: number
+  awayPenalties?: number
 }

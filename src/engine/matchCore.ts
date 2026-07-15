@@ -72,6 +72,9 @@ export function simulateScore(
 export interface SimKnockout extends SimScore {
   wentToPenalties: boolean
   winnerTeamId: string
+  /** 승부차기 성공 개수(승부차기까지 간 경우만). 연출·표시용. */
+  homePenalties?: number
+  awayPenalties?: number
 }
 
 /** 홈 이점을 명시적으로 받는 순수 녹아웃 시뮬(팀 ID 조회 없음 — 예선/PO 등 임의 팀에 안전). */
@@ -93,7 +96,13 @@ export function simulateKnockoutRaw(
   const rawProb = homeStrength / (homeStrength + awayStrength)
   // 실력차의 영향을 줄여 50:50에 가깝게 — 승부차기의 높은 변동성 반영 (C3)
   const homeWinProb = 0.5 + (rawProb - 0.5) * PENALTY.dampen
-  return { homeGoals, awayGoals, wentToPenalties: true, winnerTeamId: rand() < homeWinProb ? homeId : awayId }
+  const winnerTeamId = rand() < homeWinProb ? homeId : awayId
+  // 승부차기 스코어(연출용): 진 팀 2~4골, 이긴 팀은 +1(가끔 +2) → 4-3·5-4·4-2 같은 현실적 결과.
+  const loserPk = 2 + Math.floor(rand() * 3) // 2,3,4
+  const winnerPk = loserPk + (rand() < 0.75 ? 1 : 2)
+  const homePenalties = winnerTeamId === homeId ? winnerPk : loserPk
+  const awayPenalties = winnerTeamId === homeId ? loserPk : winnerPk
+  return { homeGoals, awayGoals, wentToPenalties: true, winnerTeamId, homePenalties, awayPenalties }
 }
 
 export function simulateKnockout(
