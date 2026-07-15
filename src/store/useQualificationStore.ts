@@ -26,6 +26,9 @@ import { getRatings } from '../engine/matchEngine'
 import { getCurrentHostIds } from '../engine/hostContext'
 import { usePerformanceStore } from './usePerformanceStore'
 import { useCareerStore } from './useCareerStore'
+import { useProgressStore } from './useProgressStore'
+import { useDrawStore } from './useDrawStore'
+import { useSimulationStore } from './useSimulationStore'
 import { ALL_NATIONS } from '../data/nations'
 import type { TeamRatings } from '../types/team'
 import type { QualWorkerOut } from '../workers/qualWorker'
@@ -66,9 +69,14 @@ function recordRankMonths(result: AllQualificationResult, windows: number[], cal
   if (valid.length === 0) return
   const base = useCareerStore.getState().rankingBase
   const carried = Object.keys(base).length > 0 ? base : undefined
+  const friendlies = useQualificationStore.getState().friendlies
   const entries = valid.map((w) => {
-    const played = flattenPlayed(collectPlayedByConfed(result, calendar[w - 1].revealedByConfed))
-    const rows = computeLiveRanking(result, played, { groupMatches: [], knockoutMatches: [] }, carried)
+    const revByConfed = calendar[w - 1].revealedByConfed
+    const played = flattenPlayed(collectPlayedByConfed(result, revByConfed))
+    // 그 시점까지 치른 친선전도 반영(대륙 무관 → 전 대륙 중 가장 앞선 경기일 기준).
+    const globalRevealed = Math.max(0, ...Object.values(revByConfed))
+    const playedFriendlies = friendlies.filter((f) => f.matchday <= globalRevealed)
+    const rows = computeLiveRanking(result, played, { groupMatches: [], knockoutMatches: [] }, carried, playedFriendlies)
     const rankByTeam: Record<string, number> = {}
     for (const row of rows) rankByTeam[row.teamId] = row.rank
     return { date: calendar[w - 1].date, rankByTeam }
@@ -202,6 +210,11 @@ export const useQualificationStore = create<QualificationStore>()(
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
         set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies, drawPending: null })
+        // 새 예선을 시작하면 이전 대회의 본선 조추첨·진행은 이 예선 결과와 무관하므로 초기화한다.
+        // (초기화하지 않으면 '조추첨 하지도 않았는데 다시하기'로 표시되는 문제가 생긴다. 팀 선택은 유지.)
+        useDrawStore.getState().reset()
+        useProgressStore.getState().reset()
+        useSimulationStore.getState().reset()
         syncPerformanceDeltas(result, revealed)
         recordRankMonths(result, [1], calendar) // 첫 경기일(월) 순위 스냅샷 기록
       },

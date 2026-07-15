@@ -545,10 +545,19 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
         <div className="flex flex-wrap items-center justify-center gap-3">
           {drawPending != null ? (
             <GlassButton onClick={advanceQual}>🎬 조추첨 완료 · {drawPending}경기일 진행 →</GlassButton>
+          ) : atEnd ? (
+            // 예선이 끝났으면 자동진행 대신 '본선진출국 확인하기'를 띄우고, 누르면 진출국·조추첨 구역으로 스크롤.
+            <GlassButton
+              onClick={() => document.getElementById('qual-finals-field')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              🏆 본선진출국 확인하기 →
+            </GlassButton>
           ) : (
-            <GlassButton onClick={advanceQual} disabled={atEnd}>▶ 다음 경기일 진행</GlassButton>
+            <>
+              <GlassButton onClick={advanceQual}>▶ 다음 경기일 진행</GlassButton>
+              <GlassButton variant="ghost" onClick={advanceQualToEnd}>⏭ 예선 끝까지 자동 진행</GlassButton>
+            </>
           )}
-          <GlassButton variant="ghost" onClick={advanceQualToEnd} disabled={atEnd}>⏭ 예선 끝까지 자동 진행</GlassButton>
         </div>
         {nextLabel && <p className="text-[11px] text-gray-500">다음 경기일: {nextLabel}</p>}
       </div>
@@ -654,6 +663,7 @@ function QualHighlightsCard({ result, onSelectMatch }: { result: AllQualificatio
 
 /** 대륙 예선 개요 그리드 (H2). 전 대륙 진행·슬롯·대표 진출국을 한눈에. */
 function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult; onSelect: (c: Confederation) => void }) {
+  const liveRank = useLiveRankLookup()
   return (
     <GlassCard className="p-4">
       <h3 className="mb-3 text-sm font-bold text-gray-200">🗺️ 대륙 예선 개요</h3>
@@ -661,8 +671,15 @@ function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult
         {CONFEDS.map((c) => {
           const r = result.byConfederation[c]
           if (!r) return null
-          const participants = new Set(r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])).size
-          const topQualifier = r.qualified[0]
+          const participantIds = [...new Set(r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]))]
+          const participants = participantIds.length
+          // 대표국가는 '현재 실시간 FIFA 랭킹'이 가장 높은(순위 숫자가 작은) 참가국으로 정한다.
+          const topQualifier = participantIds.reduce<string | null>((best, id) => {
+            if (best == null) return id
+            const ri = liveRank(id, ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999)
+            const rb = liveRank(best, ALL_NATIONS_BY_ID[best]?.fifaRankApprox ?? 999)
+            return ri < rb ? id : best
+          }, null)
           return (
             <button
               key={c}
@@ -937,6 +954,15 @@ function MyTeamQualBanner({
   )
 }
 
+// 진출 확정/완전 탈락 판정. 화면에 표시되는 '본선 X%'(정수 반올림)와 일치시켜, 100%로 표시되면 '진출',
+// 0%로 표시되면(대륙간 PO도 0%) '탈락'으로 본다.
+function isQualClinched(qualifyPct: number): boolean {
+  return Math.round(qualifyPct) >= 100
+}
+function isQualEliminated(qualifyPct: number, poPct?: number | null): boolean {
+  return Math.round(qualifyPct) <= 0 && Math.round(poPct ?? 0) <= 0
+}
+
 /** 직행/PO/탈락 상태 배지 (색+아이콘+텍스트 병행, I4). 진행 중이면 '—'. */
 function ResultBadge({
   full,
@@ -960,9 +986,10 @@ function ResultBadge({
 }) {
   if (!full) {
     // 진출/탈락은 본선 진출 확정/완전 탈락 기준, 위기는 '본선 진출 확률 50% 미만' 기준으로 판정한다.
+    // 판정 기준을 화면에 표시되는 반올림 값(본선 X%)과 일치시켜, '본선 100%'인데 배지가 안 뜨는 불일치를 없앤다.
     if (qualifyPct != null) {
-      if (qualifyPct >= 99.95) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>✅ 진출</span>
-      if (qualifyPct <= 0.05 && (poPct ?? 0) <= 0.05) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>❌ 탈락</span>
+      if (isQualClinched(qualifyPct)) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>✅ 진출</span>
+      if (isQualEliminated(qualifyPct, poPct)) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>❌ 탈락</span>
       if (qualifyPct < 50) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>⚠️ 위기</span>
     }
     // 확률이 없거나 안정권(≥50%)이면 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
@@ -1468,7 +1495,7 @@ function ConfederationStandings({
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                      {chainKeys.length > 1 && stagePctFor(teamId, QUALIFY_KEY) >= 99.95 ? (
+                      {chainKeys.length > 1 && isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) ? (
                         // 이미 본선 진출을 확정지은 팀은 이후 녹아웃/추가 예선 확률 대신 '이전 차수에서 진출 확정'을 표시.
                         <>
                           <td colSpan={chainKeys.length - 1} className="py-1.5 text-center text-[10px] font-medium text-emerald-300/80">
@@ -1512,7 +1539,7 @@ function ConfederationStandings({
                     </div>
                     {chainKeys.length > 0 && (
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
-                        {stagePctFor(teamId, QUALIFY_KEY) >= 99.95 && chainKeys.length > 1 ? (
+                        {isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) && chainKeys.length > 1 ? (
                           <>
                             <span className="font-medium text-emerald-300/80">이전 차수에서 진출 확정</span>
                             <span className="font-bold text-sky-300">본선 100%</span>
@@ -1609,9 +1636,6 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, fullyRevealed, myTeamId, soundEnabled])
 
-  // 오늘의 예선 시드 (E4 데일리 챌린지): 같은 날이면 전 세계가 같은 예선을 돌린다.
-  const todaySeed = useMemo(() => `DAILY-${new Date().toISOString().slice(0, 10)}`, [])
-
   // 대륙 탭 키보드 이동 (I3): ←/→(또는 ↑/↓)로 대륙 전환, Home/End로 처음/끝.
   const onConfedKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const idx = CONFEDS.indexOf(confed)
@@ -1671,22 +1695,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           <GlassButton onClick={() => simulate(seedInput)} title="예선을 시작하면 첫 경기일부터 하루씩 진행합니다">
             ⚽ 지역예선 시작
           </GlassButton>
-          <GlassButton
-            variant="ghost"
-            onClick={() => {
-              setSeedInput(todaySeed)
-              simulate(todaySeed)
-            }}
-            title="오늘 날짜 시드로 전 세계가 같은 예선을 돌립니다"
-          >
-            🗓️ 오늘의 예선
-          </GlassButton>
         </div>
         <p className="mt-2 text-[11px] text-gray-500">
           시작하면 <strong className="text-gray-300">첫 경기일</strong>부터 진행됩니다. 아래 <strong className="text-gray-300">📅 일별 진행</strong>에서
           <strong className="text-emerald-300"> 다음 경기일 ▶</strong>로 하루씩 넘기며 관전하세요(⏭ 전체로 끝까지 건너뛸 수 있습니다).
         </p>
-        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span>{seed === todaySeed && <span className="ml-1 text-amber-300">· 오늘의 챌린지</span>}</p>}
+        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
       </GlassCard>
 
       {!result ? (
@@ -1813,7 +1827,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </p>
           </GlassCard>
 
-          <GlassCard className="p-4">
+          <GlassCard id="qual-finals-field" className="scroll-mt-4 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-bold text-emerald-300">
                 🏆 본선 진출 48개국 <span className="text-gray-500">({result.qualified48.length})</span>
@@ -1841,7 +1855,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                     onStartFinals?.()
                   }}
                 >
-                  {finalsUnderway ? '🎲 조추첨 다시하기 (진행 초기화) →' : '🎲 본선 조추첨으로 이동 →'}
+                  {finalsUnderway ? '🎲 조추첨 다시하기 (진행 초기화) →' : '🎲 조추첨 진행하기 →'}
                 </GlassButton>
               </div>
             </div>

@@ -115,10 +115,15 @@ export function TeamQualificationSection({
     const stages = deriveQualStages(r)
 
     const played = teamMatches.filter((m) => m.matchday <= revealed).sort((a, b) => b.matchday - a.matchday)
-    const upcoming = teamMatches.filter((m) => m.matchday > revealed).sort((a, b) => a.matchday - b.matchday)
+    // 아직 이 팀이 진출·조추첨을 확정하지 않은 '다음 차수' 경기는 예정에 넣지 않는다(상대가 확정된 것처럼
+    // 보이는 스포일러 방지). 현재 차수(가장 최근/다음 경기가 속한 차수)의 종료 라운드까지만 예정으로 본다.
+    const allUpcoming = teamMatches.filter((m) => m.matchday > revealed).sort((a, b) => a.matchday - b.matchday)
+    const anchorMatch = played[0] ?? allUpcoming[0]
+    const currentStage = anchorMatch ? stages.find((s) => anchorMatch.matchday >= s.startMd && anchorMatch.matchday <= s.endMd) : null
+    const stageEndMd = currentStage?.endMd ?? total
+    const upcoming = allUpcoming.filter((m) => m.matchday <= stageEndMd)
 
     // 현재 조 = 팀이 가장 최근에 치른(없으면 다음에 치를) 경기의 조. 그 조를 공개된 경기로 순위 매긴다.
-    const anchorMatch = played[0] ?? upcoming[0]
     const groupIdx = anchorMatch ? anchorMatch.group : null
     const groupMembers = groupIdx != null ? (r.groups[groupIdx] ?? []) : []
     const groupPlayed = groupIdx != null ? r.matches.filter((m) => m.group === groupIdx && m.matchday <= revealed) : []
@@ -145,6 +150,25 @@ export function TeamQualificationSection({
 
     const currentStageName = groupIdx != null ? stageNameOfGroup(r, groupIdx) : null
 
+    // 예선이 끝나 결과가 확정된 뒤에는 차수 확률을 '실제 참여/최종 결과'로 확정 표기한다.
+    // (몬테카를로 확률은 계산 시점 기준이라, 직행 확정 후에도 4·5차·대륙간PO에 스테일 잔여 확률이
+    //  남아 "직행 확정인데 왜 4차·PO 확률이 있냐"는 불일치가 생긴다. 확정 시엔 도달=100%, 미도달=0%.)
+    let chainOverride: Record<string, number> | null = null
+    if (done && chainKeys.length > 0) {
+      const reached = new Set<string>()
+      for (const m of teamMatches) {
+        const st = stages.find((s) => m.matchday >= s.startMd && m.matchday <= s.endMd)
+        if (st) reached.add(st.name)
+      }
+      const wonInterPO = result?.interConfed?.winners?.includes(teamId) ?? false
+      chainOverride = {}
+      for (const key of chainKeys) {
+        if (key === QUALIFY_KEY) chainOverride[key] = r.qualified.includes(teamId) || wonInterPO ? 100 : 0
+        else if (key === INTER_PLAYOFF_KEY) chainOverride[key] = r.playoff.includes(teamId) ? 100 : 0
+        else chainOverride[key] = reached.has(key) ? 100 : 0
+      }
+    }
+
     return {
       confed,
       total,
@@ -160,11 +184,12 @@ export function TeamQualificationSection({
       finalStatus,
       teamProbs,
       chainKeys,
+      chainOverride,
       currentStageName,
       single: r.groups.length <= 1,
       groupLabel: groupIdx != null ? r.groupLabels?.[groupIdx] : undefined,
     }
-  }, [r, confed, teamId, revealedMap, stageProbs])
+  }, [r, result, confed, teamId, revealedMap, stageProbs])
 
   if (!team || !result) return null
 
@@ -183,7 +208,7 @@ export function TeamQualificationSection({
 
   if (!view) return null
 
-  const pct = (key: string): number => view.teamProbs?.[key] ?? 0
+  const pct = (key: string): number => view.chainOverride?.[key] ?? view.teamProbs?.[key] ?? 0
   const shortLabel = (key: string): string =>
     key === QUALIFY_KEY ? '본선 진출' : key === INTER_PLAYOFF_KEY ? '대륙간 PO' : key
 

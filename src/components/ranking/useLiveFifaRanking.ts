@@ -20,13 +20,15 @@ export function useLiveFifaRanking(): {
 } {
   const result = useQualificationStore((s) => s.result)
   const revealed = useQualificationStore((s) => s.revealed)
+  const friendlies = useQualificationStore((s) => s.friendlies)
   const groupMatches = useProgressStore((s) => s.groupMatches)
   const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
   const rankingBase = useCareerStore((s) => s.rankingBase)
 
-  return useMemo(() => computeShared(result, revealed, groupMatches, knockoutSlots, rankingBase), [
+  return useMemo(() => computeShared(result, revealed, friendlies, groupMatches, knockoutSlots, rankingBase), [
     result,
     revealed,
+    friendlies,
     groupMatches,
     knockoutSlots,
     rankingBase,
@@ -57,11 +59,12 @@ let cache: { keys: unknown[]; value: LiveRankingOutput } | null = null
 function computeShared(
   result: ReturnType<typeof useQualificationStore.getState>['result'],
   revealed: Record<string, number>,
+  friendlies: ReturnType<typeof useQualificationStore.getState>['friendlies'],
   groupMatches: ReturnType<typeof useProgressStore.getState>['groupMatches'],
   knockoutSlots: ReturnType<typeof useProgressStore.getState>['knockoutSlots'],
   rankingBase: Record<string, number>,
 ): LiveRankingOutput {
-  const keys = [result, revealed, groupMatches, knockoutSlots, rankingBase]
+  const keys = [result, revealed, friendlies, groupMatches, knockoutSlots, rankingBase]
   if (cache && cache.keys.length === keys.length && cache.keys.every((k, i) => k === keys[i])) return cache.value
 
   let value: LiveRankingOutput
@@ -75,7 +78,10 @@ function computeShared(
         .map((s) => s.result)
         .filter((m): m is KnockoutMatch => m != null),
     }
-    const rows = computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried)
+    // 이미 치른(공개된) 친선전만 랭킹에 반영한다. 친선전은 대륙 무관이라 전체 대륙 중 가장 앞선 경기일 기준.
+    const globalRevealed = Math.max(0, ...Object.values(revealed))
+    const playedFriendlies = friendlies.filter((f) => f.matchday <= globalRevealed)
+    const rows = computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried, playedFriendlies)
     const rankByTeam: Record<string, number> = {}
     const pointsByTeam: Record<string, number> = {}
     const rowByTeam: Record<string, LiveRankRow> = {}

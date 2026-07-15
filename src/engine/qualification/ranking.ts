@@ -348,6 +348,7 @@ export function computeLiveRanking(
   played: QualMatch[],
   finals?: FinalsResults,
   carriedBase?: Record<string, number>,
+  friendlies?: ReadonlyArray<{ homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number }>,
 ): LiveRankRow[] {
   const idSet = new Set(qualParticipantIds(all))
   if (finals) {
@@ -360,12 +361,16 @@ export function computeLiveRanking(
       idSet.add(m.awayTeamId)
     }
   }
+  // 친선전에만 등장하는 팀(개최국 등 예선 미참가국)도 순위표에 포함한다.
+  if (friendlies) for (const f of friendlies) { idSet.add(f.homeTeamId); idSet.add(f.awayTeamId) }
   // 이월 점수가 있는 팀(이전 대회 참가국 등)도 순위표에 포함한다.
   if (carriedBase) for (const id of Object.keys(carriedBase)) idSet.add(id)
   const ids = [...idSet]
   const base = resolveBasePoints(ids, carriedBase)
   const now = updateRankingPoints(base, played)
   if (finals) applyFinalsElo(now, finals)
+  // 친선전(평가전)도 FIFA 랭킹에 반영한다(A매치 기간 친선 중요도 I=10).
+  if (friendlies) for (const f of friendlies) applyMatchElo(now, f, MATCH_IMPORTANCE.friendlyInWindow)
   const baseRanks = rankMap(ids, base)
   const nowRanks = rankMap(ids, now)
   return ids
