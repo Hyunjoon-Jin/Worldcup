@@ -115,10 +115,15 @@ export function TeamQualificationSection({
     const stages = deriveQualStages(r)
 
     const played = teamMatches.filter((m) => m.matchday <= revealed).sort((a, b) => b.matchday - a.matchday)
-    const upcoming = teamMatches.filter((m) => m.matchday > revealed).sort((a, b) => a.matchday - b.matchday)
+    // 아직 이 팀이 진출·조추첨을 확정하지 않은 '다음 차수' 경기는 예정에 넣지 않는다(상대가 확정된 것처럼
+    // 보이는 스포일러 방지). 현재 차수(가장 최근/다음 경기가 속한 차수)의 종료 라운드까지만 예정으로 본다.
+    const allUpcoming = teamMatches.filter((m) => m.matchday > revealed).sort((a, b) => a.matchday - b.matchday)
+    const anchorMatch = played[0] ?? allUpcoming[0]
+    const currentStage = anchorMatch ? stages.find((s) => anchorMatch.matchday >= s.startMd && anchorMatch.matchday <= s.endMd) : null
+    const stageEndMd = currentStage?.endMd ?? total
+    const upcoming = allUpcoming.filter((m) => m.matchday <= stageEndMd)
 
     // 현재 조 = 팀이 가장 최근에 치른(없으면 다음에 치를) 경기의 조. 그 조를 공개된 경기로 순위 매긴다.
-    const anchorMatch = played[0] ?? upcoming[0]
     const groupIdx = anchorMatch ? anchorMatch.group : null
     const groupMembers = groupIdx != null ? (r.groups[groupIdx] ?? []) : []
     const groupPlayed = groupIdx != null ? r.matches.filter((m) => m.group === groupIdx && m.matchday <= revealed) : []

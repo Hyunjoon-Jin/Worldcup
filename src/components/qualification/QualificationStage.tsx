@@ -1609,9 +1609,6 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, fullyRevealed, myTeamId, soundEnabled])
 
-  // 오늘의 예선 시드 (E4 데일리 챌린지): 같은 날이면 전 세계가 같은 예선을 돌린다.
-  const todaySeed = useMemo(() => `DAILY-${new Date().toISOString().slice(0, 10)}`, [])
-
   // 대륙 탭 키보드 이동 (I3): ←/→(또는 ↑/↓)로 대륙 전환, Home/End로 처음/끝.
   const onConfedKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const idx = CONFEDS.indexOf(confed)
@@ -1671,22 +1668,12 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           <GlassButton onClick={() => simulate(seedInput)} title="예선을 시작하면 첫 경기일부터 하루씩 진행합니다">
             ⚽ 지역예선 시작
           </GlassButton>
-          <GlassButton
-            variant="ghost"
-            onClick={() => {
-              setSeedInput(todaySeed)
-              simulate(todaySeed)
-            }}
-            title="오늘 날짜 시드로 전 세계가 같은 예선을 돌립니다"
-          >
-            🗓️ 오늘의 예선
-          </GlassButton>
         </div>
         <p className="mt-2 text-[11px] text-gray-500">
           시작하면 <strong className="text-gray-300">첫 경기일</strong>부터 진행됩니다. 아래 <strong className="text-gray-300">📅 일별 진행</strong>에서
           <strong className="text-emerald-300"> 다음 경기일 ▶</strong>로 하루씩 넘기며 관전하세요(⏭ 전체로 끝까지 건너뛸 수 있습니다).
         </p>
-        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span>{seed === todaySeed && <span className="ml-1 text-amber-300">· 오늘의 챌린지</span>}</p>}
+        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
       </GlassCard>
 
       {!result ? (
