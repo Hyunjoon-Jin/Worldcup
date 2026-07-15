@@ -520,111 +520,95 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
           .filter((x): x is { confed: Confederation; draw: NonNullable<ReturnType<typeof potDrawDataForStageStart>> } => x.draw != null)
       : []
 
+  const statusText =
+    drawPending != null
+      ? `🎬 조추첨 진행 — ${drawPending}경기일 시작 전`
+      : atEnd
+        ? `✅ 지역예선 종료 — 경기일 ${totalWindows} / ${totalWindows}`
+        : `🌍 지역예선 진행 중 — 경기일 ${globalWindow} / ${totalWindows}`
+  const progressPct = Math.round((globalWindow / totalWindows) * 100)
+  const nextLabel = !atEnd && drawPending == null ? calendar[globalWindow]?.label : undefined
+
   return (
-    <GlassCard className="p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-emerald-300">
-          📅 일별 진행 <span className="text-gray-400">· 전 대륙 공통</span>
-        </h3>
-        <span className="text-xs text-gray-400">
+    <GlassCard strong className="p-5">
+      {/* 상단 진행 상태 + 진행바 (본선 '일정 진행' 탭과 통일된 UX) */}
+      <p className="mb-2 text-center text-sm font-semibold text-white">{statusText}</p>
+      <div className="mx-auto mb-1 h-2 max-w-md overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width]" style={{ width: `${progressPct}%` }} />
+      </div>
+      <p className="mb-3 text-center text-[10px] text-gray-500">
+        {drawPending != null ? '조추첨을 진행한 뒤 아래 버튼으로 이 경기일을 진행하세요.' : '‘다음 경기일’이 6개 대륙을 함께 진행합니다. 차수 사이에서는 조추첨을 먼저 보여줍니다.'}
+      </p>
+
+      {/* 진행 컨트롤 (중앙 정렬, 본선 탭과 동일한 버튼 구성) */}
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           {drawPending != null ? (
-            <>조추첨 · <span className="font-bold text-violet-300">{drawPending}</span>경기일 전</>
+            <GlassButton onClick={advanceQual}>🎬 조추첨 완료 · {drawPending}경기일 진행 →</GlassButton>
           ) : (
-            <>경기일 <span className="font-bold text-emerald-300">{globalWindow}</span> / {totalWindows}</>
+            <GlassButton onClick={advanceQual} disabled={atEnd}>▶ 다음 경기일 진행</GlassButton>
           )}
-        </span>
+          <GlassButton variant="ghost" onClick={advanceQualToEnd} disabled={atEnd}>⏭ 예선 끝까지 자동 진행</GlassButton>
+        </div>
+        {nextLabel && <p className="text-[11px] text-gray-500">다음 경기일: {nextLabel}</p>}
       </div>
 
-      {drawPending != null ? (
-        // ── 조추첨 단계 ──
-        <div>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="font-display text-base font-bold text-violet-200">🎬 {drawPending}경기일 조추첨</span>
-            <div className="flex items-center gap-1">
-              <button onClick={advanceQual} className="rounded bg-emerald-500/25 px-2.5 py-1 text-[11px] font-bold text-emerald-100 hover:bg-emerald-500/40">
-                조추첨 완료 — {drawPending}경기일 진행 ▶
-              </button>
-              <button onClick={advanceQualToEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20">⏭ 끝</button>
-            </div>
-          </div>
-          <p className="mb-2 rounded-lg bg-violet-500/10 px-3 py-2 text-[11px] text-violet-200">
-            이전 차수가 끝나 진출국이 확정됐습니다. 아래 조추첨을 진행한 뒤 <strong>‘조추첨 완료’</strong>를 누르면 이 경기일 경기가 진행됩니다.
-          </p>
-          {pendingDraws.length === 0 ? (
+      {/* 본문: 조추첨 단계 또는 그날 경기 */}
+      <div className="mt-4">
+        {drawPending != null ? (
+          pendingDraws.length === 0 ? (
             <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">이 경기일 조추첨 정보가 없습니다. ‘조추첨 완료’로 진행하세요.</p>
           ) : (
             <div className="space-y-3">
               {pendingDraws.map(({ confed: c, draw }) => (
-                <QualDrawReveal
-                  key={c}
-                  confedLabel={CONFEDERATION_LABEL_KO[c]}
-                  stageName={draw.stageName}
-                  groupsByPot={draw.groupsByPot}
-                  groupLabels={draw.groupLabels}
-                  potCount={draw.potCount}
-                />
+                <QualDrawReveal key={c} confedLabel={CONFEDERATION_LABEL_KO[c]} stageName={draw.stageName} groupsByPot={draw.groupsByPot} groupLabels={draw.groupLabels} potCount={draw.potCount} />
               ))}
             </div>
-          )}
-        </div>
-      ) : (
-        // ── 경기일 진행 단계 ──
-        <>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="font-display text-base font-bold text-white">
-              {date?.label ?? ''}
-              {stageName && <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-medium text-emerald-300">{CONFEDERATION_LABEL_KO[confed]} {stageName}</span>}
-            </span>
-            <div className="flex items-center gap-1">
-              <button onClick={advanceQual} disabled={atEnd} className="rounded bg-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-30">다음 경기일 ▶</button>
-              <button onClick={advanceQualToEnd} disabled={atEnd} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-200 hover:bg-white/20 disabled:opacity-30">⏭ 끝</button>
+          )
+        ) : (
+          <>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-1">
+              <span className="text-[11px] font-bold text-gray-300">
+                {date?.label ?? ''}
+                {stageName && <span className="ml-1.5 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">{CONFEDERATION_LABEL_KO[confed]} {stageName}</span>}
+              </span>
+              <span className="text-[10px] text-gray-500">{CONFEDERATION_LABEL_KO[confed]} · {matches.length}경기</span>
             </div>
-          </div>
-          <p className="mb-2 text-[11px] text-gray-500">{CONFEDERATION_LABEL_KO[confed]} · {matches.length}경기</p>
-          <div className="max-h-72 overflow-y-auto pr-1">
-            {matches.length === 0 ? (
-              <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">
-                {round}라운드에는 {CONFEDERATION_LABEL_KO[confed]} 예정 경기가 없습니다
-                {round >= total ? ' (예선 종료).' : ' — 일부 조가 이미 이 라운드를 마쳤습니다. 다음 경기일로 넘어가 보세요.'}
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {matches.map((m, i) => (
-                  <button
-                    key={i}
-                    onClick={() => onSelectMatch(m)}
-                    className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1 text-[11px] hover:bg-white/10"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-right text-gray-300">{ALL_NATIONS_BY_ID[m.homeTeamId]?.nameKo ?? m.homeTeamId}</span>
-                    <span className="shrink-0 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
-                    <span className="min-w-0 flex-1 truncate text-gray-300">{ALL_NATIONS_BY_ID[m.awayTeamId]?.nameKo ?? m.awayTeamId}</span>
-                  </button>
-                ))}
+            <div className="max-h-72 overflow-y-auto pr-1">
+              {matches.length === 0 ? (
+                <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">
+                  {round}라운드에는 {CONFEDERATION_LABEL_KO[confed]} 예정 경기가 없습니다
+                  {round >= total ? ' (예선 종료).' : ' — 대륙 탭을 바꾸면 다른 대륙 경기를 볼 수 있습니다.'}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                  {matches.map((m, i) => (
+                    <button key={i} onClick={() => onSelectMatch(m)} className="flex items-center justify-between gap-2 rounded bg-white/5 px-2 py-1 text-[11px] hover:bg-white/10">
+                      <span className="min-w-0 flex-1 truncate text-right text-gray-300">{ALL_NATIONS_BY_ID[m.homeTeamId]?.nameKo ?? m.homeTeamId}</span>
+                      <span className="shrink-0 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
+                      <span className="min-w-0 flex-1 truncate text-gray-300">{ALL_NATIONS_BY_ID[m.awayTeamId]?.nameKo ?? m.awayTeamId}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {winFriendlies.length > 0 && (
+              <div className="mt-2 border-t border-white/10 pt-2">
+                <p className="mb-1 text-[10px] font-bold text-sky-300">🤝 친선전(평가전) · {winFriendlies.length}경기</p>
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                  {winFriendlies.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 rounded bg-sky-500/[0.06] px-2 py-1 text-[11px]">
+                      <span className="min-w-0 flex-1 truncate text-right text-gray-400">{ALL_NATIONS_BY_ID[f.homeTeamId]?.nameKo ?? f.homeTeamId}</span>
+                      <span className="shrink-0 font-bold tabular-nums text-gray-200">{f.homeGoals}-{f.awayGoals}</span>
+                      <span className="min-w-0 flex-1 truncate text-gray-400">{ALL_NATIONS_BY_ID[f.awayTeamId]?.nameKo ?? f.awayTeamId}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-          </div>
-
-          {winFriendlies.length > 0 && (
-            <div className="mt-2 border-t border-white/10 pt-2">
-              <p className="mb-1 text-[10px] font-bold text-sky-300">🤝 친선전(평가전) · {winFriendlies.length}경기</p>
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                {winFriendlies.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 rounded bg-sky-500/[0.06] px-2 py-1 text-[11px]">
-                    <span className="min-w-0 flex-1 truncate text-right text-gray-400">{ALL_NATIONS_BY_ID[f.homeTeamId]?.nameKo ?? f.homeTeamId}</span>
-                    <span className="shrink-0 font-bold tabular-nums text-gray-200">{f.homeGoals}-{f.awayGoals}</span>
-                    <span className="min-w-0 flex-1 truncate text-gray-400">{ALL_NATIONS_BY_ID[f.awayTeamId]?.nameKo ?? f.awayTeamId}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <p className="mt-2 text-[10px] text-gray-500">
-            ※ ‘다음 경기일’이 6개 대륙을 함께 진행합니다. 차수 사이(2차·3차 …)에서는 먼저 조추첨을 보여준 뒤 진행됩니다.
-            마지막 경기일에 도달하면 예선이 종료돼 본선 진출 48개국이 확정됩니다.
-          </p>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </GlassCard>
   )
 }
@@ -1717,6 +1701,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
         </GlassCard>
       ) : (
         <>
+          {/* 진행 컨트롤을 최상단에 배치(본선 '일정 진행' 탭과 통일된 UX) */}
+          <QualDailyProgress result={result} onSelectMatch={setSelMatch} confed={confed} />
+
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div
               role="tablist"
@@ -1785,8 +1772,6 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               진출 확률은 {PROB_ITERATIONS}회 시뮬레이션 표본 추정치이며 ±오차범위(95% 신뢰구간)를 갖습니다.
             </p>
           )}
-
-          <QualDailyProgress result={result} onSelectMatch={setSelMatch} confed={confed} />
 
           <QualLiveRanking result={result} myTeamId={myTeamId} />
 
