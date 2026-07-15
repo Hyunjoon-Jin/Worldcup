@@ -11,6 +11,7 @@ import { useMyTeamStore, MY_TEAM_BUFF_LEVELS, MY_TEAM_BUFF_LABEL } from '../../s
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
+import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
 import { getRatings } from '../../engine/matchEngine'
 import { isCurrentHost } from '../../engine/hostContext'
 import type { MatchResult } from '../../types/match'
@@ -105,6 +106,9 @@ export function MyTeamTab() {
   const { rows, mode } = useProbabilityChain()
 
   const team = myTeamId ? ALL_NATIONS_BY_ID[myTeamId] : null
+  // 예선·본선 진행이 반영된 라이브 FIFA 순위(단일 출처). 진행 이력이 없으면 정적 근사 순위로 대체.
+  const { rankByTeam: liveRankByTeam } = useLiveFifaRanking()
+  const liveRank = myTeamId ? liveRankByTeam[myTeamId] : undefined
   // buff 변경 시 표시 능력치도 갱신되도록 의존성에 buff 포함(getRatings가 store에서 버프를 읽음).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ratings = useMemo(() => (myTeamId ? getRatings(myTeamId) : null), [myTeamId, buff])
@@ -157,7 +161,7 @@ export function MyTeamTab() {
               {isCurrentHost(team.id) && <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] text-sky-300">개최국</span>}
             </div>
             <p className="mt-0.5 text-xs text-gray-400">
-              {team.nameEn} · {CONFEDERATION_LABEL_KO[team.confederation]} · FIFA {team.fifaRankApprox}위
+              {team.nameEn} · {CONFEDERATION_LABEL_KO[team.confederation]} · FIFA {liveRank ?? team.fifaRankApprox}위
             </p>
           </div>
           <div className="flex gap-2">

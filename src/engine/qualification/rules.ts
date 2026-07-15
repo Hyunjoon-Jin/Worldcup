@@ -150,6 +150,15 @@ export function stageNameOfGroup(r: QualificationResult, gi: number): string {
   return stageNameFromLabel(r.groupLabels?.[gi], r.groups.length <= 1)
 }
 
+/**
+ * 이 조가 리그(라운드로빈)가 아니라 녹아웃(브래킷/2연전)인지 판정한다. 녹아웃 조는 순위표가 아니라
+ * 대진표로 표시해야 한다. 라벨 기준: '녹아웃', 'PO'(플레이오프·최고2위PO·UEFA 경로), '2연전'(2-leg).
+ */
+export function isKnockoutGroup(r: QualificationResult, gi: number): boolean {
+  const label = r.groupLabels?.[gi] ?? ''
+  return /녹아웃|PO|2연전|플레이오프/.test(label)
+}
+
 /** 결과에서 스테이지 이름 순서(조 인덱스 등장 순 = 차수 순). deriveQualStages보다 가볍다. */
 export function stageOrderOfResult(r: QualificationResult): string[] {
   const seen = new Set<string>()
