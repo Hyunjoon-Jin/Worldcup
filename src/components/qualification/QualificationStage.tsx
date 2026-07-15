@@ -25,6 +25,7 @@ import { PROB_ITERATIONS } from '../../store/useQualificationStore'
 import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { computePots } from '../../engine/drawEngine'
 import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
@@ -332,7 +333,8 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 
   // 이전 대회들에서 이월된 FIFA 점수(있으면 시작 점수로 사용).
   const carried = useMemo(() => (Object.keys(rankingBase).length > 0 ? rankingBase : undefined), [rankingBase])
-  const calendar = useMemo(() => buildQualCalendar(result), [result])
+  const wcYear = useCareerStore((s) => s.year)
+  const calendar = useMemo(() => buildQualCalendar(result, wcYear), [result, wcYear])
   const played = useMemo(() => flattenPlayed(collectPlayedByConfed(result, revealed)), [result, revealed])
   const ranking = useMemo(() => computeLiveRanking(result, played, undefined, carried), [result, played, carried])
 
@@ -469,10 +471,12 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 /** 일별 진행 (B2). 경기 일정(캘린더)을 날짜별로 넘기며 그날의 경기·결과를 보고,
  *  모든 대륙 순위표를 해당 날짜 기준으로 동기화한다. */
 function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void; confed: Confederation }) {
-  const calendar = useMemo(() => buildQualCalendar(result), [result])
+  const wcYear = useCareerStore((s) => s.year)
+  const calendar = useMemo(() => buildQualCalendar(result, wcYear), [result, wcYear])
   const stages = useMemo(() => deriveQualStages(result.byConfederation[confed]), [result, confed])
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
   const revealed = useQualificationStore((s) => s.revealed)
+  const friendlies = useQualificationStore((s) => s.friendlies)
 
   const r = result.byConfederation[confed]
   if (!r || calendar.length === 0) return null
@@ -488,6 +492,12 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
   const round = Math.min(globalWindow, total)
   const date = calendar[globalWindow - 1]
   const matches = r.matches.filter((m) => m.matchday === round)
+  // 이 경기일에 이 대륙 팀이 낀 친선전(예선 경기가 없는 국가들끼리).
+  const winFriendlies = friendlies.filter(
+    (f) =>
+      f.matchday === globalWindow &&
+      (ALL_NATIONS_BY_ID[f.homeTeamId]?.confederation === confed || ALL_NATIONS_BY_ID[f.awayTeamId]?.confederation === confed),
+  )
   const stageName = stageNameAt(stages, round)
   const atStart = globalWindow <= 1
   const atEnd = globalWindow >= totalWindows
@@ -550,6 +560,23 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
           </div>
         )}
       </div>
+
+      {/* 이 경기일에 예선이 없는 국가들끼리의 친선전(평가전) */}
+      {winFriendlies.length > 0 && (
+        <div className="mt-2 border-t border-white/10 pt-2">
+          <p className="mb-1 text-[10px] font-bold text-sky-300">🤝 친선전(평가전) · {winFriendlies.length}경기</p>
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {winFriendlies.map((f, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 rounded bg-sky-500/[0.06] px-2 py-1 text-[11px]">
+                <span className="min-w-0 flex-1 truncate text-right text-gray-400">{ALL_NATIONS_BY_ID[f.homeTeamId]?.nameKo ?? f.homeTeamId}</span>
+                <span className="shrink-0 font-bold tabular-nums text-gray-200">{f.homeGoals}-{f.awayGoals}</span>
+                <span className="min-w-0 flex-1 truncate text-gray-400">{ALL_NATIONS_BY_ID[f.awayTeamId]?.nameKo ?? f.awayTeamId}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="mt-2 text-[10px] text-gray-500">
         ※ 경기일을 넘기면 6개 대륙이 함께 진행됩니다(마지막 경기일에 도달하면 예선이 종료돼 본선 진출 48개국이
         확정됩니다). 위 목록은 <strong>{CONFEDERATION_LABEL_KO[confed]}</strong> 경기만 보여주며, 대륙 탭으로 볼 대륙을 바꿀 수 있습니다.
@@ -843,6 +870,7 @@ function MyTeamQualBanner({
   /** 예선이 전부 진행돼 결과가 확정됐는지. false면 진출 여부를 스포일러하지 않는다. */
   fullyRevealed: boolean
 }) {
+  const liveRank = useLiveRankLookup()
   const nation = ALL_NATIONS_BY_ID[teamId]
   if (!nation) return null
   const isHost = hosts.includes(teamId)
@@ -864,7 +892,7 @@ function MyTeamQualBanner({
       <FlagIcon iso2={nation.iso2} className="h-6 w-9 shrink-0 rounded-sm" />
       <div className="min-w-0 flex-1">
         <p className="text-xs text-gray-400">
-          내 팀 · {CONFEDERATION_LABEL_KO[nation.confederation]} · FIFA {nation.fifaRankApprox}위
+          내 팀 · {CONFEDERATION_LABEL_KO[nation.confederation]} · FIFA {liveRank(teamId, nation.fifaRankApprox)}위
         </p>
         <p className={`text-sm font-bold ${statusColor}`}>
           {nation.nameKo} {statusText}
@@ -902,9 +930,10 @@ function ResultBadge({
   if (!full) {
     // 진행 중: 조건부 진출 확률로 진출(확정 유력)/탈락/위기를 먼저 판정한다(확률이 있을 때만).
     if (nextPct != null) {
-      if (nextPct >= 99.5) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>✅ 진출</span>
-      if (nextPct <= 0.5) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>❌ 탈락</span>
-      if (nextPct < 25) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>⚠️ 위기</span>
+      // 진출/탈락은 확정(100%/0%)일 때만, 위기는 진출 확률 50% 미만일 때 표시한다.
+      if (nextPct >= 99.95) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>✅ 진출</span>
+      if (nextPct <= 0.05) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>❌ 탈락</span>
+      if (nextPct < 50) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`다음 라운드 진출 확률 ${nextPct.toFixed(1)}%`}>⚠️ 위기</span>
     }
     // 확률이 없거나 경합 구간이면 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
     if (provDirect) return <span className="rounded border border-dashed border-emerald-400/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300/90">잠정 직행</span>
@@ -1125,6 +1154,11 @@ function ConfederationStandings({
   const useStageTabs = stages.length > 1
   const activeStage =
     stages.find((s) => stageStatus(s, revealed) === 'active') ??
+    // 진행 중 차수가 없고 직전 차수가 막 끝났으면, 다음(예정) 차수를 기본 선택해 '조추첨'을 먼저 보여준다
+    // (순서: 이전 차수 → 이 차수 조추첨 → 이 차수 경기).
+    stages.find(
+      (s, i) => stageStatus(s, revealed) === 'upcoming' && (i === 0 || stageStatus(stages[i - 1], revealed) === 'done'),
+    ) ??
     [...stages].reverse().find((s) => stageStatus(s, revealed) === 'done') ??
     stages[0]
   const effectiveStageName =
@@ -1172,20 +1206,26 @@ function ConfederationStandings({
   const uniformGroupSizes = stageGroupSizes.length > 0 && stageGroupSizes.every((n) => n === firstStageGroupSize)
   // 녹아웃(플레이오프·2연전) 차수는 포트 조추첨이 아니므로 조추첨 포트/리빌을 표시하지 않는다.
   const selectedStageIsKnockout = !!selectedStage && selectedStage.groupIndices.every((gi) => isKnockoutGroup(r, gi))
-  const showDrawPots =
-    !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes && !selectedStageIsKnockout
+  // 이 차수가 '포트로 조추첨하는 조별 차수'인가(균등 크기 2개 이상 조). 상태(진행/예정)와 무관하게 판정.
+  const stageIsPotDraw = !!selectedStage && !selectedStageIsKnockout && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes
+  // 직전 차수가 끝났는지(이 차수 참가국이 확정됐는지) — 예정 차수라도 조추첨은 스포일러가 아니므로 먼저 보여줄 수 있다.
+  const selIdxInStages = selectedStage ? stages.findIndex((s) => s.name === selectedStage.name) : -1
+  const prevStageDone = selIdxInStages > 0 ? stageStatus(stages[selIdxInStages - 1], revealed) === 'done' : true
+  const showDrawPots = !selectedStageUpcoming && useStageTabs && stageIsPotDraw
   const drawPots: string[][] = showDrawPots
     ? Array.from({ length: firstStageGroupSize }, (_, p) => stageTeamsSorted.slice(p * stageNumGroups, (p + 1) * stageNumGroups))
     : []
   // 조추첨 리빌용: 각 조 멤버를 FIFA 랭킹순(=포트 순)으로 정렬. groupsByPot[g][p] = g조의 포트 p 팀.
-  const drawGroupsByPot: string[][] = showDrawPots && selectedStage
+  const drawGroupsByPot: string[][] = stageIsPotDraw && selectedStage
     ? selectedStage.groupIndices.map((gi) =>
         [...(r.groups[gi] ?? [])].sort((a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox),
       )
     : []
-  const drawGroupLabels: string[] = showDrawPots && selectedStage
+  const drawGroupLabels: string[] = stageIsPotDraw && selectedStage
     ? selectedStage.groupIndices.map((gi, i) => r.groupLabels?.[gi] ?? `${GROUP_LETTERS[selectedStage.groupIndices[i]] ?? i + 1}조`)
     : []
+  // 예정 차수인데 직전 차수가 끝나 참가국이 확정된 조별 차수 → 경기 전에 '조추첨'을 먼저 보여준다(순서: 이전 차수 → 이 차수 조추첨 → 이 차수 경기).
+  const showUpcomingDraw = selectedStageUpcoming && prevStageDone && stageIsPotDraw
 
   return (
     <GlassCard className="p-4">
@@ -1296,10 +1336,27 @@ function ConfederationStandings({
       </div>
 
       {selectedStageUpcoming ? (
-        <div className="rounded-lg bg-white/5 p-6 text-center text-xs text-gray-500">
-          <p>아직 진행되지 않은 차수입니다. 이전 차수가 끝나면 이 차수 진출국이 확정됩니다.</p>
-          <p className="mt-1 text-[10px]">📅 일별 진행에서 라운드를 넘겨 이 차수까지 진행해 보세요.</p>
-        </div>
+        showUpcomingDraw ? (
+          // 이전 차수가 끝나 참가국이 확정됨 → 경기 전에 이 차수 조추첨을 먼저 보여준다.
+          <div>
+            <p className="mb-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200">
+              🎬 <strong>{selectedStage?.name} 조추첨</strong> — 이전 차수가 끝나 진출국이 확정됐습니다. 아래에서 조추첨을 진행한 뒤,
+              위 <strong>📅 일별 진행</strong>에서 경기일을 넘기면 이 차수 경기가 시작됩니다.
+            </p>
+            <QualDrawReveal
+              confedLabel={CONFEDERATION_LABEL_KO[confed]}
+              stageName={selectedStage?.name ?? '조별리그'}
+              groupsByPot={drawGroupsByPot}
+              groupLabels={drawGroupLabels}
+              potCount={firstStageGroupSize}
+            />
+          </div>
+        ) : (
+          <div className="rounded-lg bg-white/5 p-6 text-center text-xs text-gray-500">
+            <p>아직 진행되지 않은 차수입니다. 이전 차수가 끝나면 이 차수 진출국이 확정됩니다.</p>
+            <p className="mt-1 text-[10px]">📅 일별 진행에서 라운드를 넘겨 이 차수까지 진행해 보세요.</p>
+          </div>
+        )
       ) : (
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
         {r.groups.map((finalOrder, gi) => {
@@ -1381,11 +1438,21 @@ function ConfederationStandings({
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                      {chainKeys.map((k) => (
-                        <td key={k} className={`py-1.5 text-right tabular-nums ${k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}`}>
-                          {stagePctFor(teamId, k).toFixed(0)}%
-                        </td>
-                      ))}
+                      {chainKeys.length > 1 && stagePctFor(teamId, QUALIFY_KEY) >= 99.95 ? (
+                        // 이미 본선 진출을 확정지은 팀은 이후 녹아웃/추가 예선 확률 대신 '이전 차수에서 진출 확정'을 표시.
+                        <>
+                          <td colSpan={chainKeys.length - 1} className="py-1.5 text-center text-[10px] font-medium text-emerald-300/80">
+                            이전 차수에서 진출 확정
+                          </td>
+                          <td className="py-1.5 text-right font-bold text-sky-300 tabular-nums">100%</td>
+                        </>
+                      ) : (
+                        chainKeys.map((k) => (
+                          <td key={k} className={`py-1.5 text-right tabular-nums ${k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}`}>
+                            {stagePctFor(teamId, k).toFixed(0)}%
+                          </td>
+                        ))
+                      )}
                       <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} nextPct={nextPct} /></td>
                     </tr>
                   ))}
@@ -1415,11 +1482,18 @@ function ConfederationStandings({
                     </div>
                     {chainKeys.length > 0 && (
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
-                        {chainKeys.map((k) => (
-                          <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
-                            {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
-                          </span>
-                        ))}
+                        {stagePctFor(teamId, QUALIFY_KEY) >= 99.95 && chainKeys.length > 1 ? (
+                          <>
+                            <span className="font-medium text-emerald-300/80">이전 차수에서 진출 확정</span>
+                            <span className="font-bold text-sky-300">본선 100%</span>
+                          </>
+                        ) : (
+                          chainKeys.map((k) => (
+                            <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
+                              {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
+                            </span>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>

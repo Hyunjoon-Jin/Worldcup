@@ -21,6 +21,7 @@ import { useCareerStore } from '../../store/useCareerStore'
 import type { KnockoutRound } from '../../types/match'
 
 const ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL']
+const KO_LABEL: Record<string, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
 const MEDALS = ['🥇', '🥈', '🥉']
 
 export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void }) {
@@ -92,18 +93,30 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
       .slice(0, 3)
   }, [simResult])
 
+  const drawGroups = useDrawStore((s) => s.state.groups)
   const nextSlotPreview = useMemo(() => {
     if (!schedule) return null
     if (phase === 'group' || phase === 'idle') {
       const pending = nextPendingGroupSlot(schedule, groupMatches, currentDay)
-      return pending ? { date: pending.fixtures[0]?.date, timeSlot: pending.timeSlot, count: pending.fixtures.length } : null
+      if (!pending) return null
+      const fixtures = pending.fixtures.map((fx) => ({
+        homeId: drawGroups[fx.group]?.[fx.homeSeed - 1] ?? null,
+        awayId: drawGroups[fx.group]?.[fx.awaySeed - 1] ?? null,
+        label: `조 ${fx.group}`,
+      }))
+      return { date: pending.fixtures[0]?.date, timeSlot: pending.timeSlot, count: pending.fixtures.length, fixtures }
     }
     if (phase === 'knockout') {
       const pending = nextPendingKnockoutSlot(schedule, knockoutSlots)
-      return pending ? { date: pending.date, timeSlot: pending.timeSlot, count: pending.fixtures.length } : null
+      if (!pending) return null
+      const fixtures = pending.fixtures.map((fx) => {
+        const slot = knockoutSlots[fx.slotId]
+        return { homeId: slot?.team1Id ?? null, awayId: slot?.team2Id ?? null, label: KO_LABEL[fx.round] ?? fx.round }
+      })
+      return { date: pending.date, timeSlot: pending.timeSlot, count: pending.fixtures.length, fixtures }
     }
     return null
-  }, [schedule, phase, groupMatches, currentDay, knockoutSlots])
+  }, [schedule, phase, groupMatches, currentDay, knockoutSlots, drawGroups])
 
   if (!schedule) return null
 
@@ -146,10 +159,37 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
                 </GlassButton>
               </div>
               {nextSlotPreview?.date && (
-                <p className="text-[11px] text-gray-500">
-                  다음 경기: {formatKoreanDate(nextSlotPreview.date)} {nextSlotPreview.timeSlot} 현지시간 ·{' '}
-                  {nextSlotPreview.count}경기
-                </p>
+                <div className="w-full max-w-lg rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                  <p className="mb-1.5 text-[11px] font-bold text-sky-300">
+                    📋 다음 경기 예정 — {formatKoreanDate(nextSlotPreview.date)} {nextSlotPreview.timeSlot} 현지시간 · {nextSlotPreview.count}경기
+                  </p>
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {nextSlotPreview.fixtures.map((fx, i) => (
+                      <div key={i} className="flex items-center gap-1.5 rounded bg-white/5 px-2 py-1 text-[11px]">
+                        <span className="w-10 shrink-0 text-[9px] text-gray-500">{fx.label}</span>
+                        <span className="flex flex-1 items-center justify-center gap-1.5">
+                          {fx.homeId ? (
+                            <>
+                              <FlagIcon iso2={TEAMS_BY_ID[fx.homeId]?.iso2 ?? ''} className="h-2.5 w-4" />
+                              <span className="truncate text-gray-300">{TEAMS_BY_ID[fx.homeId]?.nameKo ?? fx.homeId}</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-600">미정</span>
+                          )}
+                          <span className="shrink-0 text-gray-600">vs</span>
+                          {fx.awayId ? (
+                            <>
+                              <span className="truncate text-gray-300">{TEAMS_BY_ID[fx.awayId]?.nameKo ?? fx.awayId}</span>
+                              <FlagIcon iso2={TEAMS_BY_ID[fx.awayId]?.iso2 ?? ''} className="h-2.5 w-4" />
+                            </>
+                          ) : (
+                            <span className="text-gray-600">미정</span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </>
           ) : (

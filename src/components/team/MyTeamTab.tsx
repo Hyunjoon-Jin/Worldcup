@@ -11,7 +11,7 @@ import { useMyTeamStore, MY_TEAM_BUFF_LEVELS, MY_TEAM_BUFF_LABEL } from '../../s
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
-import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
+import { useLiveFifaRanking, useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { getRatings } from '../../engine/matchEngine'
 import { isCurrentHost } from '../../engine/hostContext'
 import type { MatchResult } from '../../types/match'
@@ -47,13 +47,14 @@ function MatchRow({ m, myTeamId, label }: { m: MatchResult & { wentToPenalties?:
 /** 내 팀을 아직 안 골랐을 때의 선택기. */
 function TeamPicker({ onPick }: { onPick: (id: string) => void }) {
   const [query, setQuery] = useState('')
+  const liveRank = useLiveRankLookup()
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
     return ALL_NATIONS.filter((n) => {
       if (!q) return true
       return n.nameKo.includes(query.trim()) || n.nameEn.toLowerCase().includes(q) || n.id.toLowerCase().includes(q)
-    }).sort((a, b) => a.fifaRankApprox - b.fifaRankApprox)
-  }, [query])
+    }).sort((a, b) => liveRank(a.id, a.fifaRankApprox) - liveRank(b.id, b.fifaRankApprox))
+  }, [query, liveRank])
   return (
     <GlassCard strong className="flex flex-col gap-4 p-5">
       <div className="text-center">
@@ -80,7 +81,7 @@ function TeamPicker({ onPick }: { onPick: (id: string) => void }) {
           >
             <FlagIcon iso2={n.iso2} className="h-3.5 w-5 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-gray-100">{n.nameKo}</span>
-            <span className="shrink-0 text-[10px] text-gray-500">{n.fifaRankApprox}위</span>
+            <span className="shrink-0 text-[10px] text-gray-500">{liveRank(n.id, n.fifaRankApprox)}위</span>
           </button>
         ))}
         {list.length === 0 && <p className="col-span-full py-6 text-center text-xs text-gray-500">검색 결과가 없습니다.</p>}

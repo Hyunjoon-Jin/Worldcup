@@ -11,6 +11,7 @@ import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useMomentumStore } from '../../store/useMomentumStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { ProbabilityTrendChart } from './ProbabilityTrendChart'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { ITERATION_PRESETS, type IterationPreset } from '../../engine/config'
 
 /** 정렬 키: 본선진출(qualifyPct) 또는 본선 라운드별. */
@@ -61,6 +62,7 @@ export function ProbabilityDashboard() {
   const momentumByTeam = useMomentumStore((s) => s.offsets)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const { rows: chainRows, mode, loading: qualLoading } = useProbabilityChain()
+  const liveRank = useLiveRankLookup()
 
   // 본선 시뮬은 조추첨이 끝났을 때만 돌린다(예선 중엔 예선 진출 확률만 표시).
   useEffect(() => {
@@ -174,7 +176,7 @@ export function ProbabilityDashboard() {
                       <CrisisTag pct={crisisByTeam[row.teamId]?.pct} />
                     </div>
                   </td>
-                  <td className="py-1.5 text-right text-gray-500">{TEAMS_BY_ID[row.teamId].fifaRankApprox}위</td>
+                  <td className="py-1.5 text-right text-gray-500">{liveRank(row.teamId, TEAMS_BY_ID[row.teamId].fifaRankApprox)}위</td>
                   {CHAIN.map((s) => {
                     const v = stageValue(row, s.key)
                     return (
@@ -224,7 +226,7 @@ export function ProbabilityDashboard() {
               <span className="w-5 shrink-0 text-center text-xs text-gray-500">{idx + 1}</span>
               {myTeamId === row.teamId && <span title="내 팀">⭐</span>}
               <TeamLink teamId={row.teamId} className="min-w-0 font-medium text-gray-100" />
-              <span className="shrink-0 text-[10px] text-gray-500">FIFA {TEAMS_BY_ID[row.teamId].fifaRankApprox}위</span>
+              <span className="shrink-0 text-[10px] text-gray-500">FIFA {liveRank(row.teamId, TEAMS_BY_ID[row.teamId].fifaRankApprox)}위</span>
               <MomentumTag value={momentumByTeam[row.teamId]} />
               <CrisisTag pct={crisisByTeam[row.teamId]?.pct} />
             </div>

@@ -24,10 +24,50 @@ export function useLiveFifaRanking(): {
   const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
   const rankingBase = useCareerStore((s) => s.rankingBase)
 
-  return useMemo(() => {
-    if (!result) {
-      return { rows: [], rankByTeam: {}, pointsByTeam: {}, rowByTeam: {}, hasLive: false }
-    }
+  return useMemo(() => computeShared(result, revealed, groupMatches, knockoutSlots, rankingBase), [
+    result,
+    revealed,
+    groupMatches,
+    knockoutSlots,
+    rankingBase,
+  ])
+}
+
+/**
+ * 라이브 FIFA 순위 조회 함수. 진행 이력이 있으면 실시간 순위를, 없으면 fallback(정적 근사 순위)을
+ * 돌려준다. 화면 곳곳의 'FIFA X위' 표시를 실시간 순위와 일관되게 맞추는 데 쓴다.
+ */
+export function useLiveRankLookup(): (teamId: string, fallback: number) => number {
+  const { rankByTeam } = useLiveFifaRanking()
+  return (teamId, fallback) => rankByTeam[teamId] ?? fallback
+}
+
+type LiveRankingOutput = {
+  rows: LiveRankRow[]
+  rankByTeam: Record<string, number>
+  pointsByTeam: Record<string, number>
+  rowByTeam: Record<string, LiveRankRow>
+  hasLive: boolean
+}
+
+// 모듈 단위 캐시: 여러 컴포넌트가 이 훅을 동시에 써도(경기 상세·순위표 등) 입력이 같으면 계산을 한 번만 한다.
+// 스토어가 같은 참조를 돌려주는 한(값이 바뀌지 않으면) 마지막 계산을 재사용한다.
+let cache: { keys: unknown[]; value: LiveRankingOutput } | null = null
+
+function computeShared(
+  result: ReturnType<typeof useQualificationStore.getState>['result'],
+  revealed: Record<string, number>,
+  groupMatches: ReturnType<typeof useProgressStore.getState>['groupMatches'],
+  knockoutSlots: ReturnType<typeof useProgressStore.getState>['knockoutSlots'],
+  rankingBase: Record<string, number>,
+): LiveRankingOutput {
+  const keys = [result, revealed, groupMatches, knockoutSlots, rankingBase]
+  if (cache && cache.keys.length === keys.length && cache.keys.every((k, i) => k === keys[i])) return cache.value
+
+  let value: LiveRankingOutput
+  if (!result) {
+    value = { rows: [], rankByTeam: {}, pointsByTeam: {}, rowByTeam: {}, hasLive: false }
+  } else {
     const carried = Object.keys(rankingBase).length > 0 ? rankingBase : undefined
     const finals: FinalsResults = {
       groupMatches,
@@ -44,6 +84,8 @@ export function useLiveFifaRanking(): {
       pointsByTeam[r.teamId] = r.points
       rowByTeam[r.teamId] = r
     }
-    return { rows, rankByTeam, pointsByTeam, rowByTeam, hasLive: true }
-  }, [result, revealed, groupMatches, knockoutSlots, rankingBase])
+    value = { rows, rankByTeam, pointsByTeam, rowByTeam, hasLive: true }
+  }
+  cache = { keys, value }
+  return value
 }

@@ -110,6 +110,7 @@ export function FifaRankingTab() {
   const groupMatches = useProgressStore((s) => s.groupMatches)
   const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
   const rankingBase = useCareerStore((s) => s.rankingBase)
+  const wcYear = useCareerStore((s) => s.year)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const [query, setQuery] = useState('')
   const [sortMode, setSortMode] = useState<'rank' | 'up' | 'down'>('rank')
@@ -135,7 +136,7 @@ export function FifaRankingTab() {
     return computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried)
   }, [result, revealed, finals, carried])
 
-  const calendar = useMemo(() => (result ? buildQualCalendar(result) : []), [result])
+  const calendar = useMemo(() => (result ? buildQualCalendar(result, wcYear) : []), [result, wcYear])
   const dayCount = useMemo(
     () =>
       calendar.filter((d) => Object.keys(d.revealedByConfed).every((c) => d.revealedByConfed[c] <= (revealed[c] ?? 0)))

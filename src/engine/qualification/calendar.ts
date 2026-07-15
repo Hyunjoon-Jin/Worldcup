@@ -9,15 +9,21 @@ import type { QualMatch } from '../../types/qualification'
  * 그대로 재현하는 대신, 라운드↔윈도우 1:1 매핑으로 단순화해 "라운드 단위 하루씩 관전"을 쉽게 한다.
  * 그러면 라운드가 뭉개지거나 건너뛰지 않고, 한 경기일에 여러 대륙 경기가 함께 열린다(#16 근거). 순수 함수(결정적).
  */
+// 기준(2026 대회) 예선 기간. 다른 대회는 개최 연도 차이만큼 통째로 이동한다(2030이면 +4년 → 2029~2030).
+const BASE_WC_YEAR = 2026
 const QUAL_WINDOW_START = '2025-03-21'
 const QUAL_WINDOW_END = '2026-03-31'
 
-/** 윈도우 인덱스 w(0..total-1)를 실제 예선 기간에 균등 매핑한 ISO 날짜로 변환한다. */
-function windowDate(w: number, total: number): string {
+/** 윈도우 인덱스 w(0..total-1)를 예선 기간에 균등 매핑한 ISO 날짜로 변환한다. wcYear에 맞춰 연도를 이동한다. */
+function windowDate(w: number, total: number, wcYear: number): string {
+  const deltaYears = wcYear - BASE_WC_YEAR
   const s = new Date(QUAL_WINDOW_START + 'T00:00:00Z').getTime()
   const e = new Date(QUAL_WINDOW_END + 'T00:00:00Z').getTime()
   const frac = total <= 1 ? 0 : w / (total - 1)
-  return new Date(s + Math.round(frac * (e - s))).toISOString().slice(0, 10)
+  const iso = new Date(s + Math.round(frac * (e - s))).toISOString().slice(0, 10)
+  if (deltaYears === 0) return iso
+  const [y, m, d] = iso.split('-')
+  return `${Number(y) + deltaYears}-${m}-${d}`
 }
 
 export interface CalendarMatch {
@@ -43,8 +49,8 @@ function koLabel(iso: string): string {
   return `${y}년 ${Number(m)}월 ${Number(d)}일`
 }
 
-/** 전체 예선 결과로 경기일(캘린더)을 만든다. 경기가 있는 윈도우만, 날짜 오름차순. */
-export function buildQualCalendar(all: AllQualificationResult): CalendarDay[] {
+/** 전체 예선 결과로 경기일(캘린더)을 만든다. 경기가 있는 윈도우만, 날짜 오름차순. wcYear로 대회 시기를 맞춘다. */
+export function buildQualCalendar(all: AllQualificationResult, wcYear: number = BASE_WC_YEAR): CalendarDay[] {
   const confeds = Object.keys(all.byConfederation)
   const maxMd: Record<string, number> = {}
   for (const c of confeds) maxMd[c] = all.byConfederation[c].matchdays
@@ -66,7 +72,7 @@ export function buildQualCalendar(all: AllQualificationResult): CalendarDay[] {
     const revealedByConfed: Record<string, number> = {}
     // 윈도우 w까지 각 대륙은 라운드 1..(w+1)을 소화(자기 총 라운드로 상한).
     for (const c of confeds) revealedByConfed[c] = Math.min(w + 1, maxMd[c])
-    const date = windowDate(w, totalWindows)
+    const date = windowDate(w, totalWindows, wcYear)
     return {
       date,
       label: koLabel(date),
