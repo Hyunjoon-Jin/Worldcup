@@ -654,6 +654,7 @@ function QualHighlightsCard({ result, onSelectMatch }: { result: AllQualificatio
 
 /** 대륙 예선 개요 그리드 (H2). 전 대륙 진행·슬롯·대표 진출국을 한눈에. */
 function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult; onSelect: (c: Confederation) => void }) {
+  const liveRank = useLiveRankLookup()
   return (
     <GlassCard className="p-4">
       <h3 className="mb-3 text-sm font-bold text-gray-200">🗺️ 대륙 예선 개요</h3>
@@ -661,8 +662,15 @@ function QualOverviewCard({ result, onSelect }: { result: AllQualificationResult
         {CONFEDS.map((c) => {
           const r = result.byConfederation[c]
           if (!r) return null
-          const participants = new Set(r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])).size
-          const topQualifier = r.qualified[0]
+          const participantIds = [...new Set(r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]))]
+          const participants = participantIds.length
+          // 대표국가는 '현재 실시간 FIFA 랭킹'이 가장 높은(순위 숫자가 작은) 참가국으로 정한다.
+          const topQualifier = participantIds.reduce<string | null>((best, id) => {
+            if (best == null) return id
+            const ri = liveRank(id, ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999)
+            const rb = liveRank(best, ALL_NATIONS_BY_ID[best]?.fifaRankApprox ?? 999)
+            return ri < rb ? id : best
+          }, null)
           return (
             <button
               key={c}
