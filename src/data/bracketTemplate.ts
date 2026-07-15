@@ -16,10 +16,11 @@ export interface R32SlotDef {
 
 // 32강 고정 슬롯 구조: 전체 12개 조를 두 개의 브래킷 절반(6개조씩)으로 나누고,
 // 각 절반 안에서 "1위vs2위(WR) 2매치 + 1위vs3위(WT) 4매치 + 2위끼리(RR) 2매치" = 8매치를 편성한다.
-// 이는 실제 FIFA 규정의 4:8:4(WR:WT:RR) 비율과 "자기 조 팀과 재대결 금지"를 만족하는
+// 이는 실제 FIFA 규정의 4:8:4(WR:WT:RR) 비율과 "자기 조 팀과 조기 재대결 금지"를 만족하는
 // 구조적으로 동일한 형태의 대진이며, FIFA 공식 495종 조합표(Annex C)의 1:1 재현은 아니다.
 // 배열 순서(half A 8개 → half B 8개, 각 half 내부는 표준 브래킷 진행 순서)는 그대로
-// R16/QF/SF/Final 진행에 "인접 2개씩 페어링"으로 재사용된다.
+// R16/QF/SF/Final 진행에 "인접 2개씩 페어링"으로 재사용된다. 3위팀은 자기 조 1위와 R32에서,
+// 인접 슬롯 고정 팀(승자/준우승)과 R16에서 다시 만나지 않도록 배정된다(tournamentSimulation).
 export const HALF_A_GROUPS: GroupLetter[] = ['A', 'B', 'C', 'D', 'E', 'F']
 export const HALF_B_GROUPS: GroupLetter[] = ['G', 'H', 'I', 'J', 'K', 'L']
 
