@@ -4,6 +4,7 @@ import { simulateAllQualification, type AllQualificationResult } from '../engine
 import { buildQualCalendar } from '../engine/qualification/calendar'
 import { createQualProbAccumulator, type StageProbabilities } from '../engine/qualification/probability'
 import { buildFriendlies, type FriendlyMatch } from '../engine/qualification/friendlies'
+import { deriveQualStages, isKnockoutGroup } from '../engine/qualification/rules'
 import {
   collectPlayedByConfed,
   buildLockedLookups,
@@ -16,7 +17,9 @@ import {
   updateRankingPoints,
   updatedRatingsFromPoints,
   overallDeltasFromResults,
+  computeLiveRanking,
 } from '../engine/qualification/ranking'
+import { useRankHistoryStore } from './useRankHistoryStore'
 import type { LockedLookup } from '../engine/qualification/generic'
 import { generateSeed } from '../engine/rng'
 import { getRatings } from '../engine/matchEngine'
@@ -33,6 +36,44 @@ import type { QualWorkerOut } from '../workers/qualWorker'
  */
 function buildQualRatings(): Record<string, TeamRatings> {
   return Object.fromEntries(ALL_NATIONS.map((t) => [t.id, getRatings(t.id)]))
+}
+
+/** 이 스테이지가 '포트로 조추첨하는 조별 차수'인가(균등 크기 2개 이상 조, 녹아웃 아님). */
+function isPotDrawStage(r: AllQualificationResult['byConfederation'][string], stage: { groupIndices: number[] }): boolean {
+  const sizes = stage.groupIndices.map((gi) => r.groups[gi]?.length ?? 0)
+  if (stage.groupIndices.length < 2 || (sizes[0] ?? 0) < 3) return false
+  if (!sizes.every((n) => n === sizes[0])) return false
+  return !stage.groupIndices.every((gi) => isKnockoutGroup(r, gi))
+}
+
+/** 조추첨을 진행 단계로 끼워 넣을 경기일(윈도우) 집합 = 어떤 대륙이든 포트 조추첨 차수가 시작하는 라운드. */
+function computeDrawWindows(result: AllQualificationResult): Set<number> {
+  const windows = new Set<number>()
+  for (const r of Object.values(result.byConfederation)) {
+    for (const stage of deriveQualStages(r)) {
+      if (isPotDrawStage(r, stage)) windows.add(stage.startMd)
+    }
+  }
+  return windows
+}
+
+/**
+ * 지정한 경기일(윈도우)들의 '그 시점 전체 FIFA 순위'를 계산해 월별 랭킹 이력에 기록한다.
+ * 각 윈도우는 캘린더 날짜(≈월)에 대응하므로, 대회 단위가 아니라 월별로 최고·최저·평균 순위를 낼 수 있다.
+ */
+function recordRankMonths(result: AllQualificationResult, windows: number[], calendar: ReturnType<typeof buildQualCalendar>): void {
+  const valid = windows.filter((w) => w >= 1 && w <= calendar.length)
+  if (valid.length === 0) return
+  const base = useCareerStore.getState().rankingBase
+  const carried = Object.keys(base).length > 0 ? base : undefined
+  const entries = valid.map((w) => {
+    const played = flattenPlayed(collectPlayedByConfed(result, calendar[w - 1].revealedByConfed))
+    const rows = computeLiveRanking(result, played, { groupMatches: [], knockoutMatches: [] }, carried)
+    const rankByTeam: Record<string, number> = {}
+    for (const row of rows) rankByTeam[row.teamId] = row.rank
+    return { date: calendar[w - 1].date, rankByTeam }
+  })
+  useRankHistoryStore.getState().recordMany(entries)
 }
 
 /**
@@ -110,12 +151,18 @@ interface QualificationStore {
   revealed: Record<string, number>
   /** 예선 기간 중 열리는 친선전(평가전) — 그 경기일에 예선 경기가 없는 국가들끼리. */
   friendlies: FriendlyMatch[]
+  /** null이 아니면 이 경기일(윈도우)의 경기를 공개하기 전에 그 차수 '조추첨'을 먼저 보여주는 중이다. */
+  drawPending: number | null
   simulate: (seed?: string) => void
   computeProbabilities: () => void
   /** 특정 대륙의 공개 라운드를 설정한다. */
   setRevealed: (confed: string, matchday: number) => void
   /** 여러 대륙의 공개 라운드를 한 번에 설정한다(일별 진행 B2). */
   setRevealedMany: (map: Record<string, number>) => void
+  /** 하루씩 진행: 조추첨이 낀 경기일 앞에서는 먼저 조추첨을 보여주고, 다시 누르면 그 경기일을 공개한다. */
+  advanceQual: () => void
+  /** 남은 예선을 끝까지 공개한다(조추첨 단계 포함 모두 건너뛰기). */
+  advanceQualToEnd: () => void
   reset: () => void
 }
 
@@ -139,6 +186,7 @@ export const useQualificationStore = create<QualificationStore>()(
       probLoading: false,
       revealed: {},
       friendlies: [],
+      drawPending: null,
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
         // 커리어 폼(이전 대회 흐름)을 시작 전력에 반영한 뒤, 현재 대회 개최국으로 시뮬레이션한다.
@@ -147,22 +195,59 @@ export const useQualificationStore = create<QualificationStore>()(
         const result = simulateAllQualification(usedSeed, qualRatings, undefined, getCurrentHostIds())
         // 예선 기간 중 쉬는 국가들끼리 친선전(평가전)을 편성해 둔다(경기일별, 결정론적).
         const friendlies = buildFriendlies(result, qualRatings, usedSeed)
-        // 첫 경기일부터 날짜별로 진행(관전)하도록, 공개 라운드를 캘린더 1일차 상태로 시작한다.
-        // '⏭ 끝'으로 언제든 전체 결과로 건너뛸 수 있다.
+        // 첫 경기일부터 하루씩 진행. 이후 차수 사이(2차·3차 …)에서 advanceQual이 조추첨을 끼워 넣는다.
         const calendar = buildQualCalendar(result, useCareerStore.getState().year)
         const revealed =
           calendar.length > 0
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
-        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies })
+        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies, drawPending: null })
         syncPerformanceDeltas(result, revealed)
+        recordRankMonths(result, [1], calendar) // 첫 경기일(월) 순위 스냅샷 기록
+      },
+      advanceQual: () => {
+        const { result, revealed, drawPending } = get()
+        if (!result) return
+        const cal = buildQualCalendar(result, useCareerStore.getState().year)
+        if (cal.length === 0) return
+        if (drawPending != null) {
+          // 조추첨을 봤으니 그 경기일 경기를 공개한다.
+          const w = Math.min(drawPending, cal.length)
+          const rev = cal[w - 1].revealedByConfed
+          set({ revealed: rev, drawPending: null })
+          syncPerformanceDeltas(result, rev)
+          recordRankMonths(result, [w], cal)
+          return
+        }
+        const cur = Math.max(0, ...Object.values(revealed))
+        const next = cur + 1
+        if (next > cal.length) return
+        // 다음 경기일에 조추첨 차수가 시작되면, 경기 공개 전에 조추첨을 먼저 보여준다.
+        if (computeDrawWindows(result).has(next)) {
+          set({ drawPending: next })
+        } else {
+          const rev = cal[next - 1].revealedByConfed
+          set({ revealed: rev, drawPending: null })
+          syncPerformanceDeltas(result, rev)
+          recordRankMonths(result, [next], cal)
+        }
+      },
+      advanceQualToEnd: () => {
+        const { result } = get()
+        if (!result) return
+        const cal = buildQualCalendar(result, useCareerStore.getState().year)
+        const rev = Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
+        set({ revealed: rev, drawPending: null })
+        syncPerformanceDeltas(result, rev)
+        // 건너뛰어도 월별 이력이 비지 않도록 모든 경기일 스냅샷을 채운다.
+        recordRankMonths(result, Array.from({ length: cal.length }, (_, i) => i + 1), cal)
       },
       setRevealed: (confed, matchday) => {
         set({ revealed: { ...get().revealed, [confed]: matchday } })
         syncPerformanceDeltas(get().result, get().revealed)
       },
       setRevealedMany: (map) => {
-        set({ revealed: { ...get().revealed, ...map } })
+        set({ revealed: { ...get().revealed, ...map }, drawPending: null })
         syncPerformanceDeltas(get().result, get().revealed)
       },
       computeProbabilities: () => {
@@ -210,16 +295,28 @@ export const useQualificationStore = create<QualificationStore>()(
           probWorker = null
         }
         usePerformanceStore.getState().reset()
-        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {}, friendlies: [] })
+        // 월별 랭킹 이력(useRankHistoryStore)은 대회 간 누적이므로 여기서 지우지 않는다(전체 삭제는 clearAllHistory).
+        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {}, friendlies: [], drawPending: null })
       },
     }),
     {
       name: 'wc2026-qualification-store',
       version: 3,
-      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed, friendlies: s.friendlies }),
+      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed, friendlies: s.friendlies, drawPending: s.drawPending }),
       onRehydrateStorage: () => (state) => {
         // 새로고침 후 저장된 진행 상황으로 성적 반영 능력치 보정을 복원한다.
-        if (state?.result) syncPerformanceDeltas(state.result, state.revealed)
+        if (state?.result) {
+          syncPerformanceDeltas(state.result, state.revealed)
+          // 친선전은 (결과+시드)에서 파생되므로, 예전 빌드에서 만들어진 저장본이 있어도 현재 규칙(전력 차 50위 이내)으로
+          // 항상 다시 계산해 덮어쓴다. 이렇게 하면 오래된 저장 상태의 잘못된 친선전 매칭이 새로고침 시 교정된다.
+          if (state.seed) {
+            try {
+              state.friendlies = buildFriendlies(state.result, buildQualRatings(), state.seed)
+            } catch {
+              /* 능력치 계산 실패 시 저장본 유지 */
+            }
+          }
+        }
       },
     },
   ),

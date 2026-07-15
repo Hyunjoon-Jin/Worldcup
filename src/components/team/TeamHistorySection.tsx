@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useHistoryStore } from '../../store/useHistoryStore'
+import { useRankHistoryStore, aggregateMonthlyRank } from '../../store/useRankHistoryStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useCareerStore } from '../../store/useCareerStore'
@@ -30,8 +31,14 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   )
 }
 
+/** 날짜(yyyy-mm-dd) → 'YY.M월' 짧은 라벨. */
+function monthLabel(iso: string): string {
+  const [y, m] = iso.split('-')
+  return `${y.slice(2)}.${Number(m)}월`
+}
+
 /** 랭킹 추이 미니 스파크라인(순위는 작을수록 위). 값이 2개 이상일 때만 그린다. */
-function RankSparkline({ trend }: { trend: Array<{ year: number; rank: number }> }) {
+function RankSparkline({ trend }: { trend: Array<{ label: string; rank: number }> }) {
   if (trend.length < 2) return null
   const ranks = trend.map((t) => t.rank)
   const min = Math.min(...ranks)
@@ -47,15 +54,15 @@ function RankSparkline({ trend }: { trend: Array<{ year: number; rank: number }>
   const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   return (
     <div>
-      <svg viewBox={`-4 -4 ${W + 8} ${H + 8}`} className="h-14 w-full" role="img" aria-label="연도별 FIFA 순위 추이">
+      <svg viewBox={`-4 -4 ${W + 8} ${H + 8}`} className="h-14 w-full" role="img" aria-label="월별 FIFA 순위 추이">
         <path d={path} fill="none" stroke="#38bdf8" strokeWidth="1.5" />
         {pts.map((p, i) => (
           <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="#38bdf8" />
         ))}
       </svg>
       <div className="flex justify-between text-[9px] text-gray-500">
-        <span>{trend[0].year} ({trend[0].rank}위)</span>
-        <span>{trend[trend.length - 1].year} ({trend[trend.length - 1].rank}위)</span>
+        <span>{trend[0].label} ({trend[0].rank}위)</span>
+        <span>{trend[trend.length - 1].label} ({trend[trend.length - 1].rank}위)</span>
       </div>
     </div>
   )
@@ -107,30 +114,41 @@ export function TeamHistorySection({ teamId }: { teamId: string }) {
     [allEditions, teamId],
   )
 
+  // 월별 랭킹 이력(있으면 우선). 없으면 대회 단위 이력으로 대체한다.
+  const rankSnapshots = useRankHistoryStore((s) => s.snapshots)
+  const monthly = useMemo(() => aggregateMonthlyRank(rankSnapshots, teamId), [rankSnapshots, teamId])
+  const bestRank = monthly.best
+    ? { rank: monthly.best.rank, sub: monthLabel(monthly.best.date) }
+    : stats.bestRank
+      ? { rank: stats.bestRank.rank, sub: String(stats.bestRank.year) }
+      : null
+  const worstRank = monthly.worst
+    ? { rank: monthly.worst.rank, sub: monthLabel(monthly.worst.date) }
+    : stats.worstRank
+      ? { rank: stats.worstRank.rank, sub: String(stats.worstRank.year) }
+      : null
+  const avgRank = monthly.avg ?? stats.avgRank
+  const rankTrend =
+    monthly.trend.length >= 2
+      ? monthly.trend.map((t) => ({ label: monthLabel(t.date), rank: t.rank }))
+      : stats.rankTrend.map((t) => ({ label: String(t.year), rank: t.rank }))
+
   return (
     <GlassCard className="p-4">
       <h3 className="mb-3 text-sm font-bold text-sky-300">📜 역대 기록 (2026~)</h3>
 
-      {/* FIFA 랭킹 기록 */}
-      <p className="mb-1.5 text-[11px] font-bold text-gray-400">FIFA 랭킹</p>
+      {/* FIFA 랭킹 기록 (월별) */}
+      <p className="mb-1.5 text-[11px] font-bold text-gray-400">FIFA 랭킹 <span className="font-normal text-gray-600">(월별)</span></p>
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="현재" value={currentRank != null ? `${currentRank}위` : '—'} />
-        <Stat
-          label="역대 최고"
-          value={stats.bestRank ? `${stats.bestRank.rank}위` : '—'}
-          sub={stats.bestRank ? `${stats.bestRank.year}` : undefined}
-        />
-        <Stat
-          label="역대 최저"
-          value={stats.worstRank ? `${stats.worstRank.rank}위` : '—'}
-          sub={stats.worstRank ? `${stats.worstRank.year}` : undefined}
-        />
-        <Stat label="평균 순위" value={stats.avgRank != null ? `${stats.avgRank.toFixed(1)}위` : '—'} />
+        <Stat label="역대 최고" value={bestRank ? `${bestRank.rank}위` : '—'} sub={bestRank?.sub} />
+        <Stat label="역대 최저" value={worstRank ? `${worstRank.rank}위` : '—'} sub={worstRank?.sub} />
+        <Stat label="평균 순위" value={avgRank != null ? `${avgRank.toFixed(1)}위` : '—'} />
       </div>
-      {stats.rankTrend.length >= 2 && (
+      {rankTrend.length >= 2 && (
         <div className="mb-4">
-          <p className="mb-1 text-[11px] font-bold text-gray-400">순위 추이</p>
-          <RankSparkline trend={stats.rankTrend} />
+          <p className="mb-1 text-[11px] font-bold text-gray-400">순위 추이 <span className="font-normal text-gray-600">(월별)</span></p>
+          <RankSparkline trend={rankTrend} />
         </div>
       )}
 
