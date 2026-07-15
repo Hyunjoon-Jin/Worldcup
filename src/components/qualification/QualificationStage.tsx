@@ -17,7 +17,7 @@ import { computeQualStats, computeConfedDifficulty, computeLuckAnalysis, probMar
 import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
-import { QUAL_RULES, INTER_CONFED_RULE, deriveQualStages, stageStatus, stageNameAt } from '../../engine/qualification/rules'
+import { QUAL_RULES, INTER_CONFED_RULE, deriveQualStages, stageStatus, stageNameAt, isKnockoutGroup } from '../../engine/qualification/rules'
 import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, editionEndRankingPoints, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
@@ -31,7 +31,7 @@ import { QualMatchModal } from './QualMatchModal'
 import { QualDrawReveal } from './QualDrawReveal'
 import type { Confederation } from '../../types/team'
 import type { MatchResult } from '../../types/match'
-import type { QualificationResult } from '../../types/qualification'
+import type { QualificationResult, QualMatch } from '../../types/qualification'
 import type { InterConfedResult } from '../../engine/qualification/interConfed'
 
 /** 한 조의 경기 목록(접이식). 클릭 시 상세 모달을 연다 (F1). */
@@ -112,6 +112,129 @@ function NationLabel({
     >
       {inner}
     </button>
+  )
+}
+
+/**
+ * 녹아웃(브래킷/2연전) 스테이지 표시 — 순위표 대신 대진표로 그린다. 조 2위 미니토너먼트·UEFA PO 경로·
+ * OFC 녹아웃(준결승→결승) 및 AFC 5차(홈&어웨이 2연전) 같은 단판/합산 토너먼트를 올바른 형태로 보여준다.
+ */
+function KnockoutStageView({
+  groupLabel,
+  matches,
+  qSet,
+  pSet,
+  myTeamId,
+  onSelectMatch,
+}: {
+  groupLabel: string
+  matches: QualMatch[]
+  qSet: Set<string>
+  pSet: Set<string>
+  myTeamId: string | null
+  onSelectMatch: (m: MatchResult) => void
+}) {
+  if (matches.length === 0) {
+    return <p className="rounded-lg bg-white/5 px-3 py-4 text-center text-[11px] text-gray-500">이 녹아웃은 아직 진행되지 않았습니다.</p>
+  }
+  const teams = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]))
+  const mds = [...new Set(matches.map((m) => m.matchday))].sort((a, b) => a - b)
+  const twoLeg = teams.size === 2 && mds.length >= 2 // 같은 두 팀의 홈&어웨이 2연전(합산)
+  const nameKo = (id: string) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id
+  const resultBadge = (id: string) =>
+    qSet.has(id) ? (
+      <span className="ml-1 rounded bg-emerald-500/20 px-1 text-[9px] font-bold text-emerald-300">직행</span>
+    ) : pSet.has(id) ? (
+      <span className="ml-1 rounded bg-amber-500/20 px-1 text-[9px] font-bold text-amber-300">PO</span>
+    ) : null
+
+  const MatchRow = ({ m, winner }: { m: QualMatch; winner: string | null }) => (
+    <button
+      type="button"
+      onClick={() => onSelectMatch(m)}
+      className="flex w-full items-center gap-2 rounded bg-white/5 px-2 py-1.5 text-[11px] hover:bg-white/10"
+    >
+      <span className={`min-w-0 flex-1 truncate text-right ${winner === m.homeTeamId ? 'font-bold text-emerald-200' : 'text-gray-400'}`}>
+        {m.homeTeamId === myTeamId && '⭐'}
+        {nameKo(m.homeTeamId)}
+      </span>
+      <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 font-bold tabular-nums text-white">
+        {m.homeGoals}-{m.awayGoals}
+      </span>
+      <span className={`min-w-0 flex-1 truncate ${winner === m.awayTeamId ? 'font-bold text-emerald-200' : 'text-gray-400'}`}>
+        {nameKo(m.awayTeamId)}
+        {m.awayTeamId === myTeamId && '⭐'}
+      </span>
+    </button>
+  )
+
+  if (twoLeg) {
+    const [a, b] = [...teams]
+    const agg: Record<string, number> = { [a]: 0, [b]: 0 }
+    for (const m of matches) {
+      agg[m.homeTeamId] += m.homeGoals
+      agg[m.awayTeamId] += m.awayGoals
+    }
+    // 합산 승자 = 골 합계 우위, 동률이면 진출(qSet/pSet)에 있는 팀.
+    const winner = agg[a] !== agg[b] ? (agg[a] > agg[b] ? a : b) : qSet.has(a) || pSet.has(a) ? a : b
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[10px] font-bold text-violet-300">{groupLabel} · 홈&어웨이 2연전(합산)</p>
+        {mds.map((md, i) => {
+          const m = matches.find((x) => x.matchday === md)!
+          return (
+            <div key={md} className="flex items-center gap-1.5">
+              <span className="shrink-0 text-[9px] text-gray-500">{i + 1}차전</span>
+              <div className="flex-1">
+                <MatchRow m={m} winner={null} />
+              </div>
+            </div>
+          )
+        })}
+        <div className="flex items-center justify-center gap-2 rounded bg-emerald-500/10 px-2 py-1 text-[11px]">
+          <span className="text-gray-400">합산</span>
+          <span className={winner === a ? 'font-bold text-emerald-200' : 'text-gray-400'}>{nameKo(a)} {agg[a]}</span>
+          <span className="text-gray-500">-</span>
+          <span className={winner === b ? 'font-bold text-emerald-200' : 'text-gray-400'}>{agg[b]} {nameKo(b)}</span>
+          {resultBadge(winner)}
+        </div>
+      </div>
+    )
+  }
+
+  // 브래킷(단판 토너먼트): 라운드(matchday) 순. 라운드 이름은 그 라운드의 경기 수로 판정한다
+  // (결승 1 · 준결승 2 · 8강 4 …) → 일부만 공개된 중간 상태에서도 라벨이 어긋나지 않는다.
+  const roundNameByCount = (n: number): string =>
+    ({ 1: '결승', 2: '준결승', 4: '8강', 8: '16강', 16: '32강' })[n] ?? `${n * 2}강`
+  const matchWinner = (m: QualMatch) => (m.homeGoals >= m.awayGoals ? m.homeTeamId : m.awayTeamId)
+  return (
+    <div className="space-y-2">
+      {mds.map((md) => {
+        const roundMatches = matches.filter((m) => m.matchday === md)
+        const roundName = roundNameByCount(roundMatches.length)
+        const isFinal = roundMatches.length === 1
+        return (
+          <div key={md}>
+            <p className="mb-1 text-[10px] font-bold text-violet-300">{roundName}</p>
+            <div className="space-y-1">
+              {roundMatches.map((m, j) => {
+                const w = matchWinner(m)
+                const drawn = m.homeGoals === m.awayGoals
+                return (
+                  <div key={j} className="flex items-center gap-1.5">
+                    <div className="flex-1">
+                      <MatchRow m={m} winner={w} />
+                    </div>
+                    {drawn && <span className="shrink-0 text-[9px] text-gray-500" title="무승부 시 상위 시드 진출">시드</span>}
+                    {isFinal && resultBadge(w)}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1038,7 +1161,10 @@ function ConfederationStandings({
   const firstStageGroupSize = stageGroupSizes[0] ?? 0
   // 포트 재구성은 조 크기가 모두 같을 때만 정확하다(크기가 다르면 슬라이스가 어긋나므로 표시하지 않는다).
   const uniformGroupSizes = stageGroupSizes.length > 0 && stageGroupSizes.every((n) => n === firstStageGroupSize)
-  const showDrawPots = !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes
+  // 녹아웃(플레이오프·2연전) 차수는 포트 조추첨이 아니므로 조추첨 포트/리빌을 표시하지 않는다.
+  const selectedStageIsKnockout = !!selectedStage && selectedStage.groupIndices.every((gi) => isKnockoutGroup(r, gi))
+  const showDrawPots =
+    !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes && !selectedStageIsKnockout
   const drawPots: string[][] = showDrawPots
     ? Array.from({ length: firstStageGroupSize }, (_, p) => stageTeamsSorted.slice(p * stageNumGroups, (p + 1) * stageNumGroups))
     : []
@@ -1173,6 +1299,23 @@ function ConfederationStandings({
         {r.groups.map((finalOrder, gi) => {
           if (!visibleGroupIdx.has(gi)) return null // 선택된 차수의 조만 노출
           const groupMatches = shownMatches.filter((m) => m.group === gi)
+          // 녹아웃(브래킷/2연전) 조는 순위표가 아니라 대진표로 그린다(리그 형태 오표시 방지).
+          if (isKnockoutGroup(r, gi)) {
+            const koLabel = r.groupLabels?.[gi] ?? '녹아웃'
+            return (
+              <div key={gi} className="rounded-lg border border-violet-400/15 bg-violet-500/[0.04] p-2.5">
+                <p className="mb-1.5 font-display text-xs font-bold text-violet-200">🏆 {koLabel}</p>
+                <KnockoutStageView
+                  groupLabel={koLabel}
+                  matches={groupMatches as QualMatch[]}
+                  qSet={qSet}
+                  pSet={pSet}
+                  myTeamId={myTeamId}
+                  onSelectMatch={onSelectMatch}
+                />
+              </div>
+            )
+          }
           const groupTeams = rankGroupTeams(finalOrder, groupMatches)
           // 조 자체 경기만으로 순위 지표 계산(다단계 대륙에서 팀이 여러 조에 걸쳐도 정확).
           const gStand = computeStandings(finalOrder, groupMatches)
