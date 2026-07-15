@@ -26,6 +26,8 @@ import {
   type ScenarioVerdict,
 } from '../../engine/qualificationStatus'
 import { runOpponentForecast, runTeamScenarioSimulation, type RoundOpponentForecast, type TeamScenarioResult } from '../../engine/monteCarlo'
+import { runProjectedFinalsForTeam, type ProjectedFinals } from '../../engine/projectedFinals'
+import { useQualificationStore } from '../../store/useQualificationStore'
 import { buildSnapshot } from '../../engine/buildSnapshot'
 import { runSensitivity, type SensitivityPoint } from '../../engine/sensitivity'
 import { useDrawStore } from '../../store/useDrawStore'
@@ -135,6 +137,10 @@ export function TeamDetailPage() {
   const [scenarioLoading, setScenarioLoading] = useState(false)
   const [forecast, setForecast] = useState<RoundOpponentForecast[] | null>(null)
   const [forecastLoading, setForecastLoading] = useState(false)
+  const [projFinals, setProjFinals] = useState<ProjectedFinals | null>(null)
+  const [projLoading, setProjLoading] = useState(false)
+  const qualResult = useQualificationStore((s) => s.result)
+  const qualSeed = useQualificationStore((s) => s.seed)
   const [sensitivity, setSensitivity] = useState<SensitivityPoint[] | null>(null)
   const [sensitivityLoading, setSensitivityLoading] = useState(false)
 
@@ -303,6 +309,21 @@ export function TeamDetailPage() {
     }, 10)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, playedGroupCount])
+
+  // 본선 조추첨 전(지역예선 중): 예상 진출 48개국으로 무작위 조편성해 본선을 여러 번 시뮬레이션하여
+  // 이 팀의 '예상' 라운드별 진출 확률·예상 상대를 낸다(조추첨이 확정되면 실제 값으로 대체).
+  useEffect(() => {
+    setProjFinals(null)
+    if (inFinals || !teamId || !qualResult) return
+    setProjLoading(true)
+    const t = setTimeout(() => {
+      const field = qualResult.qualified48
+      const projRatings = Object.fromEntries(field.map((id) => [id, getRatings(id)]))
+      setProjFinals(runProjectedFinalsForTeam(field, projRatings, teamId, 120, qualSeed ?? 'PROJ'))
+      setProjLoading(false)
+    }, 10)
+    return () => clearTimeout(t)
+  }, [teamId, inFinals, qualResult, qualSeed])
 
   if (!team || !teamId) return null
 
@@ -630,10 +651,35 @@ export function TeamDetailPage() {
             ))}
           </div>
         ) : !inFinals ? (
-          <p className="text-sm text-gray-400">
-            🗓 아직 본선에 진출하지 않았습니다. 지역예선을 통과하고 <strong className="text-emerald-300">본선 조추첨</strong>이 끝나면
-            32강~우승 라운드별 진출 확률이 표시됩니다. (예선 진출 확률은 위 <strong className="text-sky-300">‘지역예선 현황’</strong>에서 확인하세요.)
-          </p>
+          projLoading ? (
+            <p className="text-sm text-gray-400">예상 계산 중…</p>
+          ) : !qualResult ? (
+            <p className="text-sm text-gray-400">지역예선을 시작하면 예상 본선 진출 확률이 표시됩니다.</p>
+          ) : projFinals?.inField ? (
+            <>
+              <p className="mb-2 text-[11px] text-amber-300">
+                🔮 조추첨 전 <strong>예상값</strong> — 현재 예선 예상 진출 48개국으로 무작위 조편성을 여러 번 돌린 평균입니다
+                (실제 조추첨 후 확정값으로 대체).
+              </p>
+              <div className="space-y-2">
+                {[
+                  { label: '32강 진출', pct: projFinals.reach.groupStage, color: '#34d399' },
+                  { label: '16강', pct: projFinals.reach.r16, color: '#60a5fa' },
+                  { label: '8강', pct: projFinals.reach.qf, color: '#a78bfa' },
+                  { label: '4강', pct: projFinals.reach.sf, color: '#f472b6' },
+                  { label: '결승', pct: projFinals.reach.final, color: '#fbbf24' },
+                  { label: '우승', pct: projFinals.reach.champion, color: '#f87171' },
+                ].map((row) => (
+                  <ProbBar key={row.label} pct={row.pct} color={row.color} label={row.label} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">
+              🗓 현재 예선 예상으로는 이 팀이 본선에 오르지 못합니다. 예선 진출 확률은 위{' '}
+              <strong className="text-sky-300">‘지역예선 현황’</strong>에서 확인하세요.
+            </p>
+          )
         ) : (
           <p className="text-sm text-gray-400">
             "확률 대시보드" 탭에서 먼저 시뮬레이션을 실행하면 이 팀의 본선 라운드별 진출 확률이 표시됩니다.
@@ -699,9 +745,41 @@ export function TeamDetailPage() {
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-violet-300">본선 라운드별 예상 상대</h3>
         {!inFinals ? (
-          <p className="text-sm text-gray-400">
-            🗓 지역예선 진행 중입니다. 본선에 진출해 <strong className="text-violet-300">조추첨</strong>이 끝나면 라운드별 예상 상대가 표시됩니다.
-          </p>
+          projLoading ? (
+            <p className="text-sm text-gray-400">예상 계산 중…</p>
+          ) : projFinals?.inField && projFinals.opponents.some((f) => f.reachPct > 0.5) ? (
+            <>
+              <p className="mb-2 text-[11px] text-amber-300">🔮 조추첨 전 예상 — 무작위 조편성 평균 기준.</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {projFinals.opponents
+                  .filter((f) => f.reachPct > 0.5)
+                  .map((f) => (
+                    <div key={f.round} className="rounded-lg bg-white/5 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="font-display text-sm font-semibold text-gray-100">{ROUND_LABEL_KO[f.round]}</span>
+                        <span className="text-[10px] text-gray-500">도달 확률 {f.reachPct.toFixed(1)}%</span>
+                      </div>
+                      {f.opponents.length === 0 ? (
+                        <p className="text-xs text-gray-500">표본 부족</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {f.opponents.map((o) => (
+                            <li key={o.teamId} className="flex items-center justify-between text-xs">
+                              <TeamLink teamId={o.teamId} flagClassName="h-2.5 w-3.5" />
+                              <span className="tabular-nums text-gray-300">{o.pct.toFixed(1)}%</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">
+              🗓 현재 예선 예상으로는 본선 32강 도달 가능성이 낮아 예상 상대를 추정하기 어렵습니다.
+            </p>
+          )
         ) : forecastLoading || !forecast ? (
           <p className="text-sm text-gray-400">분석 중…</p>
         ) : (
