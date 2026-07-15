@@ -5,6 +5,7 @@ import { GlassCard } from '../common/GlassCard'
 import { FlagIcon } from '../common/FlagIcon'
 import { ProbBar } from '../probability/ProbBar'
 import { useQualificationStore } from '../../store/useQualificationStore'
+import { useCareerStore } from '../../store/useCareerStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { deriveQualStages, stageNameAt, stageNameOfGroup } from '../../engine/qualification/rules'
 import { QUALIFY_KEY, INTER_PLAYOFF_KEY } from '../../engine/qualification/probability'
@@ -90,19 +91,20 @@ export function TeamQualificationSection({
   const revealedMap = useQualificationStore((s) => s.revealed)
   const stageProbs = useQualificationStore((s) => s.stageProbabilities)
   const friendlies = useQualificationStore((s) => s.friendlies)
+  const wcYear = useCareerStore((s) => s.year)
 
   const team = ALL_NATIONS_BY_ID[teamId]
   const confed = team?.confederation
   const r = confed ? result?.byConfederation[confed] : undefined
 
-  // 라운드(matchday) → 날짜 라벨. 전체 예선 캘린더에서 윈도우별 날짜를 뽑아 매핑한다.
+  // 라운드(matchday) → 날짜 라벨. 전체 예선 캘린더에서 윈도우별 날짜를 뽑아 매핑한다(대회 연도 반영).
   const dateByMatchday = useMemo(() => {
     if (!result) return {} as Record<number, string>
-    const cal = buildQualCalendar(result)
+    const cal = buildQualCalendar(result, wcYear)
     const map: Record<number, string> = {}
     for (const d of cal) map[d.windowIndex + 1] = d.date // 윈도우 w ↔ 라운드 w+1
     return map
-  }, [result])
+  }, [result, wcYear])
 
   const view = useMemo(() => {
     if (!r || !confed) return null

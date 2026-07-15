@@ -3,6 +3,7 @@ import { TeamLink } from '../common/TeamLink'
 import { rankGroupTeams, rankThirdPlaceTeams } from '../../engine/tiebreakers'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import type { QualificationStatus } from '../../engine/qualificationStatus'
 import type { GroupLetter } from '../../types/group'
 import type { GroupMatch } from '../../types/match'
@@ -20,6 +21,7 @@ function StatusCell({ status }: { status?: QualificationStatus }) {
 }
 
 export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlaceTableProps) {
+  const liveRank = useLiveRankLookup()
   const thirdByGroup: Partial<Record<GroupLetter, string>> = {}
   for (const group of GROUP_LETTERS) {
     const teamIds = groupTeams[group]
@@ -71,7 +73,7 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlac
                     <TeamLink teamId={entry.teamId} wrap className="min-w-0 font-medium text-gray-100" />
                   </td>
                   <td className="hidden text-center text-gray-500 sm:table-cell">
-                    {TEAMS_BY_ID[entry.teamId].fifaRankApprox}위
+                    {liveRank(entry.teamId, TEAMS_BY_ID[entry.teamId].fifaRankApprox)}위
                   </td>
                   <td className="text-center text-gray-300">{entry.group}</td>
                   <td className="text-center text-gray-300">{gd > 0 ? `+${gd}` : gd}</td>

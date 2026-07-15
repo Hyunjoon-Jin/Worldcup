@@ -2,6 +2,7 @@ import { GlassCard } from '../common/GlassCard'
 import { FlagIcon } from '../common/FlagIcon'
 import { getRatings } from '../../engine/matchEngine'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import type { MatchResult } from '../../types/match'
 
 function RatingRow({ label, home, away }: { label: string; home: number; away: number }) {
@@ -18,6 +19,7 @@ function RatingRow({ label, home, away }: { label: string; home: number; away: n
 export function QualMatchModal({ match, onClose }: { match: MatchResult; onClose: () => void }) {
   const home = ALL_NATIONS_BY_ID[match.homeTeamId]
   const away = ALL_NATIONS_BY_ID[match.awayTeamId]
+  const liveRank = useLiveRankLookup()
   if (!home || !away) return null
   const hr = getRatings(match.homeTeamId)
   const ar = getRatings(match.awayTeamId)
@@ -35,7 +37,7 @@ export function QualMatchModal({ match, onClose }: { match: MatchResult; onClose
           <div className="flex flex-1 flex-col items-center gap-1.5 text-center">
             <FlagIcon iso2={home.iso2} className="h-8 w-12" />
             <span className="text-sm font-semibold text-white">{home.nameKo}</span>
-            <span className="text-[10px] text-gray-500">FIFA {home.fifaRankApprox}위</span>
+            <span className="text-[10px] text-gray-500">FIFA {liveRank(match.homeTeamId, home.fifaRankApprox)}위</span>
           </div>
           <div className="rounded-lg bg-white/10 px-3 py-1.5 text-2xl font-bold text-white">
             {match.homeGoals} - {match.awayGoals}
@@ -43,7 +45,7 @@ export function QualMatchModal({ match, onClose }: { match: MatchResult; onClose
           <div className="flex flex-1 flex-col items-center gap-1.5 text-center">
             <FlagIcon iso2={away.iso2} className="h-8 w-12" />
             <span className="text-sm font-semibold text-white">{away.nameKo}</span>
-            <span className="text-[10px] text-gray-500">FIFA {away.fifaRankApprox}위</span>
+            <span className="text-[10px] text-gray-500">FIFA {liveRank(match.awayTeamId, away.fifaRankApprox)}위</span>
           </div>
         </div>
         <div className="rounded-lg bg-white/5 p-3">

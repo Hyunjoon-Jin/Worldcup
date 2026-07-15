@@ -149,7 +149,7 @@ export const useQualificationStore = create<QualificationStore>()(
         const friendlies = buildFriendlies(result, qualRatings, usedSeed)
         // 첫 경기일부터 날짜별로 진행(관전)하도록, 공개 라운드를 캘린더 1일차 상태로 시작한다.
         // '⏭ 끝'으로 언제든 전체 결과로 건너뛸 수 있다.
-        const calendar = buildQualCalendar(result)
+        const calendar = buildQualCalendar(result, useCareerStore.getState().year)
         const revealed =
           calendar.length > 0
             ? calendar[0].revealedByConfed

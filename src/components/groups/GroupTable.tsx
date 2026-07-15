@@ -1,5 +1,6 @@
 import { TeamLink } from '../common/TeamLink'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import type { GroupMatch } from '../../types/match'
 import type { QualificationStatus } from '../../engine/qualificationStatus'
@@ -54,6 +55,7 @@ export function GroupTable({
 }: GroupTableProps) {
   const standings = computeStandings(teamIds, matches)
   const order = rankGroupTeams(teamIds, matches)
+  const liveRank = useLiveRankLookup()
 
   return (
     <div className="overflow-x-auto">
@@ -91,7 +93,7 @@ export function GroupTable({
                     <TeamLink teamId={teamId} wrap className="min-w-0 font-medium text-gray-100" />
                     {!compact && (
                       <span className="hidden text-[10px] text-gray-500 sm:inline">
-                        FIFA {TEAMS_BY_ID[teamId].fifaRankApprox}위
+                        FIFA {liveRank(teamId, TEAMS_BY_ID[teamId].fifaRankApprox)}위
                       </span>
                     )}
                     <StatusBadge status={status} />

@@ -186,7 +186,7 @@ export function MatchDetailModal() {
   const selectTeam = useSelectionStore((s) => s.selectTeam)
   const drawGroups = useDrawStore((s) => s.state.groups)
   const allGroupMatches = useProgressStore((s) => s.groupMatches)
-  const { pointsByTeam } = useLiveFifaRanking()
+  const { pointsByTeam, rankByTeam } = useLiveFifaRanking()
 
   const homeTeamId = selected ? (selected.kind === 'upcoming' ? selected.homeTeamId : selected.match.homeTeamId) : null
   const awayTeamId = selected ? (selected.kind === 'upcoming' ? selected.awayTeamId : selected.match.awayTeamId) : null
@@ -355,7 +355,7 @@ export function MatchDetailModal() {
           >
             <FlagIcon iso2={homeTeam.iso2} className="h-8 w-12" />
             <span className="text-sm font-semibold text-white">{homeTeam.nameKo}</span>
-            <span className="text-[10px] text-gray-500">FIFA {homeTeam.fifaRankApprox}위</span>
+            <span className="text-[10px] text-gray-500">FIFA {rankByTeam[homeTeamId] ?? homeTeam.fifaRankApprox}위</span>
           </button>
           <div className="shrink-0 text-center">
             {played ? (
@@ -374,7 +374,7 @@ export function MatchDetailModal() {
           >
             <FlagIcon iso2={awayTeam.iso2} className="h-8 w-12" />
             <span className="text-sm font-semibold text-white">{awayTeam.nameKo}</span>
-            <span className="text-[10px] text-gray-500">FIFA {awayTeam.fifaRankApprox}위</span>
+            <span className="text-[10px] text-gray-500">FIFA {rankByTeam[awayTeamId] ?? awayTeam.fifaRankApprox}위</span>
           </button>
         </div>
 

@@ -25,6 +25,7 @@ import { PROB_ITERATIONS } from '../../store/useQualificationStore'
 import type { AllQualificationResult } from '../../engine/qualification'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { CONFEDERATION_LABEL_KO } from '../../data/teams'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { computePots } from '../../engine/drawEngine'
 import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
@@ -332,7 +333,8 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 
   // 이전 대회들에서 이월된 FIFA 점수(있으면 시작 점수로 사용).
   const carried = useMemo(() => (Object.keys(rankingBase).length > 0 ? rankingBase : undefined), [rankingBase])
-  const calendar = useMemo(() => buildQualCalendar(result), [result])
+  const wcYear = useCareerStore((s) => s.year)
+  const calendar = useMemo(() => buildQualCalendar(result, wcYear), [result, wcYear])
   const played = useMemo(() => flattenPlayed(collectPlayedByConfed(result, revealed)), [result, revealed])
   const ranking = useMemo(() => computeLiveRanking(result, played, undefined, carried), [result, played, carried])
 
@@ -469,7 +471,8 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 /** 일별 진행 (B2). 경기 일정(캘린더)을 날짜별로 넘기며 그날의 경기·결과를 보고,
  *  모든 대륙 순위표를 해당 날짜 기준으로 동기화한다. */
 function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQualificationResult; onSelectMatch: (m: MatchResult) => void; confed: Confederation }) {
-  const calendar = useMemo(() => buildQualCalendar(result), [result])
+  const wcYear = useCareerStore((s) => s.year)
+  const calendar = useMemo(() => buildQualCalendar(result, wcYear), [result, wcYear])
   const stages = useMemo(() => deriveQualStages(result.byConfederation[confed]), [result, confed])
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
   const revealed = useQualificationStore((s) => s.revealed)
@@ -867,6 +870,7 @@ function MyTeamQualBanner({
   /** 예선이 전부 진행돼 결과가 확정됐는지. false면 진출 여부를 스포일러하지 않는다. */
   fullyRevealed: boolean
 }) {
+  const liveRank = useLiveRankLookup()
   const nation = ALL_NATIONS_BY_ID[teamId]
   if (!nation) return null
   const isHost = hosts.includes(teamId)
@@ -888,7 +892,7 @@ function MyTeamQualBanner({
       <FlagIcon iso2={nation.iso2} className="h-6 w-9 shrink-0 rounded-sm" />
       <div className="min-w-0 flex-1">
         <p className="text-xs text-gray-400">
-          내 팀 · {CONFEDERATION_LABEL_KO[nation.confederation]} · FIFA {nation.fifaRankApprox}위
+          내 팀 · {CONFEDERATION_LABEL_KO[nation.confederation]} · FIFA {liveRank(teamId, nation.fifaRankApprox)}위
         </p>
         <p className={`text-sm font-bold ${statusColor}`}>
           {nation.nameKo} {statusText}
@@ -1406,11 +1410,21 @@ function ConfederationStandings({
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
                       <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                      {chainKeys.map((k) => (
-                        <td key={k} className={`py-1.5 text-right tabular-nums ${k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}`}>
-                          {stagePctFor(teamId, k).toFixed(0)}%
-                        </td>
-                      ))}
+                      {chainKeys.length > 1 && stagePctFor(teamId, QUALIFY_KEY) >= 99.95 ? (
+                        // 이미 본선 진출을 확정지은 팀은 이후 녹아웃/추가 예선 확률 대신 '이전 차수에서 진출 확정'을 표시.
+                        <>
+                          <td colSpan={chainKeys.length - 1} className="py-1.5 text-center text-[10px] font-medium text-emerald-300/80">
+                            이전 차수에서 진출 확정
+                          </td>
+                          <td className="py-1.5 text-right font-bold text-sky-300 tabular-nums">100%</td>
+                        </>
+                      ) : (
+                        chainKeys.map((k) => (
+                          <td key={k} className={`py-1.5 text-right tabular-nums ${k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}`}>
+                            {stagePctFor(teamId, k).toFixed(0)}%
+                          </td>
+                        ))
+                      )}
                       <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} nextPct={nextPct} /></td>
                     </tr>
                   ))}
@@ -1440,11 +1454,18 @@ function ConfederationStandings({
                     </div>
                     {chainKeys.length > 0 && (
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
-                        {chainKeys.map((k) => (
-                          <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
-                            {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
-                          </span>
-                        ))}
+                        {stagePctFor(teamId, QUALIFY_KEY) >= 99.95 && chainKeys.length > 1 ? (
+                          <>
+                            <span className="font-medium text-emerald-300/80">이전 차수에서 진출 확정</span>
+                            <span className="font-bold text-sky-300">본선 100%</span>
+                          </>
+                        ) : (
+                          chainKeys.map((k) => (
+                            <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
+                              {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
+                            </span>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
