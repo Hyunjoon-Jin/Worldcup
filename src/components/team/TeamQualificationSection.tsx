@@ -150,6 +150,25 @@ export function TeamQualificationSection({
 
     const currentStageName = groupIdx != null ? stageNameOfGroup(r, groupIdx) : null
 
+    // 예선이 끝나 결과가 확정된 뒤에는 차수 확률을 '실제 참여/최종 결과'로 확정 표기한다.
+    // (몬테카를로 확률은 계산 시점 기준이라, 직행 확정 후에도 4·5차·대륙간PO에 스테일 잔여 확률이
+    //  남아 "직행 확정인데 왜 4차·PO 확률이 있냐"는 불일치가 생긴다. 확정 시엔 도달=100%, 미도달=0%.)
+    let chainOverride: Record<string, number> | null = null
+    if (done && chainKeys.length > 0) {
+      const reached = new Set<string>()
+      for (const m of teamMatches) {
+        const st = stages.find((s) => m.matchday >= s.startMd && m.matchday <= s.endMd)
+        if (st) reached.add(st.name)
+      }
+      const wonInterPO = result?.interConfed?.winners?.includes(teamId) ?? false
+      chainOverride = {}
+      for (const key of chainKeys) {
+        if (key === QUALIFY_KEY) chainOverride[key] = r.qualified.includes(teamId) || wonInterPO ? 100 : 0
+        else if (key === INTER_PLAYOFF_KEY) chainOverride[key] = r.playoff.includes(teamId) ? 100 : 0
+        else chainOverride[key] = reached.has(key) ? 100 : 0
+      }
+    }
+
     return {
       confed,
       total,
@@ -165,11 +184,12 @@ export function TeamQualificationSection({
       finalStatus,
       teamProbs,
       chainKeys,
+      chainOverride,
       currentStageName,
       single: r.groups.length <= 1,
       groupLabel: groupIdx != null ? r.groupLabels?.[groupIdx] : undefined,
     }
-  }, [r, confed, teamId, revealedMap, stageProbs])
+  }, [r, result, confed, teamId, revealedMap, stageProbs])
 
   if (!team || !result) return null
 
@@ -188,7 +208,7 @@ export function TeamQualificationSection({
 
   if (!view) return null
 
-  const pct = (key: string): number => view.teamProbs?.[key] ?? 0
+  const pct = (key: string): number => view.chainOverride?.[key] ?? view.teamProbs?.[key] ?? 0
   const shortLabel = (key: string): string =>
     key === QUALIFY_KEY ? '본선 진출' : key === INTER_PLAYOFF_KEY ? '대륙간 PO' : key
 
