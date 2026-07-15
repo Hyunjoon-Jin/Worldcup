@@ -1154,6 +1154,11 @@ function ConfederationStandings({
   const useStageTabs = stages.length > 1
   const activeStage =
     stages.find((s) => stageStatus(s, revealed) === 'active') ??
+    // 진행 중 차수가 없고 직전 차수가 막 끝났으면, 다음(예정) 차수를 기본 선택해 '조추첨'을 먼저 보여준다
+    // (순서: 이전 차수 → 이 차수 조추첨 → 이 차수 경기).
+    stages.find(
+      (s, i) => stageStatus(s, revealed) === 'upcoming' && (i === 0 || stageStatus(stages[i - 1], revealed) === 'done'),
+    ) ??
     [...stages].reverse().find((s) => stageStatus(s, revealed) === 'done') ??
     stages[0]
   const effectiveStageName =
@@ -1201,20 +1206,26 @@ function ConfederationStandings({
   const uniformGroupSizes = stageGroupSizes.length > 0 && stageGroupSizes.every((n) => n === firstStageGroupSize)
   // 녹아웃(플레이오프·2연전) 차수는 포트 조추첨이 아니므로 조추첨 포트/리빌을 표시하지 않는다.
   const selectedStageIsKnockout = !!selectedStage && selectedStage.groupIndices.every((gi) => isKnockoutGroup(r, gi))
-  const showDrawPots =
-    !selectedStageUpcoming && useStageTabs && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes && !selectedStageIsKnockout
+  // 이 차수가 '포트로 조추첨하는 조별 차수'인가(균등 크기 2개 이상 조). 상태(진행/예정)와 무관하게 판정.
+  const stageIsPotDraw = !!selectedStage && !selectedStageIsKnockout && stageNumGroups >= 2 && firstStageGroupSize >= 3 && uniformGroupSizes
+  // 직전 차수가 끝났는지(이 차수 참가국이 확정됐는지) — 예정 차수라도 조추첨은 스포일러가 아니므로 먼저 보여줄 수 있다.
+  const selIdxInStages = selectedStage ? stages.findIndex((s) => s.name === selectedStage.name) : -1
+  const prevStageDone = selIdxInStages > 0 ? stageStatus(stages[selIdxInStages - 1], revealed) === 'done' : true
+  const showDrawPots = !selectedStageUpcoming && useStageTabs && stageIsPotDraw
   const drawPots: string[][] = showDrawPots
     ? Array.from({ length: firstStageGroupSize }, (_, p) => stageTeamsSorted.slice(p * stageNumGroups, (p + 1) * stageNumGroups))
     : []
   // 조추첨 리빌용: 각 조 멤버를 FIFA 랭킹순(=포트 순)으로 정렬. groupsByPot[g][p] = g조의 포트 p 팀.
-  const drawGroupsByPot: string[][] = showDrawPots && selectedStage
+  const drawGroupsByPot: string[][] = stageIsPotDraw && selectedStage
     ? selectedStage.groupIndices.map((gi) =>
         [...(r.groups[gi] ?? [])].sort((a, b) => ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox),
       )
     : []
-  const drawGroupLabels: string[] = showDrawPots && selectedStage
+  const drawGroupLabels: string[] = stageIsPotDraw && selectedStage
     ? selectedStage.groupIndices.map((gi, i) => r.groupLabels?.[gi] ?? `${GROUP_LETTERS[selectedStage.groupIndices[i]] ?? i + 1}조`)
     : []
+  // 예정 차수인데 직전 차수가 끝나 참가국이 확정된 조별 차수 → 경기 전에 '조추첨'을 먼저 보여준다(순서: 이전 차수 → 이 차수 조추첨 → 이 차수 경기).
+  const showUpcomingDraw = selectedStageUpcoming && prevStageDone && stageIsPotDraw
 
   return (
     <GlassCard className="p-4">
@@ -1325,10 +1336,27 @@ function ConfederationStandings({
       </div>
 
       {selectedStageUpcoming ? (
-        <div className="rounded-lg bg-white/5 p-6 text-center text-xs text-gray-500">
-          <p>아직 진행되지 않은 차수입니다. 이전 차수가 끝나면 이 차수 진출국이 확정됩니다.</p>
-          <p className="mt-1 text-[10px]">📅 일별 진행에서 라운드를 넘겨 이 차수까지 진행해 보세요.</p>
-        </div>
+        showUpcomingDraw ? (
+          // 이전 차수가 끝나 참가국이 확정됨 → 경기 전에 이 차수 조추첨을 먼저 보여준다.
+          <div>
+            <p className="mb-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200">
+              🎬 <strong>{selectedStage?.name} 조추첨</strong> — 이전 차수가 끝나 진출국이 확정됐습니다. 아래에서 조추첨을 진행한 뒤,
+              위 <strong>📅 일별 진행</strong>에서 경기일을 넘기면 이 차수 경기가 시작됩니다.
+            </p>
+            <QualDrawReveal
+              confedLabel={CONFEDERATION_LABEL_KO[confed]}
+              stageName={selectedStage?.name ?? '조별리그'}
+              groupsByPot={drawGroupsByPot}
+              groupLabels={drawGroupLabels}
+              potCount={firstStageGroupSize}
+            />
+          </div>
+        ) : (
+          <div className="rounded-lg bg-white/5 p-6 text-center text-xs text-gray-500">
+            <p>아직 진행되지 않은 차수입니다. 이전 차수가 끝나면 이 차수 진출국이 확정됩니다.</p>
+            <p className="mt-1 text-[10px]">📅 일별 진행에서 라운드를 넘겨 이 차수까지 진행해 보세요.</p>
+          </div>
+        )
       ) : (
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
         {r.groups.map((finalOrder, gi) => {

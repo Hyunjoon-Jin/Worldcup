@@ -21,7 +21,8 @@ export function QualDrawReveal({
   groupsByPot: string[][]
   groupLabels: string[]
   potCount: number
-  onClose: () => void
+  /** 닫기 콜백(온디맨드 조추첨용). 필수 스테이지 내용으로 쓸 때는 생략하면 닫기 버튼이 사라진다. */
+  onClose?: () => void
 }) {
   // 추첨 순서: 포트 1부터, 각 포트 안에서 조 A→마지막 조 순으로 한 팀씩.
   const order = useMemo(() => {
@@ -100,9 +101,11 @@ export function QualDrawReveal({
           >
             ↺
           </button>
-          <button onClick={onClose} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-400 hover:bg-white/20">
-            ✕ 닫기
-          </button>
+          {onClose && (
+            <button onClick={onClose} className="rounded bg-white/10 px-2 py-1 text-[11px] text-gray-400 hover:bg-white/20">
+              ✕ 닫기
+            </button>
+          )}
         </div>
       </div>
 
