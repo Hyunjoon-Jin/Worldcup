@@ -464,8 +464,9 @@ export function TeamDetailPage() {
 
       <TeamHistorySection teamId={teamId} />
 
+      {inFinals && (
       <GlassCard className="p-4">
-        <h3 className="mb-3 text-sm font-bold text-sky-300">경기 기록</h3>
+        <h3 className="mb-3 text-sm font-bold text-sky-300">본선 경기 기록</h3>
         {matchHistory.length === 0 ? (
           <p className="text-sm text-gray-400">아직 치른 경기가 없습니다.</p>
         ) : (
@@ -515,9 +516,11 @@ export function TeamDetailPage() {
           </div>
         )}
       </GlassCard>
+      )}
 
+      {inFinals && (
       <GlassCard className="p-4">
-        <h3 className="mb-3 text-sm font-bold text-sky-300">다음 경기 일정</h3>
+        <h3 className="mb-3 text-sm font-bold text-sky-300">본선 다음 경기 일정</h3>
         {upcomingMatches.length === 0 ? (
           <p className="text-sm text-gray-400">
             {status === 'eliminated' ? '탈락이 확정되어 예정된 경기가 없습니다.' : '예정된 경기가 없습니다.'}
@@ -561,6 +564,7 @@ export function TeamDetailPage() {
           </div>
         )}
       </GlassCard>
+      )}
 
       {thirdPlaceRoute && (
         <GlassCard className="p-4">
