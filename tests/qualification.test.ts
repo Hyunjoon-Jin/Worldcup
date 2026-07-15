@@ -868,3 +868,26 @@ describe('예선 드라마 (지역예선 Q6)', () => {
     }
   })
 })
+
+describe('공개 라운드 기본값 — 미지정 대륙은 아직 미시작 (#8)', () => {
+  it('revealed에 키가 없는 대륙은 잠금 경기 0개(전체 공개로 오인하지 않는다)', async () => {
+    const { collectPlayedByConfed, isPartialProgress } = await import('../src/engine/qualification/conditional')
+    const all = simulateAllQualification('REVEAL-DEFAULT')
+    // 어떤 대륙도 공개하지 않은 상태(빈 revealed).
+    const played = collectPlayedByConfed(all, {})
+    for (const c of Object.keys(all.byConfederation)) {
+      expect(played[c]).toEqual([]) // 미지정 = 미시작 → 잠긴(치른) 경기 없음
+    }
+    // 하나도 공개 안 됐으면 "부분 진행"으로 간주(모든 대륙이 아직 안 끝남 → 조건부 확률 의미 있음).
+    expect(isPartialProgress(all, {})).toBe(true)
+  })
+
+  it('특정 대륙만 공개하면 그 대륙만 잠금 경기가 잡힌다', async () => {
+    const { collectPlayedByConfed } = await import('../src/engine/qualification/conditional')
+    const all = simulateAllQualification('REVEAL-ONE')
+    const played = collectPlayedByConfed(all, { UEFA: 1 })
+    expect(played.UEFA.every((m) => m.matchday <= 1)).toBe(true)
+    // 다른 대륙(예: CAF)은 여전히 미지정 → 잠금 경기 0개.
+    expect(played.CAF).toEqual([])
+  })
+})

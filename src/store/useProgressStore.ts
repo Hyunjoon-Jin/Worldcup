@@ -30,6 +30,11 @@ type Phase = 'idle' | 'group' | 'knockout' | 'complete'
 interface ProgressStore {
   schedule: TournamentSchedule | null
   phase: Phase
+  /**
+   * 그룹스테이지 진행일(1..totalGroupStageDays). 녹아웃 단계에서는 진행이 날짜창(ROUND_DATE_WINDOWS)
+   * 기준이라 이 값을 더 이상 갱신하지 않는다 — 녹아웃을 읽는 곳(CalendarTimeline·상태 텍스트)은 모두
+   * phase로 분기하므로 정지된 currentDay를 참조하지 않는다(의도된 동작, #24).
+   */
   currentDay: number
   groupMatches: GroupMatch[]
   lastBatchDate: string | null
@@ -210,7 +215,12 @@ export const useProgressStore = create<ProgressStore>()(
 
   initSchedule: () => {
     if (get().schedule) return
-    set({ schedule: buildFullSchedule(), phase: 'group', currentDay: 1 })
+    // schedule은 결정론적이라 언제든 재생성해도 안전하다. 다만 이미 진행 이력이 있는데(부분 복원·마이그레이션)
+    // schedule만 비어 있는 경우, phase/currentDay를 초기화하면 진행일과 치른 경기가 어긋난다. 그러므로
+    // 진행 이력이 있으면 단계/진행일은 건드리지 않고 schedule만 복구한다 (#23: 새로고침 복구 견고화).
+    const s = get()
+    const hasProgress = s.groupMatches.length > 0 || s.phase !== 'idle'
+    set({ schedule: buildFullSchedule(), ...(hasProgress ? {} : { phase: 'group', currentDay: 1 }) })
   },
 
   reset: () => {

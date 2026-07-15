@@ -12,14 +12,15 @@ export interface LockedMatchData {
   awayGoals: number
 }
 
-/** 현재 결과 + 대륙별 공개 라운드로부터 이미 치른 경기를 대륙별로 뽑는다(미지정=전체 공개). */
+/** 현재 결과 + 대륙별 공개 라운드로부터 이미 치른 경기를 대륙별로 뽑는다(미지정=아직 미시작). */
 export function collectPlayedByConfed(
   all: AllQualificationResult,
   revealed: Record<string, number>,
 ): Record<string, LockedMatchData[]> {
   const out: Record<string, LockedMatchData[]> = {}
   for (const c of Object.keys(all.byConfederation)) {
-    const rev = revealed[c] ?? all.byConfederation[c].matchdays
+    // 공개 라운드가 지정되지 않은 대륙은 "아직 시작 전"으로 본다(전체 공개로 오인해 스포일러가 되지 않게, #8).
+    const rev = revealed[c] ?? 0
     out[c] = all.byConfederation[c].matches
       .filter((m) => m.matchday <= rev)
       .map((m) => ({
@@ -50,7 +51,7 @@ export function buildLockedLookups(data: Record<string, LockedMatchData[]>): Rec
 /** 하나라도 미완 라운드가 있으면(부분 진행) true — 이때만 조건부 확률이 의미 있다. */
 export function isPartialProgress(all: AllQualificationResult, revealed: Record<string, number>): boolean {
   return Object.keys(all.byConfederation).some(
-    (c) => (revealed[c] ?? all.byConfederation[c].matchdays) < all.byConfederation[c].matchdays,
+    (c) => (revealed[c] ?? 0) < all.byConfederation[c].matchdays,
   )
 }
 

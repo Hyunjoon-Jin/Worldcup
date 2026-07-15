@@ -114,7 +114,8 @@ export function MyTeamTab() {
     if (!result || !myTeamId || !team) return []
     const r = result.byConfederation[team.confederation]
     if (!r) return []
-    const rev = revealed[team.confederation] ?? r.matchdays
+    // 공개 라운드 미지정 = 아직 시작 전(전체 공개로 오인해 스포일러가 되지 않게, #8).
+    const rev = revealed[team.confederation] ?? 0
     return r.matches
       .filter((m) => (m.homeTeamId === myTeamId || m.awayTeamId === myTeamId) && m.matchday <= rev)
       .sort((a, b) => a.matchday - b.matchday)

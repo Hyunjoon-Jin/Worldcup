@@ -2,6 +2,8 @@ import type { KnockoutRound } from '../types/match'
 
 // 실제 2026 북중미 월드컵 일정(날짜 창)을 그대로 채택한다.
 // 그룹스테이지는 Day 인덱스(1~) 로 진행하며, 토너먼트는 라운드별 날짜창 안에서 진행한다.
+// 라운드 사이 간격(예: R16 종료 7/7 → QF 시작 7/9, QF 종료 7/11 → SF 7/14)은 실제 2026 대회의
+// 휴식일 구조를 그대로 따르므로, 팀별 휴식일도 실제 대회와 동일한 창 안에서 결정된다(#14 근거).
 export const GROUP_STAGE_DAYS = 12
 export const GROUP_STAGE_START = '2026-06-11'
 export const GROUP_STAGE_END = '2026-06-27'

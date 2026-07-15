@@ -6,7 +6,6 @@ import {
   R32_SLOTS,
   SF_SLOT_IDS,
   THIRD_SLOT_ID,
-  WT_SLOT_GROUPS,
 } from '../data/bracketTemplate'
 import type { GroupLetter } from '../types/group'
 import type { GroupMatch, KnockoutMatch, KnockoutRound } from '../types/match'
@@ -50,17 +49,45 @@ export interface BracketMatchup {
   team2Id: string
 }
 
-/** 자기 조 재대결을 피하면서 진출한 8개 3위팀을 8개 WT 슬롯에 결정적으로 배정한다. */
+// 각 WT 슬롯(1위 vs 3위)에 3위팀을 넣을 때 "재대결 금지" 대상 조 집합.
+// = 그 슬롯의 R32 상대(자기 조 1위) + R16에서 맞붙는 인접 슬롯의 고정 팀(승자/준우승) 소속 조.
+// R16 페어링은 R32_SLOTS를 인접 2개씩(i, i^1) 묶으므로, 인접 슬롯의 고정 조를 피하면
+// 3위팀이 R32뿐 아니라 R16에서도 자기 조 팀과 다시 만나지 않는다 (#11·#12).
+const WT_SLOT_FORBIDDEN_GROUPS: Set<GroupLetter>[] = (() => {
+  const fixedGroupsOf = (slot: (typeof R32_SLOTS)[number]): GroupLetter[] =>
+    [slot.team1, slot.team2]
+      .filter((r): r is Extract<typeof r, { group: GroupLetter }> => r.type === 'winner' || r.type === 'runnerup')
+      .map((r) => r.group)
+  return R32_SLOTS.map((slot, idx) => {
+    if (slot.kind !== 'WT') return new Set<GroupLetter>()
+    const partner = R32_SLOTS[idx ^ 1] // R16에서 맞붙는 인접 슬롯
+    return new Set<GroupLetter>([...fixedGroupsOf(slot), ...fixedGroupsOf(partner)])
+  }).filter((_, idx) => R32_SLOTS[idx].kind === 'WT')
+})()
+
+/**
+ * 진출한 8개 3위팀을 8개 WT 슬롯에 결정적으로 배정한다. 자기 조 팀과 R32는 물론 R16에서도
+ * 재대결하지 않도록(#11·#12) 금지 조를 피하는 완전 배정을 백트래킹으로 찾는다. 후보를 사전식
+ * 정렬해 탐색하므로 같은 입력은 항상 같은 배정을 낸다(재현성). 유효 배정이 없으면(이론상 도달
+ * 불가) 정렬 순서를 그대로 반환해 진행을 막지 않는다.
+ */
 function assignThirdsToSlots(qualifiedThirdGroups: GroupLetter[]): GroupLetter[] {
-  const sortedThirdGroups = [...qualifiedThirdGroups].sort()
-  const assignment = [...sortedThirdGroups]
-  for (let iter = 0; iter < assignment.length * 2; iter++) {
-    const conflictIndex = assignment.findIndex((g, i) => g === WT_SLOT_GROUPS[i])
-    if (conflictIndex === -1) break
-    const swapWith = (conflictIndex + 1) % assignment.length
-    ;[assignment[conflictIndex], assignment[swapWith]] = [assignment[swapWith], assignment[conflictIndex]]
+  const groups = [...qualifiedThirdGroups].sort()
+  const slotCount = WT_SLOT_FORBIDDEN_GROUPS.length
+  const assignment: GroupLetter[] = new Array(slotCount)
+  const used = new Set<number>()
+  const solve = (slot: number): boolean => {
+    if (slot === slotCount) return true
+    for (let i = 0; i < groups.length; i++) {
+      if (used.has(i) || WT_SLOT_FORBIDDEN_GROUPS[slot].has(groups[i])) continue
+      assignment[slot] = groups[i]
+      used.add(i)
+      if (solve(slot + 1)) return true
+      used.delete(i)
+    }
+    return false
   }
-  return assignment
+  return solve(0) ? assignment : groups
 }
 
 export function buildR32Matchups(

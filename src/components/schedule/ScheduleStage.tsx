@@ -59,7 +59,9 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
       `🥇 우승: ${name(champion)}`,
       `🥈 준우승: ${name(runnerUp)}`,
       thirdSlot ? `🥉 3위: ${name(thirdSlot.winnerTeamId)}` : '',
-      seed ? `🎲 조추첨 시드: ${seed}` : '',
+      // 시드는 "조 편성"을 재현한다. 경기 결과는 매 진행마다 새로 시뮬레이션되므로 시드로 우승팀까지
+      // 그대로 재현되지는 않는다는 점을 분명히 밝힌다 (#7: 시드=재현 가능이라는 오해 방지).
+      seed ? `🎲 조추첨 시드: ${seed} (같은 시드=같은 조 편성 · 경기 결과는 매번 새로 시뮬레이션)` : '',
     ].filter(Boolean)
     void navigator.clipboard?.writeText(lines.join('\n')).then(() => {
       setShared(true)
@@ -71,10 +73,16 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
     initSchedule()
   }, [initSchedule])
 
+  // 진행된 경기 수(그룹 + 결정된 녹아웃)를 지표로 삼아, 하루/시간대가 진행될 때마다
+  // 실시간 우승 확률을 다시 계산한다. buildSnapshot이 이미 확정된 결과를 조건으로 반영하므로
+  // 재계산 결과가 현재까지의 실황을 그대로 담는다 (Phase 1 #3·#4: 확률 고착/노후화 방지).
+  const playedCount = useProgressStore(
+    (s) => s.groupMatches.length + Object.values(s.knockoutSlots).filter((k) => k.result).length,
+  )
   useEffect(() => {
-    if (!simResult) runSimulation()
+    runSimulation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [playedCount])
 
   const top3Champion = useMemo(() => {
     if (!simResult) return []
@@ -130,7 +138,7 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
                 <GlassButton onClick={withClick(advanceTimeSlot)} disabled={!nextSlotPreview}>
                   ⏱ 다음 시간대 진행{nextSlotPreview && ` (${nextSlotPreview.timeSlot})`}
                 </GlassButton>
-                <GlassButton variant="ghost" onClick={withClick(advanceDay)}>
+                <GlassButton variant="ghost" onClick={withClick(advanceDay)} disabled={!nextSlotPreview}>
                   ▶ 다음 날 전체 진행
                 </GlassButton>
                 <GlassButton variant="ghost" onClick={withClick(advanceToEnd)} disabled={!nextSlotPreview}>
