@@ -10,6 +10,7 @@ import { playVictory } from '../../engine/sound'
 import { prepareFinalsDrawFromQualification, advanceToNextEdition } from '../../store/tournamentActions'
 import { useCareerStore } from '../../store/useCareerStore'
 import { useProgressStore } from '../../store/useProgressStore'
+import { useDrawStore } from '../../store/useDrawStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { rankAcrossGroups } from '../../engine/qualification/generic'
 import { extractQualDrama } from '../../engine/qualification/drama'
@@ -1599,9 +1600,18 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   const editionIndex = useCareerStore((s) => s.editionIndex)
   const hostIds = useCareerStore((s) => s.hostIds)
   const finalsPhase = useProgressStore((s) => s.phase)
-  const finalsComplete = finalsPhase === 'complete'
-  // 조추첨 이후(진행 중이거나 종료된 본선)에는 "조추첨으로 이동" 재클릭이 진행을 날려버린다.
-  const finalsUnderway = finalsPhase !== 'idle'
+  const drawField = useDrawStore((s) => s.fieldTeams)
+  // 현재 진행 중인 본선이 '이번 예선 결과(qualified48)'로 만든 것인지 확인한다. 예전 대회의 조추첨/진행이
+  // 남아 있을 수 있으므로(persist), 조추첨 대상 명단이 지금 진출 48개국과 다르면 그 진행은 '스테일'로 본다.
+  const finalsMatchesCurrent =
+    drawField != null &&
+    result != null &&
+    drawField.length === result.qualified48.length &&
+    drawField.every((id) => result.qualified48.includes(id))
+  const finalsComplete = finalsPhase === 'complete' && finalsMatchesCurrent
+  // 조추첨 이후(이번 예선 명단으로 진행 중이거나 종료된 본선)에는 재클릭이 진행을 날려버린다.
+  // 스테일(예전 대회) 진행이면 잃을 게 없으므로 '다시하기'가 아니라 '조추첨 진행하기'로 안내한다.
+  const finalsUnderway = finalsPhase !== 'idle' && finalsMatchesCurrent
   const champion = useProgressStore((s) => s.champion)
   const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
