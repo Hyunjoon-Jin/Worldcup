@@ -89,6 +89,7 @@ export function TeamQualificationSection({
   const result = useQualificationStore((s) => s.result)
   const revealedMap = useQualificationStore((s) => s.revealed)
   const stageProbs = useQualificationStore((s) => s.stageProbabilities)
+  const friendlies = useQualificationStore((s) => s.friendlies)
 
   const team = ALL_NATIONS_BY_ID[teamId]
   const confed = team?.confederation
@@ -183,6 +184,11 @@ export function TeamQualificationSection({
   const pct = (key: string): number => view.teamProbs?.[key] ?? 0
   const shortLabel = (key: string): string =>
     key === QUALIFY_KEY ? '본선 진출' : key === INTER_PLAYOFF_KEY ? '대륙간 PO' : key
+
+  // 이 팀의 친선전(평가전) — 예선이 없던 경기일에 치른 경기. 전역 공개 경기일 기준으로 최근/예정 분리.
+  const globalRevealed = Math.max(0, ...Object.values(revealedMap))
+  const teamFriendlies = friendlies.filter((f) => f.homeTeamId === teamId || f.awayTeamId === teamId)
+  const playedFriendlies = teamFriendlies.filter((f) => f.matchday <= globalRevealed).sort((a, b) => b.matchday - a.matchday)
 
   return (
     <GlassCard className="p-4">
@@ -328,6 +334,39 @@ export function TeamQualificationSection({
                 upcoming
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 친선전(평가전) — 예선이 없던 경기일에 치른 경기 */}
+      {playedFriendlies.length > 0 && (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <p className="mb-1.5 text-[11px] font-bold text-sky-300">🤝 친선전(평가전)</p>
+          <div className="space-y-1">
+            {playedFriendlies.slice(0, 5).map((f, i) => {
+              const isHome = f.homeTeamId === teamId
+              const gf = isHome ? f.homeGoals : f.awayGoals
+              const ga = isHome ? f.awayGoals : f.homeGoals
+              const oppId = isHome ? f.awayTeamId : f.homeTeamId
+              const outcome = gf > ga ? '승' : gf < ga ? '패' : '무'
+              const oColor = outcome === '승' ? 'text-emerald-300' : outcome === '패' ? 'text-red-300' : 'text-gray-400'
+              const oBg = outcome === '승' ? 'bg-emerald-500/15' : outcome === '패' ? 'bg-red-500/15' : 'bg-white/10'
+              return (
+                <div key={i} className="flex items-center gap-2 rounded-lg bg-sky-500/[0.05] px-2.5 py-1.5 text-xs">
+                  <span className={`w-6 shrink-0 rounded text-center text-[10px] font-bold ${oColor} ${oBg}`}>{outcome}</span>
+                  <span className="w-20 shrink-0 truncate text-left text-[10px] text-gray-500">
+                    친선 · {dateByMatchday[f.matchday] ? formatKoreanDate(dateByMatchday[f.matchday]) : `R${f.matchday}`}
+                  </span>
+                  <span className="flex-1 truncate text-gray-300">
+                    {isHome ? '' : '@ '}
+                    {ALL_NATIONS_BY_ID[oppId]?.nameKo ?? oppId}
+                  </span>
+                  <span className="shrink-0 font-bold tabular-nums text-white">
+                    {gf}-{ga}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

@@ -473,6 +473,7 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
   const stages = useMemo(() => deriveQualStages(result.byConfederation[confed]), [result, confed])
   const setRevealedMany = useQualificationStore((s) => s.setRevealedMany)
   const revealed = useQualificationStore((s) => s.revealed)
+  const friendlies = useQualificationStore((s) => s.friendlies)
 
   const r = result.byConfederation[confed]
   if (!r || calendar.length === 0) return null
@@ -488,6 +489,12 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
   const round = Math.min(globalWindow, total)
   const date = calendar[globalWindow - 1]
   const matches = r.matches.filter((m) => m.matchday === round)
+  // 이 경기일에 이 대륙 팀이 낀 친선전(예선 경기가 없는 국가들끼리).
+  const winFriendlies = friendlies.filter(
+    (f) =>
+      f.matchday === globalWindow &&
+      (ALL_NATIONS_BY_ID[f.homeTeamId]?.confederation === confed || ALL_NATIONS_BY_ID[f.awayTeamId]?.confederation === confed),
+  )
   const stageName = stageNameAt(stages, round)
   const atStart = globalWindow <= 1
   const atEnd = globalWindow >= totalWindows
@@ -550,6 +557,23 @@ function QualDailyProgress({ result, onSelectMatch, confed }: { result: AllQuali
           </div>
         )}
       </div>
+
+      {/* 이 경기일에 예선이 없는 국가들끼리의 친선전(평가전) */}
+      {winFriendlies.length > 0 && (
+        <div className="mt-2 border-t border-white/10 pt-2">
+          <p className="mb-1 text-[10px] font-bold text-sky-300">🤝 친선전(평가전) · {winFriendlies.length}경기</p>
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {winFriendlies.map((f, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 rounded bg-sky-500/[0.06] px-2 py-1 text-[11px]">
+                <span className="min-w-0 flex-1 truncate text-right text-gray-400">{ALL_NATIONS_BY_ID[f.homeTeamId]?.nameKo ?? f.homeTeamId}</span>
+                <span className="shrink-0 font-bold tabular-nums text-gray-200">{f.homeGoals}-{f.awayGoals}</span>
+                <span className="min-w-0 flex-1 truncate text-gray-400">{ALL_NATIONS_BY_ID[f.awayTeamId]?.nameKo ?? f.awayTeamId}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="mt-2 text-[10px] text-gray-500">
         ※ 경기일을 넘기면 6개 대륙이 함께 진행됩니다(마지막 경기일에 도달하면 예선이 종료돼 본선 진출 48개국이
         확정됩니다). 위 목록은 <strong>{CONFEDERATION_LABEL_KO[confed]}</strong> 경기만 보여주며, 대륙 탭으로 볼 대륙을 바꿀 수 있습니다.

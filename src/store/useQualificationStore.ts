@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { simulateAllQualification, type AllQualificationResult } from '../engine/qualification'
 import { buildQualCalendar } from '../engine/qualification/calendar'
 import { createQualProbAccumulator, type StageProbabilities } from '../engine/qualification/probability'
+import { buildFriendlies, type FriendlyMatch } from '../engine/qualification/friendlies'
 import {
   collectPlayedByConfed,
   buildLockedLookups,
@@ -107,6 +108,8 @@ interface QualificationStore {
   probLoading: boolean
   /** 대륙별 현재까지 공개된 라운드(B1 라운드별 진행). 기본은 전체 공개. */
   revealed: Record<string, number>
+  /** 예선 기간 중 열리는 친선전(평가전) — 그 경기일에 예선 경기가 없는 국가들끼리. */
+  friendlies: FriendlyMatch[]
   simulate: (seed?: string) => void
   computeProbabilities: () => void
   /** 특정 대륙의 공개 라운드를 설정한다. */
@@ -135,11 +138,15 @@ export const useQualificationStore = create<QualificationStore>()(
       stageProbabilities: null,
       probLoading: false,
       revealed: {},
+      friendlies: [],
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
         // 커리어 폼(이전 대회 흐름)을 시작 전력에 반영한 뒤, 현재 대회 개최국으로 시뮬레이션한다.
         usePerformanceStore.getState().setDeltas(useCareerStore.getState().carriedForm)
-        const result = simulateAllQualification(usedSeed, buildQualRatings(), undefined, getCurrentHostIds())
+        const qualRatings = buildQualRatings()
+        const result = simulateAllQualification(usedSeed, qualRatings, undefined, getCurrentHostIds())
+        // 예선 기간 중 쉬는 국가들끼리 친선전(평가전)을 편성해 둔다(경기일별, 결정론적).
+        const friendlies = buildFriendlies(result, qualRatings, usedSeed)
         // 첫 경기일부터 날짜별로 진행(관전)하도록, 공개 라운드를 캘린더 1일차 상태로 시작한다.
         // '⏭ 끝'으로 언제든 전체 결과로 건너뛸 수 있다.
         const calendar = buildQualCalendar(result)
@@ -147,7 +154,7 @@ export const useQualificationStore = create<QualificationStore>()(
           calendar.length > 0
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
-        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed })
+        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies })
         syncPerformanceDeltas(result, revealed)
       },
       setRevealed: (confed, matchday) => {
@@ -203,13 +210,13 @@ export const useQualificationStore = create<QualificationStore>()(
           probWorker = null
         }
         usePerformanceStore.getState().reset()
-        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {} })
+        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {}, friendlies: [] })
       },
     }),
     {
       name: 'wc2026-qualification-store',
       version: 3,
-      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed }),
+      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed, friendlies: s.friendlies }),
       onRehydrateStorage: () => (state) => {
         // 새로고침 후 저장된 진행 상황으로 성적 반영 능력치 보정을 복원한다.
         if (state?.result) syncPerformanceDeltas(state.result, state.revealed)
