@@ -36,7 +36,16 @@ const wdOf = (iso: string) => new Date(iso + 'T00:00:00Z').getUTCDay()
  * 각 날짜에 어떤 대회의 어떤 라운드가 열리는지 점으로 표시한다. 달력 아래에는 그 달의 일정을 목록으로 보여준다.
  * 대회를 임의로 고를 수는 없고(캘린더 축), 순수 표시용이다. 기본 표시 월은 지금 진행할 일정의 달이다.
  */
-export function CalendarView({ wcYear, currentEvent }: { wcYear: number; currentEvent?: SeasonEvent }) {
+export function CalendarView({
+  wcYear,
+  currentEvent,
+  onProgressTo,
+}: {
+  wcYear: number
+  currentEvent?: SeasonEvent
+  /** 달력에서 일정을 클릭하면 그 대회 일정까지 진행한다(있을 때만 클릭 가능). */
+  onProgressTo?: (eventId: string, eventYear: number) => void
+}) {
   const phases = useMemo(() => buildCycleCalendar(wcYear), [wcYear])
   // 일정이 있는 월만 네비게이션 대상(사이클 내 빈 달은 건너뛴다).
   const months = useMemo(() => [...new Set(phases.map((p) => ymKey(p.start)))].sort(), [phases])
@@ -142,14 +151,29 @@ export function CalendarView({ wcYear, currentEvent }: { wcYear: number; current
           <p className="text-[11px] text-gray-500">이 달에는 시작하는 일정이 없습니다.</p>
         ) : (
           <div className="space-y-1">
-            {agenda.map((p) => (
-              <div key={`${p.eventId}-${p.key}`} className="flex items-center gap-2 text-[11px]">
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${EVENT_COLOR[p.eventId] ?? 'bg-gray-400'}`} />
-                <span className="w-16 shrink-0 tabular-nums text-gray-400">{mm}월 {Number(p.start.slice(8, 10))}일 ({WD[wdOf(p.start)]})</span>
-                <span className={`shrink-0 font-medium ${EVENT_TEXT[p.eventId] ?? 'text-gray-200'}`}>{p.eventKind === 'wc' ? '🏆' : '🌍'} {p.eventNameKo}</span>
-                <span className="min-w-0 flex-1 truncate text-gray-400">{p.label}</span>
-              </div>
-            ))}
+            {agenda.map((p) => {
+              const row = (
+                <>
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${EVENT_COLOR[p.eventId] ?? 'bg-gray-400'}`} />
+                  <span className="w-16 shrink-0 tabular-nums text-gray-400">{mm}월 {Number(p.start.slice(8, 10))}일 ({WD[wdOf(p.start)]})</span>
+                  <span className={`shrink-0 font-medium ${EVENT_TEXT[p.eventId] ?? 'text-gray-200'}`}>{p.eventKind === 'wc' ? '🏆' : '🌍'} {p.eventNameKo}</span>
+                  <span className="min-w-0 flex-1 truncate text-gray-400">{p.label}</span>
+                </>
+              )
+              return onProgressTo ? (
+                <button
+                  key={`${p.eventId}-${p.key}`}
+                  onClick={() => onProgressTo(p.eventId, p.eventYear)}
+                  title="이 일정까지 진행"
+                  className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-[11px] transition-colors hover:bg-white/10"
+                >
+                  {row}
+                  <span className="shrink-0 text-[10px] font-bold text-emerald-300">▶</span>
+                </button>
+              ) : (
+                <div key={`${p.eventId}-${p.key}`} className="flex items-center gap-2 px-1 text-[11px]">{row}</div>
+              )
+            })}
           </div>
         )}
       </div>

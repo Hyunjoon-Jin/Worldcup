@@ -93,6 +93,38 @@ export function runCupQualification(
   // 예선 대상 풀: 아직 자동 진출 안 한 팀들.
   const candidatePool = (guests.length > 0 ? guestPool : primaryPool).filter((id) => !autoSet.has(id))
 
+  // 통합 예선(AFC 아시안컵 등, combinedWcq): 월드컵 지역예선과 같은 캠페인이므로 별도 예선을 다시 치르지
+  // 않고, 월드컵 예선 성적이 반영된 랭킹(rankByTeam)으로 본선 진출국을 가린다(현실의 통합 예선 반영).
+  if (format.qual.style === 'combinedWcq') {
+    const earned = [...candidatePool]
+      .sort((a, b) => rankOf(a, rankByTeam) - rankOf(b, rankByTeam) || a.localeCompare(b))
+      .slice(0, Math.max(0, remaining))
+    return { groups: [], autoQualified, earned, qualified: [...autoQualified, ...earned].slice(0, format.teams) }
+  }
+
+  // 네이션스리그 예선(CONCACAF 골드컵, nationsLeague): 상위(리그 A 프록시)는 성적순 직행,
+  // 남은 자리는 하위권 예선 플레이오프(골드컵 프렐림)로 채운다 — 현실의 네이션스리그 기반 진출 반영.
+  if (format.qual.style === 'nationsLeague') {
+    const ordered = [...candidatePool].sort(
+      (a, b) => rankOf(a, rankByTeam) - rankOf(b, rankByTeam) || ratingOf(b, ratings) - ratingOf(a, ratings) || a.localeCompare(b),
+    )
+    const prelimSpots = Math.min(4, Math.max(0, remaining - 1))
+    const directCount = Math.max(0, remaining - prelimSpots)
+    const direct = ordered.slice(0, directCount) // 리그 A 직행
+    // 프렐림: 그 다음 상위 2*prelimSpots 팀이 시드 단판(무승부는 상위 시드 진출)으로 남은 자리를 다툰다.
+    const contenders = ordered.slice(directCount, directCount + prelimSpots * 2)
+    const rand = createSeededRandom(`${seed}-${format.id}-NL-PRELIM`)
+    const prelimWinners: string[] = []
+    for (let i = 0; i < prelimSpots && i * 2 + 1 < contenders.length; i++) {
+      const home = contenders[i * 2]
+      const away = contenders[i * 2 + 1]
+      const s = simulateScoreRaw(ratings[home], ratings[away], 0, 0, rand)
+      prelimWinners.push(s.homeGoals >= s.awayGoals ? home : away)
+    }
+    const earned = [...direct, ...prelimWinners].slice(0, remaining)
+    return { groups: [], autoQualified, earned, qualified: [...autoQualified, ...earned].slice(0, format.teams) }
+  }
+
   // 예선 불필요(후보가 슬롯 이하): 전원 통과.
   if (candidatePool.length <= remaining) {
     const earned = candidatePool

@@ -131,6 +131,41 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const yieldPaint = () => new Promise((r) => setTimeout(r, 24))
 
   /**
+   * 캘린더 클릭 진행 — 현재 커서부터 target 일정까지 시간 순서대로 자동 진행한다(그 사이 모든 대회가
+   * 자연스럽게 진행·기록된다). 과거로는 갈 수 없고(이미 지난 일정), 대회를 임의로 건너뛸 수 없다(순서 진행).
+   * 마지막 일정까지 진행하면 사이클을 넘겨(커리어 롤) 다음 월드컵 사이클로 이어간다.
+   */
+  const progressToIndex = async (target: number) => {
+    if (busy || target < clampedCursor) return
+    const total = target - clampedCursor + 1
+    setBusy(true)
+    for (let k = 0; k < total; k++) {
+      const idx = clampedCursor + k
+      const e = events[idx]
+      setCycleProgress({ done: k, total, label: `${e.nameKo} ${e.year}` })
+      await yieldPaint()
+      autoSimulateSeasonEvent(e)
+    }
+    setCycleProgress({ done: total, total, label: '마무리' })
+    await yieldPaint()
+    if (target >= events.length - 1) {
+      // 사이클의 마지막 일정까지 진행 → 커리어 롤 + 커서 리셋(다음 월드컵 사이클).
+      advanceToNextEdition()
+      useSeasonStore.getState().reset()
+    } else {
+      useSeasonStore.getState().setCursor(target + 1)
+    }
+    setCycleProgress(null)
+    setBusy(false)
+  }
+
+  /** 캘린더(달력)에서 특정 대회 일정을 클릭 → 그 일정까지 진행. */
+  const progressToEvent = (eventId: string, eventYear: number) => {
+    const idx = events.findIndex((e) => e.id === eventId && e.year === eventYear)
+    if (idx >= 0) progressToIndex(idx)
+  }
+
+  /**
    * 이 사이클(현재 커서~마지막)을 전부 자동 진행하고 다음 월드컵 사이클로 넘어간다(커리어 자동 진행).
    * 진행률(어떤 대회를 진행 중인지·전체 대비 몇 번째인지)을 화면에 갱신하기 위해 이벤트마다 페인트를 양보한다.
    */
@@ -161,7 +196,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
       <GlassCard strong className="p-5 text-center">
         <p className="mb-1 text-sm font-semibold text-white">🗓 {wcYear} 시즌 캘린더 — 일정 진행</p>
         <p className="mb-3 text-[11px] text-gray-400">
-          캘린더를 시간 순서대로 진행하면 대회가 다가옵니다. 대회를 임의로 고를 수 없고, 다가온 일정만 진행합니다. 월드컵도 캘린더 위의 한 이벤트입니다.
+          달력에서 일정을 클릭하면 그때까지 시간 순서대로 진행되고, 그 사이 대회들이 자연스럽게 함께 진행됩니다. 월드컵도 캘린더 위의 한 이벤트입니다.
           {hostIds.length > 0 && <> 월드컵 개최국: {hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(', ')}.</>}
         </p>
         {current && (() => {
@@ -207,8 +242,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         })()}
       </GlassCard>
 
-      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화 */}
-      <CalendarView wcYear={wcYear} currentEvent={current} />
+      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행 */}
+      <CalendarView wcYear={wcYear} currentEvent={current} onProgressTo={busy ? undefined : progressToEvent} />
 
       {/* 진행 중인 대회 — 캘린더 밑에서 각 대회 실황 페이지로 진입 */}
       <GlassCard className="p-4">
@@ -242,29 +277,34 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
       {/* 내 팀 경기 일정 — 내 팀이 설정돼 있으면 내 팀 경기를 날짜와 함께 표시(클릭 시 경기 상세) */}
       {myTeamId && <MyTeamSchedule teamId={myTeamId} onSelectCup={onSelectCup} />}
 
-      {/* 전체 일정(진행 상태 표시 — 캘린더대로 순서대로만 진행) */}
+      {/* 전체 일정 — 항목을 클릭하면 그 일정까지 순서대로 진행된다(캘린더가 진행의 축) */}
       <GlassCard className="p-4">
         <h3 className="mb-1 text-sm font-bold text-gray-200">전체 일정</h3>
-        <p className="mb-3 text-[11px] text-gray-500">캘린더는 시간 순서대로만 진행됩니다. 대회를 임의로 고를 수 없고, 다가온 일정(위의 ‘지금 진행할 일정’)만 진행할 수 있습니다.</p>
+        <p className="mb-3 text-[11px] text-gray-500">일정을 클릭하면 그 일정까지 시간 순서대로 자동 진행됩니다(그 사이 대회들이 함께 진행돼요). 지난 일정은 이미 진행됐습니다.</p>
         <div className="space-y-1.5">
           {events.map((e, i) => {
             const state = i < clampedCursor ? 'past' : i === clampedCursor ? 'current' : 'future'
+            const clickable = !busy && state !== 'past'
             return (
-              <div
+              <button
                 key={`${e.id}-${e.year}`}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+                disabled={!clickable}
+                onClick={() => clickable && progressToIndex(i)}
+                title={clickable ? '이 일정까지 진행' : undefined}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors ${
                   state === 'current' ? 'bg-emerald-500/15 ring-1 ring-emerald-400/40' : state === 'past' ? 'bg-white/5 opacity-60' : 'bg-white/5'
-                }`}
+                } ${clickable ? 'hover:bg-white/15' : ''}`}
               >
                 <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
-                <span className={`min-w-0 flex-1 font-medium ${state === 'future' ? 'text-gray-400' : e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>
-                  {state === 'future' ? '🔒 ' : e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span>
+                <span className={`min-w-0 flex-1 font-medium ${state === 'past' && !isDone(e) ? 'text-gray-400' : e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>
+                  {e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-gray-500">
                   {isDone(e) && <span className="rounded bg-emerald-500/20 px-1 py-0.5 font-bold text-emerald-300">✅ 완료</span>}
-                  {state === 'past' ? '지난 일정' : state === 'current' ? '▶ 진행 중' : '예정'}
+                  {state === 'past' ? '지난 일정' : state === 'current' ? '' : ''}
+                  {clickable && <span className="font-bold text-emerald-300">{state === 'current' ? '▶ 진행' : '▶ 여기까지'}</span>}
                 </span>
-              </div>
+              </button>
             )
           })}
         </div>
