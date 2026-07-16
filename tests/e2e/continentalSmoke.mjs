@@ -24,10 +24,12 @@ try {
   const skip = page.getByText('건너뛰기')
   if (await skip.isVisible().catch(() => false)) await skip.click()
 
-  // 시즌 홈 탭 렌더 확인
-  await page.getByRole('tab', { name: '시즌' }).click()
-  await page.getByText('전체 일정', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, '시즌 홈이 렌더된다')
+  // 기본 진입점이 시즌 홈(일정 축)이고, 진행 척추(지금 진행할 일정)가 렌더되는지
+  await page.getByText('시즌 — 일정 진행', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, '기본 진입점이 시즌 홈(일정 축)이다')
+  assert(await page.getByText('지금 진행할 일정', { exact: false }).first().isVisible(), '진행 척추(현재 일정)가 표시된다')
+  assert(await page.getByRole('button', { name: '▶ 이 일정 진행' }).isVisible(), '현재 일정 진행 버튼이 있다')
+  assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
 
   // 대륙컵 탭으로 이동 (지연 로딩 → Suspense 해제 대기)
   await page.getByRole('tab', { name: '대륙컵' }).click()
