@@ -50,6 +50,25 @@ export interface CupResult {
   hosts: string[]
 }
 
+/** CupResult를 FIFA 랭킹 반영용 형태로 변환한다(조별·녹아웃 경기 목록). */
+export function cupToRankingResults(result: CupResult): {
+  groupMatches: Array<{ homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number }>
+  knockoutMatches: Array<{ homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number; wentToPenalties?: boolean; winnerTeamId?: string }>
+} {
+  const groupMatches = result.groups.flatMap((g) =>
+    g.matches.map((m) => ({ homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals })),
+  )
+  const knockoutMatches = result.knockout.map((m) => ({
+    homeTeamId: m.homeTeamId,
+    awayTeamId: m.awayTeamId,
+    homeGoals: m.result.homeGoals,
+    awayGoals: m.result.awayGoals,
+    wentToPenalties: m.result.wentToPenalties,
+    winnerTeamId: m.result.winnerTeamId,
+  }))
+  return { groupMatches, knockoutMatches }
+}
+
 const ratingOf = (id: string, ratings: Record<string, TeamRatings>) => ratings[id]?.overall ?? 0
 const hostAdv = (id: string, hostSet: Set<string>) => (hostSet.has(id) ? hostAdvantageFor(id) : 0)
 

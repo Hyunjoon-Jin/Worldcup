@@ -208,6 +208,18 @@ export function applyFinalsElo(points: Record<string, number>, finals: FinalsRes
   for (const m of finals.knockoutMatches) applyMatchElo(points, m, wcKnockoutImportance(m.round))
 }
 
+/** 대륙별 대표 대회(대륙컵) 경기 — 조별 I=35, 녹아웃 I=40. FIFA 랭킹에 대륙컵 성적을 반영한다. */
+export interface ContinentalResults {
+  groupMatches: Array<{ homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number }>
+  knockoutMatches: Array<{ homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number; wentToPenalties?: boolean; winnerTeamId?: string }>
+}
+
+/** 대륙컵 경기(조별 continentalGroup=35, 녹아웃 continentalKnockout=40)를 점수 맵에 제자리로 누적 적용한다. */
+export function applyContinentalElo(points: Record<string, number>, cr: ContinentalResults): void {
+  for (const m of cr.groupMatches) applyMatchElo(points, m, MATCH_IMPORTANCE.continentalGroup)
+  for (const m of cr.knockoutMatches) applyMatchElo(points, m, MATCH_IMPORTANCE.continentalKnockout)
+}
+
 /**
  * 한 대회(예선 전체 + 본선 전체)가 끝난 뒤의 FIFA 점수 맵을 계산한다(커리어 이월용).
  * carried(이전 대회 이월 점수)를 시작점으로, 이번 대회 모든 예선 경기와 본선 경기를 누적 적용한다.
@@ -349,6 +361,7 @@ export function computeLiveRanking(
   finals?: FinalsResults,
   carriedBase?: Record<string, number>,
   friendlies?: ReadonlyArray<{ homeTeamId: string; awayTeamId: string; homeGoals: number; awayGoals: number }>,
+  continental?: ContinentalResults,
 ): LiveRankRow[] {
   const idSet = new Set(qualParticipantIds(all))
   if (finals) {
@@ -363,6 +376,8 @@ export function computeLiveRanking(
   }
   // 친선전에만 등장하는 팀(개최국 등 예선 미참가국)도 순위표에 포함한다.
   if (friendlies) for (const f of friendlies) { idSet.add(f.homeTeamId); idSet.add(f.awayTeamId) }
+  // 대륙컵에만 등장하는 팀(예선 미참가국 등)도 순위표에 포함한다.
+  if (continental) for (const m of [...continental.groupMatches, ...continental.knockoutMatches]) { idSet.add(m.homeTeamId); idSet.add(m.awayTeamId) }
   // 이월 점수가 있는 팀(이전 대회 참가국 등)도 순위표에 포함한다.
   if (carriedBase) for (const id of Object.keys(carriedBase)) idSet.add(id)
   const ids = [...idSet]
@@ -371,6 +386,8 @@ export function computeLiveRanking(
   if (finals) applyFinalsElo(now, finals)
   // 친선전(평가전)도 FIFA 랭킹에 반영한다(A매치 기간 친선 중요도 I=10).
   if (friendlies) for (const f of friendlies) applyMatchElo(now, f, MATCH_IMPORTANCE.friendlyInWindow)
+  // 대륙컵 성적도 반영(조별 35·녹아웃 40).
+  if (continental) applyContinentalElo(now, continental)
   const baseRanks = rankMap(ids, base)
   const nowRanks = rankMap(ids, now)
   return ids
