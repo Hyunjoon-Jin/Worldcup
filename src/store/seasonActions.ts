@@ -7,7 +7,8 @@ import { useSeasonStore } from './useSeasonStore'
 import { startFinalsFromQualification, advanceToNextEdition } from './tournamentActions'
 import { formOffsetsFromResults } from '../engine/qualification/ranking'
 import { buildSeasonTimeline, type SeasonEvent } from '../engine/season/seasonTimeline'
-import type { CupId } from '../data/continental/formats'
+import { CUP_FORMATS, type CupId } from '../data/continental/formats'
+import { ALL_NATIONS_BY_ID } from '../data/nations'
 
 /**
  * 일정(캘린더) 축 진행 액션. 앱은 '월드컵'이 아니라 '일정'을 축으로 전진한다 — 이 모듈은 캘린더 위의
@@ -45,14 +46,29 @@ export function autoSimulateWorldCupFinals(seed?: string): void {
 }
 
 /**
+ * 통합 예선(combinedWcq: AFC 아시안컵)용 랭킹 — 월드컵 지역예선과 같은 캠페인이므로, 이번 월드컵 예선에서
+ * 본선에 오른 팀을 강하게 우대해 대륙컵 진출을 결정한다. 예선 결과가 없으면 빈 맵(엔진이 FIFA 근사 랭킹 폴백).
+ */
+function combinedQualRanking(): Record<string, number> {
+  const qr = useQualificationStore.getState().result
+  if (!qr) return {}
+  const map: Record<string, number> = {}
+  // 월드컵 본선 진출국은 기본 랭킹에서 크게 끌어올려(−1000) 대륙컵 진출 우선순위를 준다.
+  for (const id of qr.qualified48) map[id] = (ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999) - 1000
+  return map
+}
+
+/**
  * 대륙컵 한 대회를 자동으로 시뮬레이션한다(예선 → 본선 전과정). 이미 그 연도 대회가 기록돼 있으면 스킵한다.
  * 결과는 useContinentalHistoryStore에 축적되어 팀별 트로피·통산 성적·랭킹에 반영된다.
+ * AFC 아시안컵(combinedWcq)은 월드컵 예선 결과를 반영해 진출국을 가린다(통합 예선).
  */
 export function autoSimulateCup(cupId: CupId, year: number, seed?: string): void {
   if (isCupSimulated(cupId, year)) return
   const store = useContinentalStore.getState()
   store.selectCup(cupId, year)
-  store.runActiveCup({ seed: seed ?? `${cupId}-${year}` })
+  const rankByTeam = CUP_FORMATS[cupId].qual.style === 'combinedWcq' ? combinedQualRanking() : undefined
+  store.runActiveCup({ seed: seed ?? `${cupId}-${year}`, rankByTeam })
   useContinentalStore.getState().advanceToEnd()
 }
 

@@ -93,6 +93,15 @@ export function runCupQualification(
   // 예선 대상 풀: 아직 자동 진출 안 한 팀들.
   const candidatePool = (guests.length > 0 ? guestPool : primaryPool).filter((id) => !autoSet.has(id))
 
+  // 통합 예선(AFC 아시안컵 등, combinedWcq): 월드컵 지역예선과 같은 캠페인이므로 별도 예선을 다시 치르지
+  // 않고, 월드컵 예선 성적이 반영된 랭킹(rankByTeam)으로 본선 진출국을 가린다(현실의 통합 예선 반영).
+  if (format.qual.style === 'combinedWcq') {
+    const earned = [...candidatePool]
+      .sort((a, b) => rankOf(a, rankByTeam) - rankOf(b, rankByTeam) || a.localeCompare(b))
+      .slice(0, Math.max(0, remaining))
+    return { groups: [], autoQualified, earned, qualified: [...autoQualified, ...earned].slice(0, format.teams) }
+  }
+
   // 예선 불필요(후보가 슬롯 이하): 전원 통과.
   if (candidatePool.length <= remaining) {
     const earned = candidatePool
