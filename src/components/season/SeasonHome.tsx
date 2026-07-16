@@ -9,6 +9,7 @@ import { useQualificationStore } from '../../store/useQualificationStore'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useContinentalHistoryStore } from '../../store/useContinentalHistoryStore'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
+import { useMatchDetailStore } from '../../store/useMatchDetailStore'
 import { advanceToNextEdition } from '../../store/tournamentActions'
 import { autoSimulateSeasonEvent } from '../../store/seasonActions'
 import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seasonTimeline'
@@ -71,6 +72,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const cupActiveYear = useContinentalStore((s) => s.cupYear)
   const cupHasResult = useContinentalStore((s) => s.result != null)
   const cupStage = useContinentalStore((s) => s.stage)
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const [busy, setBusy] = useState(false)
   const [cycleProgress, setCycleProgress] = useState<CycleProgress | null>(null)
 
@@ -130,10 +132,40 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
 
   const yieldPaint = () => new Promise((r) => setTimeout(r, 24))
 
+  /** 방금 진행한 일정의 결승 경기 상세(모달)를 띄운다 — 캘린더 진행 시 '그 경기'를 보고 넘어가게 한다. */
+  const openClimaxModal = (e: SeasonEvent) => {
+    if (e.kind === 'wc') {
+      const finalSlot = Object.values(useProgressStore.getState().knockoutSlots).find((s) => s.round === 'FINAL' && s.result)
+      if (finalSlot?.result) selectMatch({ kind: 'knockout', match: finalSlot.result })
+      return
+    }
+    // 대륙컵: 활성 대회(방금 진행한 대회)의 결승을 월드컵 녹아웃 형태로 변환해 모달로 보여준다.
+    const res = useContinentalStore.getState().result
+    const fin = res?.knockout.find((m) => m.round === 'FINAL')
+    if (fin) {
+      selectMatch({
+        kind: 'knockout',
+        external: true,
+        match: {
+          round: 'FINAL',
+          slotId: fin.slotId,
+          homeTeamId: fin.homeTeamId,
+          awayTeamId: fin.awayTeamId,
+          homeGoals: fin.result.homeGoals,
+          awayGoals: fin.result.awayGoals,
+          wentToPenalties: fin.result.wentToPenalties,
+          winnerTeamId: fin.result.winnerTeamId,
+          homePenalties: fin.result.homePenalties,
+          awayPenalties: fin.result.awayPenalties,
+        },
+      })
+    }
+  }
+
   /**
    * 캘린더 클릭 진행 — 현재 커서부터 target 일정까지 시간 순서대로 자동 진행한다(그 사이 모든 대회가
    * 자연스럽게 진행·기록된다). 과거로는 갈 수 없고(이미 지난 일정), 대회를 임의로 건너뛸 수 없다(순서 진행).
-   * 마지막 일정까지 진행하면 사이클을 넘겨(커리어 롤) 다음 월드컵 사이클로 이어간다.
+   * 진행이 끝나면 그 일정의 결승 경기 모달을 띄우고, 마지막 일정이면 사이클을 넘겨(커리어 롤) 이어간다.
    */
   const progressToIndex = async (target: number) => {
     if (busy || target < clampedCursor) return
@@ -148,6 +180,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     }
     setCycleProgress({ done: total, total, label: '마무리' })
     await yieldPaint()
+    // 방금 진행한 마지막 일정의 결승 경기 모달을 띄운다(그 경기를 보고 넘어가는 흐름).
+    openClimaxModal(events[target])
     if (target >= events.length - 1) {
       // 사이클의 마지막 일정까지 진행 → 커리어 롤 + 커서 리셋(다음 월드컵 사이클).
       advanceToNextEdition()
@@ -158,6 +192,9 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     setCycleProgress(null)
     setBusy(false)
   }
+
+  /** 캘린더 상단 '다음 일정 진행' — 현재 일정 하나를 진행하고 결승 모달을 띄운다. */
+  const progressNext = () => progressToIndex(clampedCursor)
 
   /** 캘린더(달력)에서 특정 대회 일정을 클릭 → 그 일정까지 진행. */
   const progressToEvent = (eventId: string, eventYear: number) => {
@@ -243,7 +280,14 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
       </GlassCard>
 
       {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행 */}
-      <CalendarView wcYear={wcYear} currentEvent={current} onProgressTo={busy ? undefined : progressToEvent} />
+      <CalendarView
+        wcYear={wcYear}
+        currentEvent={current}
+        onProgressTo={busy ? undefined : progressToEvent}
+        onProgressNext={busy ? undefined : progressNext}
+        nextLabel={current ? `${current.kind === 'wc' ? '🏆' : '🌍'} ${current.nameKo} ${current.year}` : undefined}
+        busy={busy}
+      />
 
       {/* 진행 중인 대회 — 캘린더 밑에서 각 대회 실황 페이지로 진입 */}
       <GlassCard className="p-4">

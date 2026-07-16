@@ -34,6 +34,8 @@ try {
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
   // 실제 달력(월별 그리드)이 캘린더 탭에 렌더된다.
   assert(await page.getByText('📅 시즌 캘린더', { exact: false }).first().isVisible(), '실제 달력(월별 그리드)이 표시된다')
+  // 캘린더 상단 '다음 일정 진행' 버튼이 있다.
+  assert(await page.getByRole('button', { name: /다음 일정 진행/ }).isVisible(), '캘린더 상단 다음 일정 진행 버튼이 있다')
   // 진행 중인 대회 섹션(캘린더 하단)이 렌더된다.
   assert(await page.getByText('🔴 진행 중인 대회', { exact: false }).first().isVisible(), '진행 중인 대회 섹션이 표시된다')
 
