@@ -54,13 +54,9 @@ const TABS: { id: TabId; label: string }[] = [
 const ALWAYS_ENABLED: TabId[] = ['season', 'qualifiers', 'continental', 'myteam', 'ranking']
 
 function App() {
-  // 시작은 지역예선부터. 저장된 대회를 이어가는 경우에만 조추첨/일정으로 진입한다.
-  const [tab, setTab] = useState<TabId>(() => {
-    const draw = useDrawStore.getState()
-    if (draw.isComplete) return 'schedule'
-    if (draw.fieldTeams) return 'draw' // 예선을 거쳐 조추첨 준비된 상태
-    return 'qualifiers'
-  })
+  // 앱의 축은 '일정(시즌)'이다. 항상 시즌 홈으로 진입해 캘린더에서 대회를 시간 순서로 진행한다.
+  // (월드컵도 캘린더 위의 한 이벤트일 뿐이다. 진행 중인 대회는 시즌 홈의 '지금 진행할 일정'에서 이어간다.)
+  const [tab, setTab] = useState<TabId>('season')
   // 새로고침/재방문으로 저장된 대회를 이어가는 경우에만 안내 배너를 띄운다.
   const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
   const isDrawComplete = useDrawStore((s) => s.isComplete)
