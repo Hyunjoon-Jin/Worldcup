@@ -6,7 +6,7 @@ import { useContinentalStore } from '../../store/useContinentalStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useCareerStore } from '../../store/useCareerStore'
 import { CUP_FORMATS, ALL_CUP_IDS, type CupId } from '../../data/continental/formats'
-import { ALL_NATIONS_BY_ID } from '../../data/nations'
+import { ALL_NATIONS_BY_ID, nationsByConfederation } from '../../data/nations'
 import { buildSeasonTimeline } from '../../engine/season/seasonTimeline'
 import type { CupGroupResult, CupKnockoutMatch } from '../../engine/continental/runCup'
 import type { KnockoutRound } from '../../types/match'
@@ -118,11 +118,21 @@ export function ContinentalStage() {
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const selectCup = useContinentalStore((s) => s.selectCup)
+  const setHost = useContinentalStore((s) => s.setHost)
   const runActiveCup = useContinentalStore((s) => s.runActiveCup)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
   const [seedInput, setSeedInput] = useState('')
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
+
+  // 개최국 후보: 이 대회 참가 연맹 소속국(랭킹순 상위). '개최국 없음' 포함.
+  const hostCandidates = useMemo(() => {
+    if (!format) return []
+    const pool = format.confeds.flatMap((c) => nationsByConfederation(c))
+    return [...new Map(pool.map((t) => [t.id, t])).values()]
+      .sort((a, b) => a.fifaRankApprox - b.fifaRankApprox)
+      .slice(0, 30)
+  }, [format])
 
   const koByRound = useMemo<Array<{ round: KnockoutRound; matches: CupKnockoutMatch[] }>>(() => {
     if (!result || !format) return []
@@ -170,6 +180,17 @@ export function ContinentalStage() {
           {format.thirdPlace ? ' (+3·4위전)' : ''} · {MONTH_LABEL[format.schedule.monthWindow]}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2">
+          <select
+            value={hostId ?? ''}
+            onChange={(e) => setHost(e.target.value || null)}
+            aria-label="개최국 선택"
+            className="w-36 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white focus:border-emerald-400/50 focus:outline-none"
+          >
+            <option value="">개최국 없음</option>
+            {hostCandidates.map((t) => (
+              <option key={t.id} value={t.id}>{t.nameKo}</option>
+            ))}
+          </select>
           <input
             type="text"
             value={seedInput}
