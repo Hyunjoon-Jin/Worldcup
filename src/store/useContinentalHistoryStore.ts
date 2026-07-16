@@ -49,11 +49,14 @@ export function aggregateCupHonors(editions: CupEdition[], teamId: string): CupT
   const byCup: CupTeamHonors['byCup'] = {}
   let totalTitles = 0
   for (const e of editions) {
+    // 이 팀이 실제로 참여(진출·입상)한 대회만 집계에 넣는다(미참여 대회는 슬롯을 만들지 않음).
+    const involved = e.qualified.includes(teamId) || e.champion === teamId || e.runnerUp === teamId || e.third === teamId
+    if (!involved) continue
     const slot = byCup[e.cupId] ?? (byCup[e.cupId] = { titles: 0, runnerUp: 0, third: 0, appearances: 0 })
-    if (e.qualified.includes(teamId) || e.champion === teamId || e.runnerUp === teamId) slot.appearances += 1
+    slot.appearances += 1
     if (e.champion === teamId) { slot.titles += 1; totalTitles += 1 }
-    if (e.runnerUp === teamId) slot.runnerUp += 1
-    if (e.third === teamId) slot.third += 1
+    else if (e.runnerUp === teamId) slot.runnerUp += 1
+    else if (e.third === teamId) slot.third += 1
   }
   return { byCup, totalTitles }
 }
