@@ -1,6 +1,9 @@
 import { CUP_FORMATS, ALL_CUP_IDS, type CupId, type MonthWindow } from '../../data/continental/formats'
-import { GROUP_STAGE_START, ROUND_DATE_WINDOWS, shiftFinalsYear } from '../../data/calendar'
+import { GROUP_STAGE_START, GROUP_STAGE_END, ROUND_DATE_WINDOWS, shiftFinalsYear } from '../../data/calendar'
 import type { Confederation } from '../../types/team'
+import type { KnockoutRound } from '../../types/match'
+
+const ROUND_LABEL_KO: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
 
 /**
  * 시즌 타임라인(대륙대회-일정조사 §1). 한 월드컵 사이클(wcYear ~ wcYear+3)에서 월드컵 본선과 6개 대륙컵을
@@ -91,4 +94,73 @@ export function eventsSharePossibleTeam(a: SeasonEvent, b: SeasonEvent): boolean
 /** 두 날짜 구간이 겹치는가(경계 포함). */
 export function windowsOverlap(a: SeasonEvent, b: SeasonEvent): boolean {
   return a.start <= b.end && b.start <= a.end
+}
+
+/** 한 대회의 세부 단계(날짜 있는 라운드). 캘린더/대회 일정 표시용. */
+export interface EventPhase {
+  key: string
+  label: string
+  start: string // ISO
+  end: string // ISO
+}
+
+/** 대륙컵 한 에디션을 조별 각 차전 + 녹아웃 라운드(3·4위전 포함)로 날짜와 함께 전개한다(대륙대회 일정 상세화). */
+export function buildCupPhases(cupId: CupId, editionYear: number): EventPhase[] {
+  const f = CUP_FORMATS[cupId]
+  const { start } = cupWindow(cupId, editionYear)
+  const phases: EventPhase[] = []
+  const mdLabel = ['1차전', '2차전', '3차전']
+  f.schedule.groupDayOffsets.forEach((off, i) => {
+    const d = addDays(start, off - 1) // Day 1 = 개막
+    phases.push({ key: `G${i + 1}`, label: `조별리그 ${mdLabel[i] ?? `${i + 1}차전`}`, start: d, end: d })
+  })
+  // 녹아웃 라운드는 오프셋 순서(날짜순)로 — 3·4위전이 결승보다 앞서는 배치도 데이터대로 반영.
+  const koEntries = (Object.entries(f.schedule.knockoutDayOffsets) as Array<[KnockoutRound, number]>)
+    .filter(([, off]) => off != null)
+    .sort((a, b) => a[1] - b[1])
+  for (const [round, off] of koEntries) {
+    const d = addDays(start, off - 1)
+    phases.push({ key: round, label: ROUND_LABEL_KO[round], start: d, end: d })
+  }
+  return phases
+}
+
+/** 월드컵 본선 한 에디션을 조별리그 + 녹아웃 라운드창으로 전개한다. */
+export function buildWcPhases(wcYear: number): EventPhase[] {
+  const phases: EventPhase[] = [
+    { key: 'GROUP', label: '조별리그', start: shiftFinalsYear(GROUP_STAGE_START, wcYear), end: shiftFinalsYear(GROUP_STAGE_END, wcYear) },
+  ]
+  for (const r of ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL'] as KnockoutRound[]) {
+    const w = ROUND_DATE_WINDOWS[r]
+    phases.push({ key: r, label: w.label, start: shiftFinalsYear(w.start, wcYear), end: shiftFinalsYear(w.end, wcYear) })
+  }
+  return phases
+}
+
+/** 시즌 이벤트(월드컵/대륙컵)를 날짜가 있는 세부 단계로 전개한다(공용). */
+export function buildEventPhases(event: SeasonEvent): EventPhase[] {
+  return event.kind === 'wc' ? buildWcPhases(event.year) : buildCupPhases(event.id as CupId, event.year)
+}
+
+/** 캘린더 위의 세부 일정 항목(대회 컨텍스트 포함). */
+export interface CalendarPhase extends EventPhase {
+  eventKind: 'wc' | 'cup'
+  eventId: CupId | 'WC'
+  eventNameKo: string
+  eventYear: number
+  confeds: Confederation[] | 'ALL'
+}
+
+/** 한 월드컵 사이클의 모든 대회를 세부 단계(라운드별 날짜)로 펼친 캘린더 항목 목록. */
+export function buildCycleCalendar(wcYear: number): CalendarPhase[] {
+  return buildSeasonTimeline(wcYear).flatMap((e) =>
+    buildEventPhases(e).map((p) => ({
+      ...p,
+      eventKind: e.kind,
+      eventId: e.id,
+      eventNameKo: e.nameKo,
+      eventYear: e.year,
+      confeds: e.confeds,
+    })),
+  )
 }

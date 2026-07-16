@@ -7,6 +7,8 @@ import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID, nationsByConfederation } from '../../data/nations'
+import { buildCupPhases } from '../../engine/season/seasonTimeline'
+import { BASE_FINALS_YEAR, formatKoreanDate } from '../../data/calendar'
 import type { CupGroupResult, CupKnockoutMatch } from '../../engine/continental/runCup'
 import type { KnockoutRound } from '../../types/match'
 
@@ -142,6 +144,12 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
 
+  // 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화.
+  const cupPhases = useMemo(
+    () => (activeCupId ? buildCupPhases(activeCupId, cupYear ?? BASE_FINALS_YEAR) : []),
+    [activeCupId, cupYear],
+  )
+
   // 단계별 공개(월드컵 '일정 진행'과 동형): 0=조추첨, 1~3=조별 MD, 4~=녹아웃 라운드.
   const totalStages = activeCupId ? cupTotalStages(activeCupId) : 0
   const revealedGroupMd = Math.min(stage, 3)
@@ -239,6 +247,21 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
         {hostId && <p className="mt-2 text-[11px] text-sky-300">개최국: {ALL_NATIONS_BY_ID[hostId]?.nameKo ?? hostId}</p>}
         {seed && <p className="mt-2 text-[11px] text-gray-500">시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
       </GlassCard>
+
+      {/* 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화 */}
+      {cupPhases.length > 0 && (
+        <GlassCard className="p-4">
+          <h3 className="mb-2 text-sm font-bold text-gray-200">📅 대회 일정 <span className="text-[11px] font-normal text-gray-500">({cupYear ?? BASE_FINALS_YEAR} · {MONTH_LABEL[format.schedule.monthWindow]})</span></h3>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {cupPhases.map((p) => (
+              <div key={p.key} className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px]">
+                <span className="text-gray-300">{p.label}</span>
+                <span className="tabular-nums text-gray-400">{formatKoreanDate(p.start)}</span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       {!result ? (
         <GlassCard className="p-8 text-center text-sm text-gray-400">

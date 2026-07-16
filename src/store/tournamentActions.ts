@@ -10,6 +10,9 @@ import { usePerformanceStore } from './usePerformanceStore'
 import { useCareerStore } from './useCareerStore'
 import { useHistoryStore } from './useHistoryStore'
 import { useRankHistoryStore } from './useRankHistoryStore'
+import { useContinentalStore } from './useContinentalStore'
+import { useContinentalHistoryStore } from './useContinentalHistoryStore'
+import { useSeasonStore } from './useSeasonStore'
 import { finalsFormDeltas } from '../engine/finalsForm'
 import { editionEndRankingPoints, type FinalsResults } from '../engine/qualification/ranking'
 import { buildEditionSnapshot } from '../engine/history'
@@ -154,5 +157,10 @@ export function clearAllHistory(): void {
   useCareerStore.getState().reset()
   useHistoryStore.getState().reset() // 커리어 역대 기록(팀별 통산 성적)도 함께 삭제
   useRankHistoryStore.getState().reset() // 월별 FIFA 랭킹 이력도 함께 삭제
+  // 대륙컵 진행/역대 기록(트로피·통산 성적)과 시즌(캘린더) 커서도 함께 삭제한다.
+  // 이걸 빠뜨리면 '전체 삭제' 후에도 대륙컵 우승·역대 기록이 그대로 남는다(회귀 버그).
+  useContinentalStore.getState().reset()
+  useContinentalHistoryStore.getState().reset()
+  useSeasonStore.getState().reset()
   useConditionStore.getState().reroll()
 }
