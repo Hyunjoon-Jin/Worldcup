@@ -33,12 +33,16 @@ try {
   await page.getByText('유럽 축구 선수권').first().click()
   await page.getByRole('textbox', { name: '대회 시드' }).fill('CUP-SMOKE')
   await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).click()
-  await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
-  assert(true, '대회 시뮬레이션이 우승팀을 결정한다')
+  // 조추첨(stage 0)부터 단계별 공개 — 조편성 확인 후 끝까지 진행.
+  await page.getByText('조추첨 완료', { exact: false }).waitFor({ timeout: 10000 })
+  assert(true, '시뮬레이션 후 조추첨부터 단계별로 공개된다')
   assert((await page.getByText('CUP-SMOKE').count()) > 0, '사용한 시드가 표시된다')
+  assert(await page.getByText('조별리그').first().isVisible(), '조편성(조별리그)이 렌더된다')
 
-  // 조별리그·녹아웃 렌더 확인
-  assert(await page.getByText('조별리그').first().isVisible(), '조별리그가 렌더된다')
+  // 끝까지 진행 → 우승·녹아웃 공개
+  await page.getByRole('button', { name: '⏭ 끝까지 진행' }).click()
+  await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
+  assert(true, '끝까지 진행이 우승팀을 결정한다')
   assert(await page.getByText('녹아웃').first().isVisible(), '녹아웃이 렌더된다')
 
   // 확률 계산

@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
-import { useContinentalStore } from '../../store/useContinentalStore'
+import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useCareerStore } from '../../store/useCareerStore'
+import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { CUP_FORMATS, ALL_CUP_IDS, type CupId } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID, nationsByConfederation } from '../../data/nations'
 import { buildSeasonTimeline } from '../../engine/season/seasonTimeline'
@@ -57,9 +58,18 @@ function SeasonTimelineCard() {
   )
 }
 
-function GroupTable({ group, format }: { group: CupGroupResult; format: (typeof CUP_FORMATS)[CupId] }) {
+function GroupTable({ group, format, revealedMd }: { group: CupGroupResult; format: (typeof CUP_FORMATS)[CupId]; revealedMd: number }) {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const label = format.groups <= 6 ? `${GROUP_LETTERS[group.groupIndex]}조` : `${group.groupIndex + 1}조`
+  // 공개된 경기일까지만 반영한 잠정 순위(월드컵 조별 진행과 동일).
+  const { ranking, standings, groupDone } = useMemo(() => {
+    const played = group.matches.filter((m) => m.matchday <= revealedMd)
+    return {
+      ranking: rankGroupTeams(group.teams, played, format.groupTiebreak),
+      standings: computeStandings(group.teams, played),
+      groupDone: revealedMd >= 3,
+    }
+  }, [group, revealedMd, format.groupTiebreak])
   return (
     <div>
       <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{label}</p>
@@ -76,10 +86,10 @@ function GroupTable({ group, format }: { group: CupGroupResult; format: (typeof 
             </tr>
           </thead>
           <tbody>
-            {group.ranking.map((id, i) => {
-              const s = group.standings[id]
+            {ranking.map((id, i) => {
+              const s = standings[id]
               const gd = s.goalsFor - s.goalsAgainst
-              const advanced = i < format.advancePerGroup
+              const advanced = groupDone && i < format.advancePerGroup
               return (
                 <tr key={id} className={`border-t border-white/5 ${id === myTeamId ? 'bg-sky-500/15' : advanced ? 'bg-emerald-500/10' : ''}`}>
                   <td className="py-1 text-center text-gray-500">{i + 1}</td>
@@ -117,13 +127,30 @@ export function ContinentalStage() {
   const hostId = useContinentalStore((s) => s.hostId)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
+  const stage = useContinentalStore((s) => s.stage)
   const selectCup = useContinentalStore((s) => s.selectCup)
   const setHost = useContinentalStore((s) => s.setHost)
   const runActiveCup = useContinentalStore((s) => s.runActiveCup)
+  const advanceStage = useContinentalStore((s) => s.advanceStage)
+  const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
   const [seedInput, setSeedInput] = useState('')
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
+
+  // 단계별 공개(월드컵 '일정 진행'과 동형): 0=조추첨, 1~3=조별 MD, 4~=녹아웃 라운드.
+  const totalStages = activeCupId ? cupTotalStages(activeCupId) : 0
+  const revealedGroupMd = Math.min(stage, 3)
+  const revealedKoRounds = Math.max(0, stage - 3)
+  const fullyRevealed = result != null && stage >= totalStages
+  const stageLabel = ((): string => {
+    if (!result || !format) return ''
+    if (stage === 0) return '조추첨 완료 — 조편성 공개'
+    if (stage <= 3) return `조별리그 ${stage}차전`
+    const koIdx = stage - 4
+    const r = format.knockout[koIdx]
+    return r ? `녹아웃 — ${ROUND_LABEL[r]}` : '대회 종료'
+  })()
 
   // 개최국 후보: 이 대회 참가 연맹 소속국(랭킹순 상위). '개최국 없음' 포함.
   const hostCandidates = useMemo(() => {
@@ -136,9 +163,14 @@ export function ContinentalStage() {
 
   const koByRound = useMemo<Array<{ round: KnockoutRound; matches: CupKnockoutMatch[] }>>(() => {
     if (!result || !format) return []
-    const rounds: KnockoutRound[] = [...format.knockout.filter((r) => r !== 'THIRD'), ...(format.thirdPlace ? (['THIRD'] as KnockoutRound[]) : [])]
+    // 공개된 녹아웃 라운드만(3위전은 결승과 함께 마지막에 공개).
+    const revealedRounds = format.knockout.slice(0, revealedKoRounds)
+    const rounds: KnockoutRound[] = [
+      ...revealedRounds.filter((r) => r !== 'THIRD'),
+      ...(format.thirdPlace && revealedKoRounds >= format.knockout.length ? (['THIRD'] as KnockoutRound[]) : []),
+    ]
     return rounds.map((round) => ({ round, matches: result.knockout.filter((m) => m.round === round) }))
-  }, [result, format])
+  }, [result, format, revealedKoRounds])
 
   const champProb = useMemo(() => {
     if (!probabilities) return []
@@ -212,11 +244,28 @@ export function ContinentalStage() {
         </GlassCard>
       ) : (
         <>
-          <GlassCard strong className="p-5 text-center">
-            <p className="text-[11px] text-gray-400">🏆 우승</p>
-            <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
-            <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
+          {/* 단계별 진행 컨트롤 (월드컵 '일정 진행'과 동형) */}
+          <GlassCard strong className="p-5">
+            <p className="mb-2 text-center text-sm font-semibold text-white">{fullyRevealed ? '✅ 대회 종료' : `🗓 ${stageLabel}`}</p>
+            <div className="mx-auto mb-1 h-2 max-w-md overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width]" style={{ width: `${Math.round((stage / totalStages) * 100)}%` }} />
+            </div>
+            <p className="mb-3 text-center text-[10px] text-gray-500">{stage} / {totalStages} 단계</p>
+            {!fullyRevealed && (
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <GlassButton onClick={advanceStage}>▶ 다음 단계 진행</GlassButton>
+                <GlassButton variant="ghost" onClick={advanceToEnd}>⏭ 끝까지 진행</GlassButton>
+              </div>
+            )}
           </GlassCard>
+
+          {fullyRevealed && (
+            <GlassCard strong className="p-5 text-center">
+              <p className="text-[11px] text-gray-400">🏆 우승</p>
+              <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
+              <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
+            </GlassCard>
+          )}
 
           {champProb.length > 0 && (
             <GlassCard className="p-4">
@@ -234,29 +283,31 @@ export function ContinentalStage() {
           )}
 
           <GlassCard className="p-4">
-            <h3 className="mb-3 text-sm font-bold text-gray-200">조별리그</h3>
+            <h3 className="mb-3 text-sm font-bold text-gray-200">조별리그 <span className="text-[11px] font-normal text-gray-500">({revealedGroupMd}/3차전)</span></h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {result.groups.map((g) => (
-                <GroupTable key={g.groupIndex} group={g} format={format} />
+                <GroupTable key={g.groupIndex} group={g} format={format} revealedMd={revealedGroupMd} />
               ))}
             </div>
           </GlassCard>
 
-          <GlassCard className="p-4">
-            <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃</h3>
-            <div className="space-y-3">
-              {koByRound.map(({ round, matches }) => (
-                <div key={round}>
-                  <p className="mb-1.5 font-display text-xs font-bold text-violet-200">{ROUND_LABEL[round]}</p>
-                  <div className="space-y-1">
-                    {matches.map((m) => (
-                      <KnockoutMatchRow key={m.slotId} m={m} />
-                    ))}
+          {koByRound.length > 0 && (
+            <GlassCard className="p-4">
+              <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃</h3>
+              <div className="space-y-3">
+                {koByRound.map(({ round, matches }) => (
+                  <div key={round}>
+                    <p className="mb-1.5 font-display text-xs font-bold text-violet-200">{ROUND_LABEL[round]}</p>
+                    <div className="space-y-1">
+                      {matches.map((m) => (
+                        <KnockoutMatchRow key={m.slotId} m={m} />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </GlassCard>
+                ))}
+              </div>
+            </GlassCard>
+          )}
         </>
       )}
     </div>
