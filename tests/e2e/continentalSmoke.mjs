@@ -31,13 +31,10 @@ try {
   assert(await page.getByRole('button', { name: '▶ 이 일정 진행' }).isVisible(), '현재 일정 진행 버튼이 있다')
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
 
-  // 대륙컵 탭으로 이동 (지연 로딩 → Suspense 해제 대기)
-  await page.getByRole('tab', { name: '대륙컵' }).click()
-  await page.getByText('대륙별 대표 대회').first().waitFor({ timeout: 10000 })
-  assert(true, '대륙컵 탭이 렌더된다')
-
-  // 유로 선택 → 시뮬레이션
+  // 일정 축 네비게이션: 시즌 홈에서 유로 일정을 눌러 대륙컵으로 진입(컨텍스트 전환)
   await page.getByText('유럽 축구 선수권').first().click()
+  await page.getByText('유럽 축구 선수권', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).isVisible(), '시즌 홈에서 대륙컵 이벤트로 진입된다')
   await page.getByRole('textbox', { name: '대회 시드' }).fill('CUP-SMOKE')
   await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).click()
   // 조추첨(stage 0)부터 단계별 공개 — 조편성 확인 후 끝까지 진행.
