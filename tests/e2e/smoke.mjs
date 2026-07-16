@@ -24,7 +24,7 @@ page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
 try {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
-  assert(await page.getByText('2026 북중미 월드컵 시뮬레이터').isVisible(), '앱이 로드된다')
+  assert(await page.getByText('국가대표 시뮬레이터').isVisible(), '앱이 로드된다')
 
   // 첫 방문 온보딩 오버레이가 있으면 건너뛴다 (v2 #48)
   const skip = page.getByText('건너뛰기')

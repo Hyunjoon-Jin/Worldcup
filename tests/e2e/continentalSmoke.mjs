@@ -58,6 +58,7 @@ try {
   await page.locator('text=🏆 우승').locator('..').getByRole('button').first().click()
   await page.getByText('현황', { exact: false }).first().waitFor({ timeout: 10000 })
   assert(await page.getByText('조별리그 경기').first().isVisible(), '팀 페이지에 대륙컵 현황이 표시된다')
+  assert(await page.getByText('트로피 캐비닛', { exact: false }).first().isVisible(), '팀 페이지에 트로피 마일스톤이 표시된다')
 
   assert(consoleErrors.length === 0, `콘솔 오류가 없다 (발견: ${consoleErrors.length})`)
   if (consoleErrors.length) console.error(consoleErrors)

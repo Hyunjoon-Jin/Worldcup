@@ -78,6 +78,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         useContinentalHistoryStore.getState().record({
           cupId: activeCupId,
           seed: usedSeed,
+          year: get().cupYear ?? undefined,
           champion: result.champion,
           runnerUp: result.runnerUp,
           third: result.third,

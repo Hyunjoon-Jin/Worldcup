@@ -16,6 +16,7 @@ import { ProbBar } from '../probability/ProbBar'
 import { STAGES } from '../probability/probabilityStages'
 import { TeamQualificationSection } from './TeamQualificationSection'
 import { TeamContinentalSection } from './TeamContinentalSection'
+import { TeamTrophyMilestones } from './TeamTrophyMilestones'
 import { getRatings, classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import {
   analyzeLastMatchdayScenarios,
@@ -462,6 +463,8 @@ export function TeamDetailPage() {
           </p>
         </GlassCard>
       )}
+
+      <TeamTrophyMilestones teamId={teamId} />
 
       <TeamHistorySection teamId={teamId} />
 
