@@ -46,6 +46,11 @@ try {
   await page.getByText('우승 확률 (상위 8)', { exact: false }).waitFor({ timeout: 15000 })
   assert(true, '우승 확률이 계산·표시된다')
 
+  // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (우승팀 클릭)
+  await page.locator('text=🏆 우승').locator('..').getByRole('button').first().click()
+  await page.getByText('현황', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(await page.getByText('조별리그 경기').first().isVisible(), '팀 페이지에 대륙컵 현황이 표시된다')
+
   assert(consoleErrors.length === 0, `콘솔 오류가 없다 (발견: ${consoleErrors.length})`)
   if (consoleErrors.length) console.error(consoleErrors)
 
