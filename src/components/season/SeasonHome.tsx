@@ -13,6 +13,7 @@ import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDe
 import { advanceToNextEdition, startFinalsFromQualification } from '../../store/tournamentActions'
 import { autoSimulateSeasonEvent, cupRankByTeam } from '../../store/seasonActions'
 import { formOffsetsFromResults } from '../../engine/qualification/ranking'
+import { buildQualCalendar } from '../../engine/qualification/calendar'
 import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seasonTimeline'
 import { cupStageReveal, cupStageLabel } from '../../engine/season/matchdaySteps'
 import { CalendarView } from './CalendarView'
@@ -271,6 +272,30 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     return { label: `🏆 FIFA 월드컵 · ${dateLabel}${slotLabel} (${phaseLabel})`, rows }
   }
 
+  // 지역예선 전역 진행 경기일(대륙 최대 라운드 기준) — QualificationStage와 동일 계산.
+  const qualGlobalWindow = (): { gw: number; total: number } => {
+    const qs = useQualificationStore.getState()
+    if (!qs.result) return { gw: 0, total: 0 }
+    const total = buildQualCalendar(qs.result, wcYear).length
+    const gw = Math.min(total, Math.max(0, ...Object.keys(qs.result.byConfederation).map((c) => qs.revealed[c] ?? 0)))
+    return { gw, total }
+  }
+  const qualAtEnd = (): boolean => {
+    const qs = useQualificationStore.getState()
+    if (!qs.result) return false
+    const { gw, total } = qualGlobalWindow()
+    return gw >= total && qs.drawPending == null
+  }
+  /** 지역예선 한 경기일(또는 차수 조추첨) 진행 상태 패널 — 경기 목록은 지역예선 탭에서(수백 경기라 라벨만). */
+  const qualWindowPanel = (): RevealPanel => {
+    const qs = useQualificationStore.getState()
+    if (qs.drawPending != null) return { label: `🌍 월드컵 지역예선 · ${qs.drawPending}차 예선 조추첨`, rows: [] }
+    const cal = qs.result ? buildQualCalendar(qs.result, wcYear) : []
+    const { gw, total } = qualGlobalWindow()
+    const day = cal[gw - 1]?.label ? ` · ${cal[gw - 1].label}` : ''
+    return { label: `🌍 월드컵 지역예선 · 경기일 ${gw}/${total}${day}`, rows: [] }
+  }
+
   /**
    * 캘린더 상단 '다음 일정 진행' — 현재 대회를 경기일(라운드) 단위로 한 단계만 진행하고, 그 라운드의
    * 경기 결과를 화면에 보여준다(각 경기 클릭 시 모달). 한 대회를 통째로 돌리지 않는다.
@@ -296,15 +321,19 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         setReveal(null)
       }
     } else {
-      // 월드컵: 지역예선(한 스텝) → 조추첨(한 스텝) → 본선(경기일/시간대별 한 배치씩)
+      // 월드컵: 지역예선(경기일별) → 조추첨 → 본선(경기일/시간대별 한 배치씩)
       const qs = useQualificationStore.getState()
       if (!qs.result) {
+        // 예선 시작 — 첫 경기일 공개.
         qs.simulate()
-        useQualificationStore.getState().advanceQualToEnd()
-        setReveal({ label: '🏆 FIFA 월드컵 · 지역예선 종료 — 본선 48개국 확정', rows: [] })
+        setReveal(qualWindowPanel())
+      } else if (!qualAtEnd()) {
+        // 지역예선을 '한 경기일'만 진행(차수 사이엔 예선 조추첨을 먼저 보여준다). 전체 한 번에 진행하지 않는다.
+        useQualificationStore.getState().advanceQual()
+        setReveal(qualWindowPanel())
       } else if (!useDrawStore.getState().isComplete) {
         startFinalsFromQualification(qs.result.qualified48, `WC-${e.year}`, formOffsetsFromResults(qs.result))
-        setReveal({ label: '🏆 FIFA 월드컵 · 본선 조추첨 완료', rows: [] })
+        setReveal({ label: '🏆 FIFA 월드컵 · 본선 조추첨 완료 — 32강 대진 확정', rows: [] })
       } else if (useProgressStore.getState().phase === 'complete') {
         moveCursorNext()
         setReveal(null)
@@ -432,7 +461,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
             <button onClick={() => setReveal(null)} className="text-[11px] text-gray-500 hover:text-gray-300">닫기</button>
           </div>
           {reveal.rows.length === 0 ? (
-            <p className="text-[11px] text-gray-500">이 단계는 경기가 없습니다(조추첨/예선 결과). 계속 진행하세요.</p>
+            <p className="text-[11px] text-gray-500">조추첨/예선 진행 단계입니다. 경기 상세는 ‘지역예선’·해당 대회 탭에서 볼 수 있어요. ▶ 로 계속 진행하세요.</p>
           ) : (
             <div className="max-h-72 space-y-1 overflow-y-auto">
               {reveal.rows.map((row) => (
