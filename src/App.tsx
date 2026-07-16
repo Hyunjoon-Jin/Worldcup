@@ -40,7 +40,7 @@ type TabId = 'season' | 'qualifiers' | 'continental' | 'myteam' | 'ranking' | 'd
 type EventContext = 'wc' | 'cup'
 
 const TAB_LABEL: Record<TabId, string> = {
-  season: '시즌',
+  season: '캘린더',
   qualifiers: '지역예선',
   continental: '대륙컵',
   myteam: '내 팀',
