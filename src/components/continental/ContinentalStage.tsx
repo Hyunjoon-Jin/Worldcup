@@ -37,21 +37,26 @@ function fmtYmd(iso: string): string {
   return `${y}.${Number(m)}.${Number(d)}`
 }
 
-/** 시즌 일정: 이번 월드컵 사이클의 월드컵 본선 + 대륙컵을 개최 순서로 표시(충돌 없는 배치). */
-function SeasonTimelineCard() {
+/** 시즌 일정: 이번 월드컵 사이클의 월드컵 본선 + 대륙컵을 개최 순서로 표시(충돌 없는 배치). 클릭 시 진입. */
+function SeasonTimelineCard({ onNavigateWC }: { onNavigateWC?: () => void }) {
   const wcYear = useCareerStore((s) => s.year)
+  const selectCup = useContinentalStore((s) => s.selectCup)
   const events = useMemo(() => buildSeasonTimeline(wcYear), [wcYear])
   return (
     <GlassCard className="p-4">
       <h3 className="mb-1 text-sm font-bold text-gray-200">🗓 시즌 일정 <span className="text-[11px] font-normal text-gray-500">({wcYear} 사이클)</span></h3>
-      <p className="mb-3 text-[11px] text-gray-500">월드컵과 6개 대륙컵은 서로 다른 시기에 열려 같은 팀의 경기가 겹치지 않습니다.</p>
+      <p className="mb-3 text-[11px] text-gray-500">월드컵과 6개 대륙컵은 서로 다른 시기에 열려 같은 팀의 경기가 겹치지 않습니다. 대회를 눌러 바로 진입하세요.</p>
       <div className="space-y-1.5">
         {events.map((e) => (
-          <div key={`${e.id}-${e.year}`} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${e.kind === 'wc' ? 'bg-emerald-500/10' : 'bg-white/5'}`}>
+          <button
+            key={`${e.id}-${e.year}`}
+            onClick={() => (e.kind === 'wc' ? onNavigateWC?.() : selectCup(e.id as CupId, e.year))}
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/15 ${e.kind === 'wc' ? 'bg-emerald-500/10' : 'bg-white/5'}`}
+          >
             <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
-            <span className={`min-w-0 flex-1 font-medium ${e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo}</span>
-            <span className="shrink-0 text-[10px] text-gray-500">{e.confeds === 'ALL' ? '전 대륙' : e.confeds.join('/')}</span>
-          </div>
+            <span className={`min-w-0 flex-1 font-medium ${e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
+            <span className="shrink-0 text-[10px] text-gray-500">{e.confeds === 'ALL' ? '전 대륙' : e.confeds.join('/')} ›</span>
+          </button>
         ))}
       </div>
     </GlassCard>
@@ -169,10 +174,11 @@ function KnockoutMatchRow({ m }: { m: CupKnockoutMatch }) {
   )
 }
 
-export function ContinentalStage() {
+export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
   const seed = useContinentalStore((s) => s.seed)
   const hostId = useContinentalStore((s) => s.hostId)
+  const cupYear = useContinentalStore((s) => s.cupYear)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const stage = useContinentalStore((s) => s.stage)
@@ -243,7 +249,7 @@ export function ContinentalStage() {
             ))}
           </div>
         </GlassCard>
-        <SeasonTimelineCard />
+        <SeasonTimelineCard onNavigateWC={onNavigateWC} />
       </div>
     )
   }
@@ -253,7 +259,7 @@ export function ContinentalStage() {
       <GlassCard strong className="p-5 text-center">
         <div className="mb-2 flex items-center justify-center gap-2">
           <button onClick={() => selectCup(null)} className="rounded-lg bg-white/10 px-2 py-1 text-[11px] text-gray-300 hover:bg-white/20">← 대회 목록</button>
-          <p className="text-sm font-bold text-white">🏆 {format.nameKo}</p>
+          <p className="text-sm font-bold text-white">🏆 {format.nameKo}{cupYear ? ` ${cupYear}` : ''}</p>
         </div>
         <p className="mb-3 text-[11px] text-gray-400">
           {format.teams}팀 · {format.groups}개 조 · {format.knockout.map((r) => ROUND_LABEL[r]).join('→')}

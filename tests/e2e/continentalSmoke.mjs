@@ -24,6 +24,11 @@ try {
   const skip = page.getByText('건너뛰기')
   if (await skip.isVisible().catch(() => false)) await skip.click()
 
+  // 시즌 홈 탭 렌더 확인
+  await page.getByRole('tab', { name: '시즌' }).click()
+  await page.getByText('전체 일정', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, '시즌 홈이 렌더된다')
+
   // 대륙컵 탭으로 이동 (지연 로딩 → Suspense 해제 대기)
   await page.getByRole('tab', { name: '대륙컵' }).click()
   await page.getByText('대륙별 대표 대회').first().waitFor({ timeout: 10000 })
