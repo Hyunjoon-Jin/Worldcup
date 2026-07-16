@@ -197,7 +197,7 @@ export function MatchDetailModal() {
   )
 
   const groupContext = useMemo(() => {
-    if (!selected || selected.kind !== 'group') return null
+    if (!selected || selected.kind !== 'group' || selected.external) return null
     const group = selected.match.group
     const teamIds = (drawGroups[group] as (string | null)[]).filter(Boolean) as string[]
     if (teamIds.length < 4) return null
@@ -224,7 +224,7 @@ export function MatchDetailModal() {
   }, [selected, drawGroups, allGroupMatches])
 
   const knockoutContext = useMemo(() => {
-    if (!selected || selected.kind !== 'knockout') return null
+    if (!selected || selected.kind !== 'knockout' || selected.external) return null
     const findGroupInfo = (teamId: string) => {
       const group = GROUP_LETTERS.find((g) => (drawGroups[g] as (string | null)[])?.includes(teamId))
       if (!group) return null
