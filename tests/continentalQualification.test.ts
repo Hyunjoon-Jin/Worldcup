@@ -37,8 +37,8 @@ describe('대륙컵 예선 runCupQualification (Phase C)', () => {
   })
 
   it('큰 연맹은 예선에서 탈락자가 발생(전원 통과 아님)', () => {
-    // ASIAN은 통합 예선(combinedWcq)이라 별도 예선 조가 없으므로 제외.
-    for (const id of ['EURO', 'AFCON', 'GOLD'] as const) {
+    // ASIAN(통합 예선)·GOLD(네이션스리그)는 별도 예선 조가 없으므로 제외.
+    for (const id of ['EURO', 'AFCON'] as const) {
       const f = CUP_FORMATS[id]
       const res = runCupQualification(f, ratings, [], `BIG-${id}`)
       const poolSize = f.confeds.flatMap((c) => nationsByConfederation(c)).length
@@ -46,6 +46,23 @@ describe('대륙컵 예선 runCupQualification (Phase C)', () => {
       expect(res.groups.length).toBeGreaterThan(0) // 실제 예선 발생
       expect(res.qualified.length).toBeLessThan(poolSize) // 탈락자 존재
     }
+  })
+
+  it('네이션스리그 예선(골드컵)은 상위 직행 + 하위 프렐림 플레이오프로 진출국을 가린다', () => {
+    const f = CUP_FORMATS.GOLD
+    const res = runCupQualification(f, ratings, [], 'NL-GOLD')
+    expect(res.groups).toHaveLength(0) // 조별 예선 아님
+    expect(res.qualified).toHaveLength(f.teams)
+    expect(new Set(res.qualified).size).toBe(f.teams)
+    const concacafTeams = nationsByConfederation('CONCACAF')
+    const concacaf = concacafTeams.map((t) => t.id)
+    for (const id of res.qualified) expect(concacaf).toContain(id)
+    // 상위권(리그 A)은 직행 — CONCACAF 최상위 랭킹 팀은 반드시 포함된다.
+    const bestRanked = [...concacafTeams].sort((a, b) => a.fifaRankApprox - b.fifaRankApprox)[0].id
+    expect(res.qualified).toContain(bestRanked)
+    // 결정론
+    const b = runCupQualification(f, ratings, [], 'NL-GOLD')
+    expect(res.qualified).toEqual(b.qualified)
   })
 
   it('통합 예선(combinedWcq: 아시안컵)은 별도 예선 없이 월드컵 예선 랭킹으로 진출국을 가린다', () => {

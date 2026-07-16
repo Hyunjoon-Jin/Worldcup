@@ -102,6 +102,29 @@ export function runCupQualification(
     return { groups: [], autoQualified, earned, qualified: [...autoQualified, ...earned].slice(0, format.teams) }
   }
 
+  // 네이션스리그 예선(CONCACAF 골드컵, nationsLeague): 상위(리그 A 프록시)는 성적순 직행,
+  // 남은 자리는 하위권 예선 플레이오프(골드컵 프렐림)로 채운다 — 현실의 네이션스리그 기반 진출 반영.
+  if (format.qual.style === 'nationsLeague') {
+    const ordered = [...candidatePool].sort(
+      (a, b) => rankOf(a, rankByTeam) - rankOf(b, rankByTeam) || ratingOf(b, ratings) - ratingOf(a, ratings) || a.localeCompare(b),
+    )
+    const prelimSpots = Math.min(4, Math.max(0, remaining - 1))
+    const directCount = Math.max(0, remaining - prelimSpots)
+    const direct = ordered.slice(0, directCount) // 리그 A 직행
+    // 프렐림: 그 다음 상위 2*prelimSpots 팀이 시드 단판(무승부는 상위 시드 진출)으로 남은 자리를 다툰다.
+    const contenders = ordered.slice(directCount, directCount + prelimSpots * 2)
+    const rand = createSeededRandom(`${seed}-${format.id}-NL-PRELIM`)
+    const prelimWinners: string[] = []
+    for (let i = 0; i < prelimSpots && i * 2 + 1 < contenders.length; i++) {
+      const home = contenders[i * 2]
+      const away = contenders[i * 2 + 1]
+      const s = simulateScoreRaw(ratings[home], ratings[away], 0, 0, rand)
+      prelimWinners.push(s.homeGoals >= s.awayGoals ? home : away)
+    }
+    const earned = [...direct, ...prelimWinners].slice(0, remaining)
+    return { groups: [], autoQualified, earned, qualified: [...autoQualified, ...earned].slice(0, format.teams) }
+  }
+
   // 예선 불필요(후보가 슬롯 이하): 전원 통과.
   if (candidatePool.length <= remaining) {
     const earned = candidatePool
