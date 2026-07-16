@@ -4,6 +4,7 @@ import { CUP_FORMATS, type CupId } from '../data/continental/formats'
 import { runCup, type CupResult } from '../engine/continental/runCup'
 import { runCupQualification, type CupQualResult } from '../engine/continental/cupQualification'
 import { computeCupProbabilities, type CupProbabilities } from '../engine/continental/cupProbability'
+import { selectCupHosts } from '../engine/continental/hostSelection'
 import { baseRatingsMap, nationsByConfederation } from '../data/nations'
 import { generateSeed } from '../engine/rng'
 import { useContinentalHistoryStore } from './useContinentalHistoryStore'
@@ -23,8 +24,8 @@ export function cupTotalStages(cupId: CupId): number {
 interface ContinentalStore {
   activeCupId: CupId | null
   seed: string | null
-  /** 개최국 팀 ID(홈 이점·자동 진출). null이면 개최국 없음. */
-  hostId: string | null
+  /** 개최국 팀 ID(홈 이점·자동 진출). 에디션(cupId+연도)별로 경제·지역 가중 랜덤으로 자동 선정. 공동개최 시 2~3국. */
+  hostIds: string[]
   /** 이 대회의 개최 연도(시즌 타임라인에서 진입 시 설정). null이면 연도 미표시. */
   cupYear: number | null
   /** 예선 결과(참가국을 가린다). */
@@ -33,9 +34,8 @@ interface ContinentalStore {
   probabilities: CupProbabilities | null
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
   stage: number
-  /** 대회 선택(결과 초기화). year를 주면 그 개최 연도로 표시(시즌 타임라인 진입). */
+  /** 대회 선택(결과 초기화). year를 주면 그 개최 연도로 표시하고, 개최국을 자동 선정한다. */
   selectCup: (id: CupId | null, year?: number | null) => void
-  setHost: (teamId: string | null) => void
   /** 활성 대회를 참가국 선정 → 전과정 시뮬레이션한다(결과는 precompute, 단계별로 공개). */
   runActiveCup: (opts?: { seed?: string; rankByTeam?: Record<string, number> }) => void
   /** 한 단계 진행(다음 경기일/라운드 공개). */
@@ -52,20 +52,29 @@ export const useContinentalStore = create<ContinentalStore>()(
     (set, get) => ({
       activeCupId: null,
       seed: null,
-      hostId: null,
+      hostIds: [],
       cupYear: null,
       qualResult: null,
       result: null,
       probabilities: null,
       stage: 0,
-      selectCup: (id, year = null) => set({ activeCupId: id, cupYear: year, qualResult: null, result: null, probabilities: null, seed: null, stage: 0 }),
-      setHost: (teamId) => set({ hostId: teamId, qualResult: null, result: null, probabilities: null, stage: 0 }),
+      selectCup: (id, year = null) =>
+        set({
+          activeCupId: id,
+          cupYear: year,
+          // 개최국은 에디션(cupId+연도)의 고정 속성 — 경제·지역 가중 랜덤으로 자동 선정(공동개최 가능).
+          hostIds: id ? selectCupHosts(CUP_FORMATS[id], `${id}-${year ?? 0}`) : [],
+          qualResult: null,
+          result: null,
+          probabilities: null,
+          seed: null,
+          stage: 0,
+        }),
       runActiveCup: (opts) => {
-        const { activeCupId, hostId } = get()
+        const { activeCupId, hostIds } = get()
         if (!activeCupId) return
         const format = CUP_FORMATS[activeCupId]
         const usedSeed = opts?.seed && opts.seed.trim() ? opts.seed.trim().toUpperCase() : generateSeed()
-        const hostIds = hostId ? [hostId] : []
         // 1) 예선으로 참가국을 가린다. 2) 통과국으로 본선을 시뮬레이션한다.
         const poolIds = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
         const qualResult = runCupQualification(format, baseRatingsMap(poolIds), hostIds, usedSeed, opts?.rankByTeam ?? {})
@@ -96,18 +105,17 @@ export const useContinentalStore = create<ContinentalStore>()(
         set({ stage: cupTotalStages(activeCupId) })
       },
       computeProbabilities: (iterations = CUP_PROB_ITERATIONS) => {
-        const { activeCupId, hostId, result } = get()
+        const { activeCupId, hostIds, result } = get()
         if (!activeCupId || !result) return
         const format = CUP_FORMATS[activeCupId]
-        const hostIds = hostId ? [hostId] : []
         const field = result.groups.flatMap((g) => g.teams)
         const ratings = baseRatingsMap(field)
         const seedBase = get().seed ?? 'CUP'
         const probabilities = computeCupProbabilities(format, field, ratings, hostIds, iterations, `${seedBase}-PROB`)
         set({ probabilities })
       },
-      reset: () => set({ activeCupId: null, seed: null, hostId: null, cupYear: null, qualResult: null, result: null, probabilities: null, stage: 0 }),
+      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, stage: 0 }),
     }),
-    { name: 'wc2026-continental-store', version: 1 },
+    { name: 'wc2026-continental-store', version: 2 },
   ),
 )
