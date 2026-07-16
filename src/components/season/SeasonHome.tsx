@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
-import { TeamLink } from '../common/TeamLink'
 import { useCareerStore } from '../../store/useCareerStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useSeasonStore } from '../../store/useSeasonStore'
@@ -14,9 +13,9 @@ import { advanceToNextEdition } from '../../store/tournamentActions'
 import { autoSimulateSeasonEvent } from '../../store/seasonActions'
 import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seasonTimeline'
 import { CalendarView } from './CalendarView'
+import { MyTeamSchedule } from './MyTeamSchedule'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
-import type { CupId } from '../../data/continental/formats'
-import type { Confederation } from '../../types/team'
+import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
 
 /** 월드컵 이벤트의 진행 단계(예선 명시화): 예선 → 조추첨 → 본선 → 종료. */
 type WcPhase = 'qualifying' | 'drawReady' | 'finals' | 'done'
@@ -78,13 +77,10 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const events = useMemo(() => buildSeasonTimeline(wcYear), [wcYear])
   const clampedCursor = Math.min(cursorIndex, events.length - 1)
   const current = events[clampedCursor]
-  const myConfed = myTeamId ? ALL_NATIONS_BY_ID[myTeamId]?.confederation : undefined
-
   const enter = (e: SeasonEvent) => {
     if (e.kind === 'wc') onNavigateWC()
     else onSelectCup(e.id as CupId, e.year)
   }
-  const myPlays = (e: SeasonEvent) => (myConfed ? e.confeds === 'ALL' || (e.confeds as Confederation[]).includes(myConfed) : false)
 
   // 월드컵 이벤트의 현재 단계(예선 → 조추첨 대기 → 본선 → 종료)를 스토어 상태에서 도출한다.
   const wcPhase: WcPhase = progressPhase === 'complete' ? 'done' : drawDone ? 'finals' : qualDone ? 'drawReady' : 'qualifying'
@@ -94,6 +90,10 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     finals: '본선 진행 중',
     done: '본선 종료',
   }
+
+  // 진행 중인 대회(시작됐으나 종료 전) — 캘린더 밑에서 실황 페이지로 이어간다.
+  const wcInProgress = qualDone && progressPhase !== 'complete'
+  const cupInProgress = cupActiveId != null && cupHasResult && cupStage < cupTotalStages(cupActiveId)
 
   /** 한 이벤트가 이미 시뮬레이션(완주)됐는가 — 완료 표시·자동 진행 멱등성용. */
   const isDone = (e: SeasonEvent): boolean =>
@@ -210,32 +210,37 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
       {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화 */}
       <CalendarView wcYear={wcYear} currentEvent={current} />
 
-      {/* 내 팀 관련 일정(진행 상태 표시 — 캘린더 축이므로 임의 진입 불가) */}
-      {myTeamId && (
-        <GlassCard className="p-4">
-          <h3 className="mb-2 text-sm font-bold text-sky-300">⭐ 내 팀 <TeamLink teamId={myTeamId} /> 의 대회</h3>
+      {/* 진행 중인 대회 — 캘린더 밑에서 각 대회 실황 페이지로 진입 */}
+      <GlassCard className="p-4">
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-gray-200">🔴 진행 중인 대회</h3>
+        {!wcInProgress && !cupInProgress ? (
+          <p className="text-[11px] text-gray-500">현재 진행 중인 대회가 없습니다. 위 ‘지금 진행할 일정’에서 대회를 진행하면 여기에서 실황을 볼 수 있습니다.</p>
+        ) : (
           <div className="space-y-1.5">
-            {events.filter(myPlays).map((e) => {
-              const idx = events.indexOf(e)
-              const state = idx < clampedCursor ? 'past' : idx === clampedCursor ? 'current' : 'future'
-              return (
-                <div
-                  key={`${e.id}-${e.year}`}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
-                    state === 'current' ? 'bg-sky-500/20 ring-1 ring-sky-400/40' : 'bg-sky-500/10'
-                  } ${state === 'past' ? 'opacity-60' : ''}`}
-                >
-                  <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
-                  <span className="min-w-0 flex-1 font-medium text-sky-100">{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
-                  <span className="shrink-0 text-[10px] text-sky-300/70">
-                    {state === 'past' ? (isDone(e) ? '✅ 완료' : '지난 일정') : state === 'current' ? '지금 진행' : '예정'}
-                  </span>
-                </div>
-              )
-            })}
+            {wcInProgress && (
+              <button
+                onClick={onNavigateWC}
+                className="flex w-full items-center gap-2 rounded-lg bg-emerald-500/10 px-2.5 py-2 text-left text-xs transition-colors hover:bg-emerald-500/20"
+              >
+                <span className="min-w-0 flex-1 font-medium text-emerald-100">🏆 FIFA 월드컵 <span className="text-gray-500">{wcYear}</span> · <span className="text-emerald-300/80">{WC_PHASE_LABEL[wcPhase]}</span></span>
+                <span className="shrink-0 text-[11px] font-bold text-emerald-300">실황 보기 ›</span>
+              </button>
+            )}
+            {cupInProgress && cupActiveId && (
+              <button
+                onClick={() => onSelectCup(cupActiveId, cupActiveYear ?? wcYear)}
+                className="flex w-full items-center gap-2 rounded-lg bg-violet-500/10 px-2.5 py-2 text-left text-xs transition-colors hover:bg-violet-500/20"
+              >
+                <span className="min-w-0 flex-1 font-medium text-violet-100">🌍 {CUP_FORMATS[cupActiveId].nameKo} {cupActiveYear && <span className="text-gray-500">{cupActiveYear}</span>} · <span className="text-violet-300/80">진행 중</span></span>
+                <span className="shrink-0 text-[11px] font-bold text-violet-300">실황 보기 ›</span>
+              </button>
+            )}
           </div>
-        </GlassCard>
-      )}
+        )}
+      </GlassCard>
+
+      {/* 내 팀 경기 일정 — 내 팀이 설정돼 있으면 내 팀 경기를 날짜와 함께 표시(클릭 시 경기 상세) */}
+      {myTeamId && <MyTeamSchedule teamId={myTeamId} onSelectCup={onSelectCup} />}
 
       {/* 전체 일정(진행 상태 표시 — 캘린더대로 순서대로만 진행) */}
       <GlassCard className="p-4">

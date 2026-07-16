@@ -34,6 +34,8 @@ try {
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
   // 실제 달력(월별 그리드)이 캘린더 탭에 렌더된다.
   assert(await page.getByText('📅 시즌 캘린더', { exact: false }).first().isVisible(), '실제 달력(월별 그리드)이 표시된다')
+  // 진행 중인 대회 섹션(캘린더 하단)이 렌더된다.
+  assert(await page.getByText('🔴 진행 중인 대회', { exact: false }).first().isVisible(), '진행 중인 대회 섹션이 표시된다')
 
   // 캘린더 축: 대회를 임의로 고를 수 없다. 현재 일정(월드컵)을 자동 진행해 다음 일정(대륙컵)이 다가오게 한다.
   await page.getByRole('button', { name: '⏭ 자동 진행 후 다음 일정로' }).click()
