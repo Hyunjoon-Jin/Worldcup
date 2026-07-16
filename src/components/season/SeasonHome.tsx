@@ -61,7 +61,6 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const cursorIndex = useSeasonStore((s) => s.cursorIndex)
   const advance = useSeasonStore((s) => s.advance)
-  const setCursor = useSeasonStore((s) => s.setCursor)
   // 진행 상태(일정 축에서 각 이벤트의 완료 여부·월드컵 예선/본선 단계 판단).
   const progressPhase = useProgressStore((s) => s.phase)
   const qualDone = useQualificationStore((s) => s.result != null)
@@ -159,9 +158,9 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     <div className="flex flex-col gap-5">
       {/* 진행 척추 헤더 */}
       <GlassCard strong className="p-5 text-center">
-        <p className="mb-1 text-sm font-semibold text-white">🗓 {wcYear} 시즌 — 일정 진행</p>
+        <p className="mb-1 text-sm font-semibold text-white">🗓 {wcYear} 시즌 캘린더 — 일정 진행</p>
         <p className="mb-3 text-[11px] text-gray-400">
-          일정을 축으로 대회를 시간 순서대로 진행합니다. 월드컵도 캘린더 위의 한 이벤트입니다.
+          캘린더를 시간 순서대로 진행하면 대회가 다가옵니다. 대회를 임의로 고를 수 없고, 다가온 일정만 진행합니다. 월드컵도 캘린더 위의 한 이벤트입니다.
           {hostIds.length > 0 && <> 월드컵 개최국: {hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(', ')}.</>}
         </p>
         {current && (() => {
@@ -207,48 +206,56 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         })()}
       </GlassCard>
 
-      {/* 내 팀 관련 일정 강조 */}
+      {/* 내 팀 관련 일정(진행 상태 표시 — 캘린더 축이므로 임의 진입 불가) */}
       {myTeamId && (
         <GlassCard className="p-4">
           <h3 className="mb-2 text-sm font-bold text-sky-300">⭐ 내 팀 <TeamLink teamId={myTeamId} /> 의 대회</h3>
           <div className="space-y-1.5">
-            {events.filter(myPlays).map((e) => (
-              <button
-                key={`${e.id}-${e.year}`}
-                onClick={() => enter(e)}
-                className="flex w-full items-center gap-2 rounded-lg bg-sky-500/10 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-sky-500/20"
-              >
-                <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
-                <span className="min-w-0 flex-1 font-medium text-sky-100">{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
-                <span className="shrink-0 text-[10px] text-sky-300/70">진입 ›</span>
-              </button>
-            ))}
+            {events.filter(myPlays).map((e) => {
+              const idx = events.indexOf(e)
+              const state = idx < clampedCursor ? 'past' : idx === clampedCursor ? 'current' : 'future'
+              return (
+                <div
+                  key={`${e.id}-${e.year}`}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+                    state === 'current' ? 'bg-sky-500/20 ring-1 ring-sky-400/40' : 'bg-sky-500/10'
+                  } ${state === 'past' ? 'opacity-60' : ''}`}
+                >
+                  <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
+                  <span className="min-w-0 flex-1 font-medium text-sky-100">{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
+                  <span className="shrink-0 text-[10px] text-sky-300/70">
+                    {state === 'past' ? (isDone(e) ? '✅ 완료' : '지난 일정') : state === 'current' ? '지금 진행' : '예정'}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </GlassCard>
       )}
 
-      {/* 전체 일정(진행 상태 표시) */}
+      {/* 전체 일정(진행 상태 표시 — 캘린더대로 순서대로만 진행) */}
       <GlassCard className="p-4">
         <h3 className="mb-1 text-sm font-bold text-gray-200">전체 일정</h3>
-        <p className="mb-3 text-[11px] text-gray-500">지난 일정 · 진행 중 · 예정. 아무 일정이나 눌러 진입할 수 있습니다.</p>
+        <p className="mb-3 text-[11px] text-gray-500">캘린더는 시간 순서대로만 진행됩니다. 대회를 임의로 고를 수 없고, 다가온 일정(위의 ‘지금 진행할 일정’)만 진행할 수 있습니다.</p>
         <div className="space-y-1.5">
           {events.map((e, i) => {
             const state = i < clampedCursor ? 'past' : i === clampedCursor ? 'current' : 'future'
             return (
-              <button
+              <div
                 key={`${e.id}-${e.year}`}
-                onClick={() => { setCursor(i); enter(e) }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/15 ${
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
                   state === 'current' ? 'bg-emerald-500/15 ring-1 ring-emerald-400/40' : state === 'past' ? 'bg-white/5 opacity-60' : 'bg-white/5'
                 }`}
               >
                 <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
-                <span className={`min-w-0 flex-1 font-medium ${e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
+                <span className={`min-w-0 flex-1 font-medium ${state === 'future' ? 'text-gray-400' : e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>
+                  {state === 'future' ? '🔒 ' : e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span>
+                </span>
                 <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-gray-500">
                   {isDone(e) && <span className="rounded bg-emerald-500/20 px-1 py-0.5 font-bold text-emerald-300">✅ 완료</span>}
-                  {state === 'past' ? '지난 일정' : state === 'current' ? '진행 중' : e.confeds === 'ALL' ? '전 대륙' : (e.confeds as Confederation[]).join('/')} ›
+                  {state === 'past' ? '지난 일정' : state === 'current' ? '▶ 진행 중' : '예정'}
                 </span>
-              </button>
+              </div>
             )
           })}
         </div>

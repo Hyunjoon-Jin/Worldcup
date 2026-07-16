@@ -25,18 +25,20 @@ try {
   if (await skip.isVisible().catch(() => false)) await skip.click()
 
   // 기본 진입점이 시즌 홈(일정 축)이고, 진행 척추(지금 진행할 일정)가 렌더되는지
-  await page.getByText('시즌 — 일정 진행', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, '기본 진입점이 시즌 홈(일정 축)이다')
+  await page.getByText('시즌 캘린더', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, '기본 진입점이 캘린더(일정 축)이다')
   assert(await page.getByText('지금 진행할 일정', { exact: false }).first().isVisible(), '진행 척추(현재 일정)가 표시된다')
   assert(await page.getByRole('button', { name: '▶ 이 일정 진행' }).isVisible(), '현재 일정 진행 버튼이 있다')
   // 예선 명시화: 현재 일정(월드컵)의 단계 표시(지역예선 진행 중)가 렌더된다.
   assert(await page.getByText('지역예선 진행 중', { exact: false }).first().isVisible(), '현재 일정의 진행 단계가 표시된다')
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
 
-  // 일정 축 네비게이션: 시즌 홈에서 유로 일정을 눌러 대륙컵으로 진입(컨텍스트 전환)
-  await page.getByText('유럽 축구 선수권').first().click()
-  await page.getByText('유럽 축구 선수권', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).isVisible(), '시즌 홈에서 대륙컵 이벤트로 진입된다')
+  // 캘린더 축: 대회를 임의로 고를 수 없다. 현재 일정(월드컵)을 자동 진행해 다음 일정(대륙컵)이 다가오게 한다.
+  await page.getByRole('button', { name: '⏭ 자동 진행 후 다음 일정로' }).click()
+  // 다음 일정이 대륙컵으로 다가왔다 — 현재 일정 카드에서 진행하면 대륙컵 이벤트로 진입한다.
+  await page.getByRole('button', { name: '▶ 이 일정 진행' }).click()
+  await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).waitFor({ timeout: 10000 })
+  assert(true, '캘린더에서 다가온 대륙컵으로 진입된다(임의 선택 불가)')
   await page.getByRole('textbox', { name: '대회 시드' }).fill('CUP-SMOKE')
   await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).click()
   // 조추첨(stage 0)부터 단계별 공개 — 조편성 확인 후 끝까지 진행.
