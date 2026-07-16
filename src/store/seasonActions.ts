@@ -58,6 +58,11 @@ function combinedQualRanking(): Record<string, number> {
   return map
 }
 
+/** 대륙컵 예선 랭킹(통합 예선 대회만) — 캘린더 단계 진행에서 대회 시작 시 사용. */
+export function cupRankByTeam(cupId: CupId): Record<string, number> | undefined {
+  return CUP_FORMATS[cupId].qual.style === 'combinedWcq' ? combinedQualRanking() : undefined
+}
+
 /**
  * 대륙컵 한 대회를 자동으로 시뮬레이션한다(예선 → 본선 전과정). 이미 그 연도 대회가 기록돼 있으면 스킵한다.
  * 결과는 useContinentalHistoryStore에 축적되어 팀별 트로피·통산 성적·랭킹에 반영된다.
