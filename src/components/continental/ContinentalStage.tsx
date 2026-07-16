@@ -4,8 +4,10 @@ import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { useContinentalStore } from '../../store/useContinentalStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
+import { useCareerStore } from '../../store/useCareerStore'
 import { CUP_FORMATS, ALL_CUP_IDS, type CupId } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
+import { buildSeasonTimeline } from '../../engine/season/seasonTimeline'
 import type { CupGroupResult, CupKnockoutMatch } from '../../engine/continental/runCup'
 import type { KnockoutRound } from '../../types/match'
 
@@ -26,6 +28,32 @@ function CupPickerCard({ id, onPick }: { id: CupId; onPick: (id: CupId) => void 
       </p>
       <p className="mt-0.5 text-[11px] text-sky-300">{MONTH_LABEL[f.schedule.monthWindow]} · {f.confeds.join('/')}</p>
     </button>
+  )
+}
+
+function fmtYmd(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${y}.${Number(m)}.${Number(d)}`
+}
+
+/** 시즌 일정: 이번 월드컵 사이클의 월드컵 본선 + 대륙컵을 개최 순서로 표시(충돌 없는 배치). */
+function SeasonTimelineCard() {
+  const wcYear = useCareerStore((s) => s.year)
+  const events = useMemo(() => buildSeasonTimeline(wcYear), [wcYear])
+  return (
+    <GlassCard className="p-4">
+      <h3 className="mb-1 text-sm font-bold text-gray-200">🗓 시즌 일정 <span className="text-[11px] font-normal text-gray-500">({wcYear} 사이클)</span></h3>
+      <p className="mb-3 text-[11px] text-gray-500">월드컵과 6개 대륙컵은 서로 다른 시기에 열려 같은 팀의 경기가 겹치지 않습니다.</p>
+      <div className="space-y-1.5">
+        {events.map((e) => (
+          <div key={`${e.id}-${e.year}`} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${e.kind === 'wc' ? 'bg-emerald-500/10' : 'bg-white/5'}`}>
+            <span className="w-24 shrink-0 tabular-nums text-[11px] text-gray-400">{fmtYmd(e.start)}</span>
+            <span className={`min-w-0 flex-1 font-medium ${e.kind === 'wc' ? 'text-emerald-200' : 'text-gray-200'}`}>{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo}</span>
+            <span className="shrink-0 text-[10px] text-gray-500">{e.confeds === 'ALL' ? '전 대륙' : e.confeds.join('/')}</span>
+          </div>
+        ))}
+      </div>
+    </GlassCard>
   )
 }
 
@@ -125,6 +153,7 @@ export function ContinentalStage() {
             ))}
           </div>
         </GlassCard>
+        <SeasonTimelineCard />
       </div>
     )
   }
