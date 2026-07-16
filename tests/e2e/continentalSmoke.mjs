@@ -29,6 +29,8 @@ try {
   assert(true, '기본 진입점이 시즌 홈(일정 축)이다')
   assert(await page.getByText('지금 진행할 일정', { exact: false }).first().isVisible(), '진행 척추(현재 일정)가 표시된다')
   assert(await page.getByRole('button', { name: '▶ 이 일정 진행' }).isVisible(), '현재 일정 진행 버튼이 있다')
+  // 예선 명시화: 현재 일정(월드컵)의 단계 표시(지역예선 진행 중)가 렌더된다.
+  assert(await page.getByText('지역예선 진행 중', { exact: false }).first().isVisible(), '현재 일정의 진행 단계가 표시된다')
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
 
   // 일정 축 네비게이션: 시즌 홈에서 유로 일정을 눌러 대륙컵으로 진입(컨텍스트 전환)
