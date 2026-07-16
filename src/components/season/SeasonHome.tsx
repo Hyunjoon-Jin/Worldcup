@@ -19,8 +19,11 @@ import { CalendarView } from './CalendarView'
 import { MyTeamSchedule } from './MyTeamSchedule'
 import { TeamLink } from '../common/TeamLink'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
+import { formatKoreanDate } from '../../data/calendar'
 import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
-import type { KnockoutRound } from '../../types/match'
+
+/** 진행 단위: 시간대별(한 킥오프 배치) / 경기일 단위(하루 전체). 사용자가 선택. */
+type StepMode = 'slot' | 'day'
 
 /** 월드컵 이벤트의 진행 단계(예선 명시화): 예선 → 조추첨 → 본선 → 종료. */
 type WcPhase = 'qualifying' | 'drawReady' | 'finals' | 'done'
@@ -35,9 +38,6 @@ interface CycleProgress {
   total: number
   label: string
 }
-
-const KO_ROUND_ORDER: KnockoutRound[] = ['R32', 'R16', 'QF', 'SF', 'FINAL']
-const KO_LABEL: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
 
 /** 방금 진행한 경기일(라운드) — 결과 목록. 클릭 시 경기 모달. */
 interface RevealRow {
@@ -96,6 +96,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const [busy, setBusy] = useState(false)
   const [cycleProgress, setCycleProgress] = useState<CycleProgress | null>(null)
   const [reveal, setReveal] = useState<RevealPanel | null>(null)
+  const [stepMode, setStepMode] = useState<StepMode>('day')
 
   const events = useMemo(() => buildSeasonTimeline(wcYear), [wcYear])
   const clampedCursor = Math.min(cursorIndex, events.length - 1)
@@ -245,30 +246,29 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     return { label: r.label, rows }
   }
 
-  // 월드컵 녹아웃 라운드에서 결과가 있는 가장 깊은 라운드 인덱스(KO_ROUND_ORDER).
-  const wcTopRound = (): number => {
-    let top = -1
-    for (const s of Object.values(useProgressStore.getState().knockoutSlots)) {
-      if (s.result) {
-        const i = KO_ROUND_ORDER.indexOf(s.round)
-        if (i > top) top = i
-      }
-    }
-    return top
-  }
-  const wcKoRevealPanel = (): RevealPanel => {
-    const top = wcTopRound()
-    const round = KO_ROUND_ORDER[top]
-    const rows: RevealRow[] = Object.values(useProgressStore.getState().knockoutSlots)
-      .filter((s) => s.result && (s.round === round || (round === 'FINAL' && s.round === 'THIRD')))
-      .map((s) => ({
-        key: s.slotId,
-        homeTeamId: s.result!.homeTeamId,
-        awayTeamId: s.result!.awayTeamId,
-        score: `${s.result!.homeGoals}-${s.result!.awayGoals}${s.result!.wentToPenalties ? ` (PK ${s.result!.homePenalties}-${s.result!.awayPenalties})` : ''}`,
-        ref: { kind: 'knockout', match: s.result! },
-      }))
-    return { label: `🏆 FIFA 월드컵 · 녹아웃 ${KO_LABEL[round]}`, rows }
+  // 월드컵 본선에서 방금 진행한 배치(하루 또는 한 시간대)의 경기 결과 패널.
+  const wcFinalsBatchPanel = (): RevealPanel => {
+    const ps = useProgressStore.getState()
+    const rows: RevealRow[] = [
+      ...ps.lastDayGroupResults.map((m) => ({
+        key: `g-${m.group}-${m.matchday}-${m.homeTeamId}`,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        score: `${m.homeGoals}-${m.awayGoals}`,
+        ref: { kind: 'group' as const, match: m },
+      })),
+      ...ps.lastKnockoutResults.map((m) => ({
+        key: `k-${m.slotId}`,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        score: `${m.homeGoals}-${m.awayGoals}${m.wentToPenalties ? ` (PK ${m.homePenalties}-${m.awayPenalties})` : ''}`,
+        ref: { kind: 'knockout' as const, match: m },
+      })),
+    ]
+    const dateLabel = ps.lastBatchDate ? formatKoreanDate(ps.lastBatchDate) : ''
+    const slotLabel = ps.lastBatchTimeSlot ? ` · ${ps.lastBatchTimeSlot}` : ''
+    const phaseLabel = ps.phase === 'complete' ? '결승 종료' : ps.phase === 'knockout' ? '녹아웃' : '조별리그'
+    return { label: `🏆 FIFA 월드컵 · ${dateLabel}${slotLabel} (${phaseLabel})`, rows }
   }
 
   /**
@@ -296,7 +296,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         setReveal(null)
       }
     } else {
-      // 월드컵: 지역예선 → 조추첨 → 조별리그 → 녹아웃(라운드별)
+      // 월드컵: 지역예선(한 스텝) → 조추첨(한 스텝) → 본선(경기일/시간대별 한 배치씩)
       const qs = useQualificationStore.getState()
       if (!qs.result) {
         qs.simulate()
@@ -305,26 +305,14 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
       } else if (!useDrawStore.getState().isComplete) {
         startFinalsFromQualification(qs.result.qualified48, `WC-${e.year}`, formOffsetsFromResults(qs.result))
         setReveal({ label: '🏆 FIFA 월드컵 · 본선 조추첨 완료', rows: [] })
+      } else if (useProgressStore.getState().phase === 'complete') {
+        moveCursorNext()
+        setReveal(null)
       } else {
-        const ps = useProgressStore.getState()
-        if (ps.phase === 'group' || ps.phase === 'idle') {
-          let guard = 0
-          while ((useProgressStore.getState().phase === 'group' || useProgressStore.getState().phase === 'idle') && guard++ < 80) {
-            useProgressStore.getState().advanceDay()
-          }
-          setReveal({ label: '🏆 FIFA 월드컵 · 조별리그 종료 — 32강 진출 확정', rows: [] })
-        } else if (ps.phase === 'knockout') {
-          const before = wcTopRound()
-          let guard = 0
-          while (useProgressStore.getState().phase !== 'complete' && wcTopRound() === before && guard++ < 80) {
-            useProgressStore.getState().advanceDay()
-          }
-          setReveal(wcKoRevealPanel())
-        } else {
-          // 완료 → 다음 이벤트
-          moveCursorNext()
-          setReveal(null)
-        }
+        // 본선: 사용자가 고른 단위로 한 배치만 진행(시간대별=한 킥오프, 경기일=하루).
+        if (stepMode === 'slot') useProgressStore.getState().advanceTimeSlot()
+        else useProgressStore.getState().advanceDay()
+        setReveal(wcFinalsBatchPanel())
       }
     }
     setBusy(false)
@@ -432,6 +420,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         onProgressNext={busy ? undefined : advanceOneStep}
         nextLabel={nextStepLabel}
         busy={busy}
+        stepMode={stepMode}
+        onStepModeChange={setStepMode}
       />
 
       {/* 방금 진행한 경기일(라운드) 결과 — 각 경기 클릭 시 상세 모달 */}

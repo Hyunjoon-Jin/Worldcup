@@ -43,6 +43,8 @@ export function CalendarView({
   onProgressNext,
   nextLabel,
   busy,
+  stepMode,
+  onStepModeChange,
 }: {
   wcYear: number
   currentEvent?: SeasonEvent
@@ -53,6 +55,9 @@ export function CalendarView({
   /** 다음(현재) 진행할 일정 라벨. */
   nextLabel?: string
   busy?: boolean
+  /** 진행 단위(시간대별/경기일). */
+  stepMode?: 'slot' | 'day'
+  onStepModeChange?: (m: 'slot' | 'day') => void
 }) {
   const phases = useMemo(() => buildCycleCalendar(wcYear), [wcYear])
   // 일정이 있는 월만 네비게이션 대상(사이클 내 빈 달은 건너뛴다).
@@ -95,15 +100,33 @@ export function CalendarView({
 
   return (
     <GlassCard className="p-4">
-      {/* 상단: 다음 일정 진행 버튼 — 캘린더가 진행의 축. 누르면 현재 일정을 진행하고 결승 경기를 보여준다. */}
+      {/* 상단: 진행 단위 선택(시간대별/경기일) + 다음 일정 진행 버튼 — 캘린더가 진행의 축. */}
       {onProgressNext && (
-        <button
-          onClick={onProgressNext}
-          disabled={busy}
-          className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2.5 text-sm font-bold text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
-        >
-          {busy ? '진행 중…' : <>▶ 다음 일정 진행{nextLabel && <span className="font-normal text-emerald-300/80"> · {nextLabel}</span>}</>}
-        </button>
+        <div className="mb-3">
+          {onStepModeChange && (
+            <div className="mb-2 flex items-center justify-center gap-1 text-[11px]">
+              <span className="mr-1 text-gray-500">진행 단위:</span>
+              <div className="flex rounded-lg bg-white/5 p-0.5">
+                {(['slot', 'day'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => onStepModeChange(m)}
+                    className={`rounded-md px-2.5 py-1 font-bold transition-colors ${stepMode === m ? 'bg-emerald-500/30 text-emerald-100' : 'text-gray-400 hover:text-gray-200'}`}
+                  >
+                    {m === 'slot' ? '시간대별' : '경기일 단위'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={onProgressNext}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2.5 text-sm font-bold text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+          >
+            {busy ? '진행 중…' : <>▶ 다음 일정 진행{nextLabel && <span className="font-normal text-emerald-300/80"> · {nextLabel}</span>}</>}
+          </button>
+        </div>
       )}
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-bold text-gray-200">📅 시즌 캘린더</h3>
