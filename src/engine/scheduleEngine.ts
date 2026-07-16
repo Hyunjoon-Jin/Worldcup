@@ -1,5 +1,5 @@
 import { GROUP_LETTERS } from '../data/hostSlots'
-import { dateForGroupStageDay, ROUND_DATE_WINDOWS } from '../data/calendar'
+import { dateForGroupStageDay, roundDateWindow, BASE_FINALS_YEAR } from '../data/calendar'
 import { ROUND_SLOT_IDS } from '../data/bracketTemplate'
 import type { GroupLetter } from '../types/group'
 import type { KnockoutRound } from '../types/match'
@@ -35,7 +35,7 @@ function groupTimeSlot(dayPos: number, matchday: 1 | 2 | 3, fixtureIdx: number):
 }
 
 /** 조추첨 완료 후 그룹스테이지 72경기를 실제 일정 로테이션(S1-S4/S2-S3 ...)대로 Day·시간대에 배정한다. */
-export function buildGroupStageSchedule(): ScheduledGroupMatch[] {
+export function buildGroupStageSchedule(year: number = BASE_FINALS_YEAR): ScheduledGroupMatch[] {
   const matches: ScheduledGroupMatch[] = []
   for (const group of GROUP_LETTERS) {
     const groupIndex = GROUP_LETTERS.indexOf(group)
@@ -53,7 +53,7 @@ export function buildGroupStageSchedule(): ScheduledGroupMatch[] {
         homeSeed: fixture.homeSeed,
         awaySeed: fixture.awaySeed,
         day,
-        date: dateForGroupStageDay(day),
+        date: dateForGroupStageDay(day, year),
         timeSlot: groupTimeSlot(dayPos, fixture.matchday, fixtureIdx),
       })
     }
@@ -62,7 +62,7 @@ export function buildGroupStageSchedule(): ScheduledGroupMatch[] {
 }
 
 /** 그룹스테이지 종료 후 32강부터의 라운드별 날짜창에 경기를 균등 배분하고 시간대를 부여한다. */
-export function buildKnockoutSchedule(): ScheduledKnockoutMatch[] {
+export function buildKnockoutSchedule(year: number = BASE_FINALS_YEAR): ScheduledKnockoutMatch[] {
   const matches: ScheduledKnockoutMatch[] = []
   // 날짜별로 이미 배정된 시간대를 라운드 경계를 넘어 전역 추적한다(C24). 서로 다른 라운드(예: 3·4위전과
   // 결승)가 같은 날짜에 놓이더라도 같은 시간대에 중복 편성되지 않도록, 그 날짜의 빈 시간대를 우선 배정한다.
@@ -77,7 +77,7 @@ export function buildKnockoutSchedule(): ScheduledKnockoutMatch[] {
     return free
   }
   for (const round of KNOCKOUT_ROUND_ORDER) {
-    const window = ROUND_DATE_WINDOWS[round]
+    const window = roundDateWindow(round, year)
     const start = new Date(window.start + 'T00:00:00Z')
     const end = new Date(window.end + 'T00:00:00Z')
     const daySpan = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1)
@@ -98,11 +98,11 @@ export function buildKnockoutSchedule(): ScheduledKnockoutMatch[] {
   return matches
 }
 
-export function buildFullSchedule(): TournamentSchedule {
-  const groupMatches = buildGroupStageSchedule()
+export function buildFullSchedule(year: number = BASE_FINALS_YEAR): TournamentSchedule {
+  const groupMatches = buildGroupStageSchedule(year)
   return {
     groupMatches,
-    knockoutMatches: buildKnockoutSchedule(),
+    knockoutMatches: buildKnockoutSchedule(year),
     totalGroupStageDays: Math.max(...groupMatches.map((m) => m.day)),
   }
 }

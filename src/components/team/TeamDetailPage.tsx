@@ -15,6 +15,7 @@ import { UpsetBadge } from '../common/UpsetBadge'
 import { ProbBar } from '../probability/ProbBar'
 import { STAGES } from '../probability/probabilityStages'
 import { TeamQualificationSection } from './TeamQualificationSection'
+import { TeamContinentalSection } from './TeamContinentalSection'
 import { getRatings, classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import {
   analyzeLastMatchdayScenarios,
@@ -645,6 +646,8 @@ export function TeamDetailPage() {
       )}
 
       {teamId && <TeamQualificationSection teamId={teamId} />}
+
+      {teamId && <TeamContinentalSection teamId={teamId} />}
 
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-emerald-300">본선 라운드별 진출 확률</h3>

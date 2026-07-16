@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   dateForGroupStageDay,
+  roundDateWindow,
+  shiftFinalsYear,
   GROUP_STAGE_DAYS,
   GROUP_STAGE_START,
   GROUP_STAGE_END,
 } from '../src/data/calendar'
 import { buildQualCalendar } from '../src/engine/qualification/calendar'
+import { buildFullSchedule } from '../src/engine/scheduleEngine'
 import { simulateAllQualification } from '../src/engine/qualification'
 
 describe('본선 조별리그 날짜 매핑 (C21)', () => {
@@ -20,6 +23,29 @@ describe('본선 조별리그 날짜 매핑 (C21)', () => {
       expect(cur >= prev).toBe(true)
       prev = cur
     }
+  })
+})
+
+describe('본선 일정 연도 파라미터화 (Phase 0.1)', () => {
+  it('기본 연도(2026)는 기존과 동일', () => {
+    expect(dateForGroupStageDay(1)).toBe('2026-06-11')
+    expect(roundDateWindow('FINAL').start).toBe('2026-07-19')
+    expect(shiftFinalsYear('2026-06-11', 2026)).toBe('2026-06-11')
+  })
+  it('연도를 넘기면 월/일 유지한 채 연도만 이동한다', () => {
+    expect(dateForGroupStageDay(1, 2030)).toBe('2030-06-11')
+    expect(dateForGroupStageDay(GROUP_STAGE_DAYS, 2030)).toBe('2030-06-27')
+    expect(roundDateWindow('FINAL', 2030)).toEqual({ start: '2030-07-19', end: '2030-07-19', label: '결승' })
+    expect(shiftFinalsYear('2026-07-19', 2034)).toBe('2034-07-19')
+  })
+  it('buildFullSchedule(year)가 전 경기 날짜를 그 연도로 생성(기본은 2026)', () => {
+    const base = buildFullSchedule()
+    const y2030 = buildFullSchedule(2030)
+    expect(base.groupMatches.every((m) => m.date.startsWith('2026-'))).toBe(true)
+    expect(y2030.groupMatches.every((m) => m.date.startsWith('2030-'))).toBe(true)
+    expect(y2030.knockoutMatches.every((m) => m.date.startsWith('2030-'))).toBe(true)
+    // 연도만 다르고 월/일 구조는 동일
+    expect(y2030.groupMatches.map((m) => m.date.slice(5))).toEqual(base.groupMatches.map((m) => m.date.slice(5)))
   })
 })
 

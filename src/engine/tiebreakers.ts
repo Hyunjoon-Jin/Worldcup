@@ -79,19 +79,28 @@ const byFifaRank: Comparator = (a, b) => {
 }
 
 /**
- * 2026 월드컵부터 적용되는 조별리그 순위 결정 기준(월드컵 사상 최초로 전체 골득실보다
- * 동률팀 간 상호전적을 우선한다):
- *   1) 승점 → 2) 상호전적 승점 → 3) 상호전적 골득실 → 4) 상호전적 다득점 →
- *   5) 조 전체 골득실 → 6) 조 전체 다득점 → 7) 페어플레이 → 8) FIFA 랭킹
- * 3팀 이상이 얽힌 경우 4위 팀과의 경기를 제외한 미니리그로 비교하고, 그 결과 일부만
- * 분리되고 나머지가 여전히 동률이면 남은 팀들에 대해 처음부터 다시 적용한다.
+ * 조별 타이브레이커 방식.
+ * - 'h2h'(기본, FIFA 월드컵·UEFA·CAF·AFC): 전체 골득실보다 동률팀 간 상호전적을 우선.
+ * - 'overall'(CONMEBOL·CONCACAF·OFC): 전체 골득실·다득점을 먼저 보고 그 다음 상호전적.
  */
-export function rankGroupTeams(teamIds: string[], matches: MatchResult[]): string[] {
+export type GroupTiebreakMode = 'h2h' | 'overall'
+
+/**
+ * 조별리그 순위 결정. 기본(h2h)은 2026 월드컵 규정 순서:
+ *   1) 승점 → 2) 상호전적 승점 → 3) 상호전적 골득실 → 4) 상호전적 다득점 →
+ *   5) 조 전체 골득실 → 6) 조 전체 다득점 → 7) 페어플레이 → 8) FIFA 랭킹(추첨 대체)
+ * overall 모드(대륙컵 일부): 1) 승점 → 2) 전체 골득실 → 3) 전체 다득점 → 4~6) 상호전적(승점·골득실·다득점)
+ *   → 7) 페어플레이 → 8) FIFA 랭킹.
+ * 3팀 이상이 얽힌 경우 4위 팀과의 경기를 제외한 미니리그로 비교하고, 일부만 분리되고 나머지가 여전히
+ * 동률이면 남은 팀들에 대해 처음부터 다시 적용한다.
+ * @param mode 기본 'h2h'. 인자 없이 호출하면 기존 동작과 완전히 동일(월드컵 경로 무영향).
+ */
+export function rankGroupTeams(teamIds: string[], matches: MatchResult[], mode: GroupTiebreakMode = 'h2h'): string[] {
   const overall = computeStandings(teamIds, matches)
-  return resolveTier(teamIds, overall, matches)
+  return resolveTier(teamIds, overall, matches, mode)
 }
 
-function resolveTier(tier: string[], overall: Record<string, GroupStanding>, matches: MatchResult[]): string[] {
+function resolveTier(tier: string[], overall: Record<string, GroupStanding>, matches: MatchResult[], mode: GroupTiebreakMode): string[] {
   if (tier.length <= 1) return tier
 
   const pointsSorted = [...tier].sort(byPoints(overall))
@@ -101,13 +110,13 @@ function resolveTier(tier: string[], overall: Record<string, GroupStanding>, mat
     let j = i + 1
     while (j < pointsSorted.length && overall[pointsSorted[j]].points === overall[pointsSorted[i]].points) j++
     const pointsTier = pointsSorted.slice(i, j)
-    result.push(...resolvePointsTier(pointsTier, overall, matches))
+    result.push(...resolvePointsTier(pointsTier, overall, matches, mode))
     i = j
   }
   return result
 }
 
-function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding>, matches: MatchResult[]): string[] {
+function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding>, matches: MatchResult[], mode: GroupTiebreakMode): string[] {
   if (tier.length <= 1) return tier
 
   const tierSet = new Set(tier)
@@ -125,18 +134,23 @@ function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding
   const complete = pairCounts.size === expectedPairs && [...pairCounts.values()].every((c) => c === maxPerPair)
   const h2h = complete ? computeStandings(tier, h2hMatches) : null
 
-  const comparator = h2h
-    ? chain(byPoints(h2h), byGoalDifference(h2h), byGoalsScored(h2h), byGoalDifference(overall), byGoalsScored(overall), byFairPlay(overall), byFifaRank)
-    : chain(byGoalDifference(overall), byGoalsScored(overall), byFairPlay(overall), byFifaRank)
+  // 모드별 타이브레이커 체인. overall은 전체 골득실·다득점을 상호전적보다 앞에 둔다.
+  const h2hChain = h2h ? [byPoints(h2h), byGoalDifference(h2h), byGoalsScored(h2h)] : []
+  const overallGoals = [byGoalDifference(overall), byGoalsScored(overall)]
+  const coreChain: Comparator[] =
+    mode === 'overall'
+      ? [...overallGoals, ...h2hChain, byFairPlay(overall)]
+      : h2h
+        ? [...h2hChain, ...overallGoals, byFairPlay(overall)]
+        : [...overallGoals, byFairPlay(overall)]
 
+  const comparator = chain(...coreChain, byFifaRank)
   const sorted = [...tier].sort(comparator)
 
   // 정렬 결과를 다시 "완전 동률(랭킹 제외 모든 기준 동일)" 묶음으로 나눠, 분리되지 않은
   // 잔여 동률팀들에 한해 같은 기준을 처음부터 재적용한다(4위 팀 제외 규정과 동일하게 서로의
   // 경기만으로 다시 미니리그를 구성).
-  const tieBreakerWithoutRank = h2h
-    ? chain(byPoints(h2h), byGoalDifference(h2h), byGoalsScored(h2h), byGoalDifference(overall), byGoalsScored(overall), byFairPlay(overall))
-    : chain(byGoalDifference(overall), byGoalsScored(overall), byFairPlay(overall))
+  const tieBreakerWithoutRank = chain(...coreChain)
 
   const result: string[] = []
   let i = 0
@@ -145,7 +159,7 @@ function resolvePointsTier(tier: string[], overall: Record<string, GroupStanding
     while (j < sorted.length && tieBreakerWithoutRank(sorted[i], sorted[j]) === 0) j++
     const stillTied = sorted.slice(i, j)
     if (stillTied.length > 1 && stillTied.length < tier.length) {
-      result.push(...resolvePointsTier(stillTied, overall, matches))
+      result.push(...resolvePointsTier(stillTied, overall, matches, mode))
     } else {
       result.push(...stillTied)
     }

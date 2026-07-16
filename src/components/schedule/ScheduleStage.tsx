@@ -14,7 +14,6 @@ import { CalendarTimeline } from './CalendarTimeline'
 import { DayResultFeed } from './DayResultFeed'
 import { TournamentSummary } from './TournamentSummary'
 import { SaveSlotsPanel } from './SaveSlotsPanel'
-import { VenueMap } from './VenueMap'
 import { nextPendingGroupSlot, nextPendingKnockoutSlot, useProgressStore } from '../../store/useProgressStore'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useCareerStore } from '../../store/useCareerStore'
@@ -230,7 +229,6 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
 
       <DayResultFeed />
       <TournamentSummary />
-      <VenueMap />
       <SaveSlotsPanel />
       {champion && (
         <GlassCard strong className="p-6 text-center">

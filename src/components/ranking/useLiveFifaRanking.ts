@@ -3,7 +3,9 @@ import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useCareerStore } from '../../store/useCareerStore'
 import { flattenPlayed, collectPlayedByConfed } from '../../engine/qualification/conditional'
-import { computeLiveRanking, type FinalsResults, type LiveRankRow } from '../../engine/qualification/ranking'
+import { computeLiveRanking, type FinalsResults, type ContinentalResults, type LiveRankRow } from '../../engine/qualification/ranking'
+import { useContinentalStore } from '../../store/useContinentalStore'
+import { cupToRankingResults } from '../../engine/continental/runCup'
 import type { KnockoutMatch } from '../../types/match'
 
 /**
@@ -24,14 +26,16 @@ export function useLiveFifaRanking(): {
   const groupMatches = useProgressStore((s) => s.groupMatches)
   const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
   const rankingBase = useCareerStore((s) => s.rankingBase)
+  const cupResult = useContinentalStore((s) => s.result)
 
-  return useMemo(() => computeShared(result, revealed, friendlies, groupMatches, knockoutSlots, rankingBase), [
+  return useMemo(() => computeShared(result, revealed, friendlies, groupMatches, knockoutSlots, rankingBase, cupResult), [
     result,
     revealed,
     friendlies,
     groupMatches,
     knockoutSlots,
     rankingBase,
+    cupResult,
   ])
 }
 
@@ -63,8 +67,10 @@ function computeShared(
   groupMatches: ReturnType<typeof useProgressStore.getState>['groupMatches'],
   knockoutSlots: ReturnType<typeof useProgressStore.getState>['knockoutSlots'],
   rankingBase: Record<string, number>,
+  cupResult: ReturnType<typeof useContinentalStore.getState>['result'],
 ): LiveRankingOutput {
-  const keys = [result, revealed, friendlies, groupMatches, knockoutSlots, rankingBase]
+  // 캐시 키에 대륙컵 결과 포함(누락 시 대륙컵 반영이 stale 되는 감사 D2 버그 방지).
+  const keys = [result, revealed, friendlies, groupMatches, knockoutSlots, rankingBase, cupResult]
   if (cache && cache.keys.length === keys.length && cache.keys.every((k, i) => k === keys[i])) return cache.value
 
   let value: LiveRankingOutput
@@ -81,7 +87,9 @@ function computeShared(
     // 이미 치른(공개된) 친선전만 랭킹에 반영한다. 친선전은 대륙 무관이라 전체 대륙 중 가장 앞선 경기일 기준.
     const globalRevealed = Math.max(0, ...Object.values(revealed))
     const playedFriendlies = friendlies.filter((f) => f.matchday <= globalRevealed)
-    const rows = computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried, playedFriendlies)
+    // 대륙컵 결과(있으면)를 랭킹에 반영(조별 35·녹아웃 40).
+    const continental: ContinentalResults | undefined = cupResult ? cupToRankingResults(cupResult) : undefined
+    const rows = computeLiveRanking(result, flattenPlayed(collectPlayedByConfed(result, revealed)), finals, carried, playedFriendlies, continental)
     const rankByTeam: Record<string, number> = {}
     const pointsByTeam: Record<string, number> = {}
     const rowByTeam: Record<string, LiveRankRow> = {}

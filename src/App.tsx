@@ -20,6 +20,7 @@ const ProbabilityDashboard = lazy(() =>
 )
 const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
 const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
+const ContinentalStage = lazy(() => import('./components/continental/ContinentalStage').then((m) => ({ default: m.ContinentalStage })))
 const MyTeamTab = lazy(() => import('./components/team/MyTeamTab').then((m) => ({ default: m.MyTeamTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
@@ -32,10 +33,11 @@ import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
 
-type TabId = 'qualifiers' | 'myteam' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
+type TabId = 'qualifiers' | 'continental' | 'myteam' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'qualifiers', label: '지역예선' },
+  { id: 'continental', label: '대륙컵' },
   { id: 'myteam', label: '내 팀' },
   { id: 'ranking', label: 'FIFA 랭킹' },
   { id: 'draw', label: '조추첨' },
@@ -45,8 +47,8 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'probability', label: '확률 대시보드' },
 ]
 
-/** 조추첨 진행 여부와 무관하게 언제나 접근 가능한 탭. 조추첨은 예선을 거쳐야 열린다. */
-const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'myteam', 'ranking']
+/** 진행 상태와 무관하게 언제나 접근 가능한 탭. 대륙컵은 월드컵 흐름과 독립(격리 스토어). */
+const ALWAYS_ENABLED: TabId[] = ['qualifiers', 'continental', 'myteam', 'ranking']
 
 function App() {
   // 시작은 지역예선부터. 저장된 대회를 이어가는 경우에만 조추첨/일정으로 진입한다.
@@ -188,6 +190,7 @@ function App() {
         ) : (
           <>
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
+            {tab === 'continental' && <ContinentalStage />}
             {tab === 'myteam' && <MyTeamTab />}
             {tab === 'ranking' && <FifaRankingTab />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
