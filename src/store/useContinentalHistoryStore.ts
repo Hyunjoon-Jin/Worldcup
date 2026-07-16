@@ -9,11 +9,18 @@ import type { CupId } from '../data/continental/formats'
 export interface CupEdition {
   cupId: CupId
   seed: string
+  /** 개최 연도(시즌 타임라인 진입 시). 트로피 마일스톤 연대 표시용. 없으면 미상. */
+  year?: number
   champion: string
   runnerUp: string
   third: string | null
   /** 조별 통과(녹아웃 진출) 팀 — 통산 성적 집계용 */
   qualified: string[]
+}
+
+/** 한 팀이 획득한 대륙컵 우승 이벤트 목록(대회·연도). 트로피 마일스톤용. */
+export function cupTitleEvents(editions: CupEdition[], teamId: string): Array<{ cupId: CupId; year?: number }> {
+  return editions.filter((e) => e.champion === teamId).map((e) => ({ cupId: e.cupId, year: e.year }))
 }
 
 const MAX_EDITIONS = 80

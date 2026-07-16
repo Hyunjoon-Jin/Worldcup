@@ -24,11 +24,27 @@ page.on('pageerror', (err) => consoleErrors.push(String(err)))
 
 try {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
-  assert(await page.getByText('2026 북중미 월드컵 시뮬레이터').isVisible(), '앱이 로드된다')
+  assert(await page.getByText('국가대표 시뮬레이터').isVisible(), '앱이 로드된다')
 
   // 첫 방문 온보딩 오버레이가 있으면 건너뛴다 (v2 #48)
   const skip = page.getByText('건너뛰기')
   if (await skip.isVisible().catch(() => false)) await skip.click()
+
+  // 일정 축: 기본 진입은 시즌 홈. '이 일정 진행'으로 현재 일정(월드컵 지역예선)에 진입한다.
+  await page.getByText('지금 진행할 일정', { exact: false }).first().waitFor({ timeout: 10000 })
+  await page.getByRole('button', { name: '▶ 이 일정 진행' }).click()
+
+  // 예선 시작(결과가 없으면 시작 화면) → 첫 경기일 조추첨 완료 → 예선 끝까지 자동 진행
+  await page.getByRole('button', { name: '⚽ 지역예선 시작' }).click()
+  // 첫 경기일이 조추첨으로 시작하면 조추첨을 완료해 경기 진행 단계로 넘어간다(있을 때만).
+  const drawDone = page.getByRole('button', { name: /조추첨 완료/ })
+  if (await drawDone.isVisible().catch(() => false)) await drawDone.click()
+  await page.getByRole('button', { name: '⏭ 예선 끝까지 자동 진행' }).click()
+  await page.getByText('본선 진출 48개국', { exact: false }).first().waitFor({ timeout: 15000 })
+  assert(true, '지역예선이 끝까지 진행되어 본선 진출국이 확정된다')
+
+  // 조추첨 준비 → 조추첨 탭으로 이동
+  await page.getByRole('button', { name: '🎲 조추첨 진행하기 →' }).click()
 
   // 시드로 즉시 조추첨(결정론적)
   await page.getByRole('textbox', { name: '조추첨 시드' }).fill('SMOKE-TEST')
@@ -43,9 +59,9 @@ try {
   await page.getByText('우승팀이 결정되었습니다', { exact: false }).waitFor({ timeout: 15000 })
   assert(true, '결승까지 자동 진행이 우승팀을 결정한다')
 
-  // 확률 대시보드 렌더
+  // 확률 대시보드 렌더(진입 시 본선 몬테카를로 시뮬레이션 자동 실행)
   await page.getByRole('tab', { name: '확률 대시보드' }).click()
-  await page.getByText('몬테카를로 시뮬레이션한 확률', { exact: false }).waitFor({ timeout: 10000 })
+  await page.getByText('몬테카를로 시뮬레이션', { exact: false }).first().waitFor({ timeout: 15000 })
   assert(true, '확률 대시보드가 렌더된다')
 
   assert(consoleErrors.length === 0, `콘솔 오류가 없다 (발견: ${consoleErrors.length})`)

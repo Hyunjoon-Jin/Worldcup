@@ -16,6 +16,7 @@ import { ProbBar } from '../probability/ProbBar'
 import { STAGES } from '../probability/probabilityStages'
 import { TeamQualificationSection } from './TeamQualificationSection'
 import { TeamContinentalSection } from './TeamContinentalSection'
+import { TeamTrophyMilestones } from './TeamTrophyMilestones'
 import { getRatings, classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import {
   analyzeLastMatchdayScenarios,
@@ -50,6 +51,14 @@ const ROUND_LABEL_KO: Record<string, string> = {
   THIRD: '3·4위전',
   FINAL: '결승',
 }
+
+// 팀 상세가 방대해져(월드컵 예/본선 + 6개 대륙컵 + 확률·분석) 하위 탭으로 정보를 층위별로 분리한다.
+type TeamTab = 'overview' | 'schedule' | 'analysis'
+const TEAM_TABS: { id: TeamTab; label: string }[] = [
+  { id: 'overview', label: '📋 개요' },
+  { id: 'schedule', label: '🗓 일정·기록' },
+  { id: 'analysis', label: '📊 확률·분석' },
+]
 
 const VERDICT_CONFIG: Record<ScenarioVerdict, { label: string; icon: string; className: string }> = {
   advance: { label: '32강 진출 확정', icon: '✅', className: 'text-emerald-300' },
@@ -144,6 +153,12 @@ export function TeamDetailPage() {
   const qualSeed = useQualificationStore((s) => s.seed)
   const [sensitivity, setSensitivity] = useState<SensitivityPoint[] | null>(null)
   const [sensitivityLoading, setSensitivityLoading] = useState(false)
+  const [teamTab, setTeamTab] = useState<TeamTab>('overview')
+
+  // 다른 팀을 열면 항상 개요 탭에서 시작.
+  useEffect(() => {
+    setTeamTab('overview')
+  }, [teamId])
 
   const team = teamId ? TEAMS_BY_ID[teamId] : null
   const titleHistory = teamId ? titlesFor(teamId) : null
@@ -424,6 +439,28 @@ export function TeamDetailPage() {
         })()}
       </GlassCard>
 
+      {/* 하위 탭 바 — 방대해진 정보를 층위별로 분리(개요 / 일정·기록 / 확률·분석) */}
+      <GlassCard className="p-1.5">
+        <div className="flex gap-1" role="tablist" aria-label="팀 상세 하위 탭">
+          {TEAM_TABS.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={teamTab === t.id}
+              onClick={() => setTeamTab(t.id)}
+              className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition-colors sm:text-sm ${
+                teamTab === t.id ? 'bg-white/15 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </GlassCard>
+
+      {/* ── 개요 탭: FIFA 점수 · 트로피 캐비닛 · 역대 기록 ── */}
+      {teamTab === 'overview' && (
+        <>
       {/* FIFA 점수 카드(D20) — 라이브 점수·세계 순위·이번 대회 등락 */}
       {liveRow && (
         <GlassCard className="p-4">
@@ -463,7 +500,18 @@ export function TeamDetailPage() {
         </GlassCard>
       )}
 
+      <TeamTrophyMilestones teamId={teamId} />
+
       <TeamHistorySection teamId={teamId} />
+        </>
+      )}
+
+      {/* ── 일정·기록 탭: 지역예선 · 대륙컵 · 본선 경기/일정 ── */}
+      {teamTab === 'schedule' && (
+        <>
+      {teamId && <TeamQualificationSection teamId={teamId} />}
+
+      {teamId && <TeamContinentalSection teamId={teamId} />}
 
       {inFinals && (
       <GlassCard className="p-4">
@@ -566,7 +614,12 @@ export function TeamDetailPage() {
         )}
       </GlassCard>
       )}
+        </>
+      )}
 
+      {/* ── 확률·분석 탭: 진출 확률 · 3위 경우의 수 · 시나리오 · 예상 상대 · 민감도 ── */}
+      {teamTab === 'analysis' && (
+        <>
       {thirdPlaceRoute && (
         <GlassCard className="p-4">
           <h3 className="mb-3 text-sm font-bold text-amber-300">3위 진출 경우의 수 (조별리그 종료)</h3>
@@ -644,10 +697,6 @@ export function TeamDetailPage() {
           </div>
         </GlassCard>
       )}
-
-      {teamId && <TeamQualificationSection teamId={teamId} />}
-
-      {teamId && <TeamContinentalSection teamId={teamId} />}
 
       <GlassCard className="p-4">
         <h3 className="mb-3 text-sm font-bold text-emerald-300">본선 라운드별 진출 확률</h3>
@@ -870,6 +919,8 @@ export function TeamDetailPage() {
           </div>
         )}
       </GlassCard>
+        </>
+      )}
     </div>
   )
 }

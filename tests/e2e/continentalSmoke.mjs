@@ -24,18 +24,17 @@ try {
   const skip = page.getByText('건너뛰기')
   if (await skip.isVisible().catch(() => false)) await skip.click()
 
-  // 시즌 홈 탭 렌더 확인
-  await page.getByRole('tab', { name: '시즌' }).click()
-  await page.getByText('전체 일정', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, '시즌 홈이 렌더된다')
+  // 기본 진입점이 시즌 홈(일정 축)이고, 진행 척추(지금 진행할 일정)가 렌더되는지
+  await page.getByText('시즌 — 일정 진행', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, '기본 진입점이 시즌 홈(일정 축)이다')
+  assert(await page.getByText('지금 진행할 일정', { exact: false }).first().isVisible(), '진행 척추(현재 일정)가 표시된다')
+  assert(await page.getByRole('button', { name: '▶ 이 일정 진행' }).isVisible(), '현재 일정 진행 버튼이 있다')
+  assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
 
-  // 대륙컵 탭으로 이동 (지연 로딩 → Suspense 해제 대기)
-  await page.getByRole('tab', { name: '대륙컵' }).click()
-  await page.getByText('대륙별 대표 대회').first().waitFor({ timeout: 10000 })
-  assert(true, '대륙컵 탭이 렌더된다')
-
-  // 유로 선택 → 시뮬레이션
+  // 일정 축 네비게이션: 시즌 홈에서 유로 일정을 눌러 대륙컵으로 진입(컨텍스트 전환)
   await page.getByText('유럽 축구 선수권').first().click()
+  await page.getByText('유럽 축구 선수권', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).isVisible(), '시즌 홈에서 대륙컵 이벤트로 진입된다')
   await page.getByRole('textbox', { name: '대회 시드' }).fill('CUP-SMOKE')
   await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).click()
   // 조추첨(stage 0)부터 단계별 공개 — 조편성 확인 후 끝까지 진행.
@@ -57,8 +56,13 @@ try {
 
   // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (우승팀 클릭)
   await page.locator('text=🏆 우승').locator('..').getByRole('button').first().click()
+  // 기본(개요) 탭에 트로피 캐비닛이 표시된다.
+  await page.getByText('트로피 캐비닛', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, '팀 페이지 개요 탭에 트로피 마일스톤이 표시된다')
+  // 하위 탭(일정·기록)으로 이동해 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 확인.
+  await page.getByRole('tab', { name: '🗓 일정·기록' }).click()
   await page.getByText('현황', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(await page.getByText('조별리그 경기').first().isVisible(), '팀 페이지에 대륙컵 현황이 표시된다')
+  assert(await page.getByText('조별리그 경기').first().isVisible(), '팀 페이지 일정·기록 탭에 대륙컵 현황이 표시된다')
 
   assert(consoleErrors.length === 0, `콘솔 오류가 없다 (발견: ${consoleErrors.length})`)
   if (consoleErrors.length) console.error(consoleErrors)
