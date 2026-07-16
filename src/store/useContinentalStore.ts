@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { CUP_FORMATS, type CupId } from '../data/continental/formats'
-import { selectCupParticipants } from '../engine/continental/participants'
 import { runCup, type CupResult } from '../engine/continental/runCup'
+import { runCupQualification, type CupQualResult } from '../engine/continental/cupQualification'
 import { computeCupProbabilities, type CupProbabilities } from '../engine/continental/cupProbability'
-import { baseRatingsMap } from '../data/nations'
+import { baseRatingsMap, nationsByConfederation } from '../data/nations'
 import { generateSeed } from '../engine/rng'
 import { useContinentalHistoryStore } from './useContinentalHistoryStore'
 
@@ -25,6 +25,8 @@ interface ContinentalStore {
   seed: string | null
   /** 개최국 팀 ID(홈 이점·자동 진출). null이면 개최국 없음. */
   hostId: string | null
+  /** 예선 결과(참가국을 가린다). */
+  qualResult: CupQualResult | null
   result: CupResult | null
   probabilities: CupProbabilities | null
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
@@ -49,22 +51,26 @@ export const useContinentalStore = create<ContinentalStore>()(
       activeCupId: null,
       seed: null,
       hostId: null,
+      qualResult: null,
       result: null,
       probabilities: null,
       stage: 0,
-      selectCup: (id) => set({ activeCupId: id, result: null, probabilities: null, seed: null, stage: 0 }),
-      setHost: (teamId) => set({ hostId: teamId, result: null, probabilities: null, stage: 0 }),
+      selectCup: (id) => set({ activeCupId: id, qualResult: null, result: null, probabilities: null, seed: null, stage: 0 }),
+      setHost: (teamId) => set({ hostId: teamId, qualResult: null, result: null, probabilities: null, stage: 0 }),
       runActiveCup: (opts) => {
         const { activeCupId, hostId } = get()
         if (!activeCupId) return
         const format = CUP_FORMATS[activeCupId]
         const usedSeed = opts?.seed && opts.seed.trim() ? opts.seed.trim().toUpperCase() : generateSeed()
         const hostIds = hostId ? [hostId] : []
-        const field = selectCupParticipants(format, opts?.rankByTeam ?? {}, hostIds)
+        // 1) 예선으로 참가국을 가린다. 2) 통과국으로 본선을 시뮬레이션한다.
+        const poolIds = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
+        const qualResult = runCupQualification(format, baseRatingsMap(poolIds), hostIds, usedSeed, opts?.rankByTeam ?? {})
+        const field = qualResult.qualified
         const ratings = baseRatingsMap(field)
         const result = runCup(format, field, ratings, hostIds, usedSeed)
         // 결과는 즉시 계산하되 조추첨(stage 0)부터 단계별로 공개한다(월드컵 '일정 진행'과 동형).
-        set({ seed: usedSeed, result, probabilities: null, stage: 0 })
+        set({ seed: usedSeed, qualResult, result, probabilities: null, stage: 0 })
         // 완주한 대회를 역대 기록에 축적(대회·시드 dedup). 팀 페이지 통산 성적에 반영.
         useContinentalHistoryStore.getState().record({
           cupId: activeCupId,
@@ -96,7 +102,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const probabilities = computeCupProbabilities(format, field, ratings, hostIds, iterations, `${seedBase}-PROB`)
         set({ probabilities })
       },
-      reset: () => set({ activeCupId: null, seed: null, hostId: null, result: null, probabilities: null, stage: 0 }),
+      reset: () => set({ activeCupId: null, seed: null, hostId: null, qualResult: null, result: null, probabilities: null, stage: 0 }),
     }),
     { name: 'wc2026-continental-store', version: 1 },
   ),

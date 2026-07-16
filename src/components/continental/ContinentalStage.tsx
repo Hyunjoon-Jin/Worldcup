@@ -58,6 +58,54 @@ function SeasonTimelineCard() {
   )
 }
 
+function QualSummaryCard() {
+  const qualResult = useContinentalStore((s) => s.qualResult)
+  const [open, setOpen] = useState(false)
+  if (!qualResult) return null
+  const { autoQualified, earned, groups } = qualResult
+  return (
+    <GlassCard className="p-4">
+      <h3 className="mb-2 text-sm font-bold text-gray-200">🎫 예선 결과 <span className="text-[11px] font-normal text-gray-500">(자동 {autoQualified.length} · 통과 {earned.length})</span></h3>
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {autoQualified.map((id) => (
+          <span key={id} className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-200"><TeamLink teamId={id} /> <span className="text-[9px] text-sky-300/70">자동</span></span>
+        ))}
+        {earned.map((id) => (
+          <span key={id} className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-200"><TeamLink teamId={id} /> <span className="text-[9px] text-emerald-300/70">통과</span></span>
+        ))}
+      </div>
+      {groups.length > 0 && (
+        <>
+          <button onClick={() => setOpen((v) => !v)} className="text-[11px] text-gray-400 hover:text-gray-200">
+            {open ? '▲ 예선 조별 결과 접기' : `▼ 예선 조별 결과 보기 (${groups.length}개 조)`}
+          </button>
+          {open && (
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map((g, gi) => (
+                <div key={gi}>
+                  <p className="mb-1 text-[11px] font-bold text-gray-400">예선 {gi + 1}조</p>
+                  <div className="space-y-0.5">
+                    {g.ranking.map((id, i) => {
+                      const s = g.standings[id]
+                      return (
+                        <div key={id} className="flex items-center gap-2 text-[11px]">
+                          <span className="w-4 text-center text-gray-500">{i + 1}</span>
+                          <span className="min-w-0 flex-1"><TeamLink teamId={id} /></span>
+                          <span className="tabular-nums text-gray-400">{s.points}점</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </GlassCard>
+  )
+}
+
 function GroupTable({ group, format, revealedMd }: { group: CupGroupResult; format: (typeof CUP_FORMATS)[CupId]; revealedMd: number }) {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const label = format.groups <= 6 ? `${GROUP_LETTERS[group.groupIndex]}조` : `${group.groupIndex + 1}조`
@@ -258,6 +306,8 @@ export function ContinentalStage() {
               </div>
             )}
           </GlassCard>
+
+          <QualSummaryCard />
 
           {fullyRevealed && (
             <GlassCard strong className="p-5 text-center">
