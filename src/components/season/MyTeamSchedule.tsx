@@ -4,13 +4,22 @@ import { TeamLink } from '../common/TeamLink'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useContinentalStore } from '../../store/useContinentalStore'
+import { useContinentalHistoryStore } from '../../store/useContinentalHistoryStore'
+import { useCareerStore } from '../../store/useCareerStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
-import { buildCupPhases } from '../../engine/season/seasonTimeline'
+import { ALL_NATIONS_BY_ID } from '../../data/nations'
+import { buildCupPhases, buildSeasonTimeline } from '../../engine/season/seasonTimeline'
 import type { CupId } from '../../data/continental/formats'
 import type { GroupLetter } from '../../types/group'
 import type { KnockoutRound } from '../../types/match'
+import type { Confederation } from '../../types/team'
+
+function fmtYmd(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${y}.${Number(m)}.${Number(d)}`
+}
 
 const ROUND_LABEL: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
 
@@ -38,6 +47,20 @@ export function MyTeamSchedule({ teamId, onSelectCup }: { teamId: string; onSele
   const cupActiveId = useContinentalStore((s) => s.activeCupId)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const cupResult = useContinentalStore((s) => s.result)
+  const wcYear = useCareerStore((s) => s.year)
+  const progressPhase = useProgressStore((s) => s.phase)
+  const cupEditions = useContinentalHistoryStore((s) => s.editions)
+
+  // 내 팀이 이번 사이클에 참가하는 대회 일정(월드컵 + 소속 연맹 대륙컵) — 경기가 없어도 항상 표시.
+  const myConfed = ALL_NATIONS_BY_ID[teamId]?.confederation
+  const myTournaments = useMemo(() => {
+    return buildSeasonTimeline(wcYear)
+      .filter((e) => e.kind === 'wc' || (myConfed != null && (e.confeds === 'ALL' || (e.confeds as Confederation[]).includes(myConfed))))
+      .map((e) => {
+        const done = e.kind === 'wc' ? progressPhase === 'complete' : cupEditions.some((x) => x.cupId === e.id && x.year === e.year)
+        return { e, done }
+      })
+  }, [wcYear, myConfed, progressPhase, cupEditions])
 
   // 월드컵 본선에서 내 팀의 조.
   const group = useMemo<GroupLetter | null>(() => {
@@ -120,7 +143,24 @@ export function MyTeamSchedule({ teamId, onSelectCup }: { teamId: string; onSele
 
   return (
     <GlassCard className="p-4">
-      <h3 className="mb-2 text-sm font-bold text-sky-300">⭐ 내 팀 <TeamLink teamId={teamId} /> 경기 일정</h3>
+      <h3 className="mb-2 text-sm font-bold text-sky-300">⭐ 내 팀 <TeamLink teamId={teamId} /> 일정</h3>
+
+      {/* 내 팀이 참가하는 대회 일정(경기 전에도 항상 표시) */}
+      <div className="mb-3">
+        <p className="mb-1.5 text-[11px] font-bold text-gray-400">참가 대회 ({wcYear} 시즌)</p>
+        <div className="space-y-1">
+          {myTournaments.map(({ e, done }) => (
+            <div key={`${e.id}-${e.year}`} className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs">
+              <span className="w-20 shrink-0 tabular-nums text-[10px] text-gray-400">{fmtYmd(e.start)}</span>
+              <span className="min-w-0 flex-1 font-medium text-gray-200">{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
+              <span className={`shrink-0 text-[10px] font-bold ${done ? 'text-emerald-300' : 'text-gray-500'}`}>{done ? '✅ 완료' : '예정'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 내 팀 경기(대회 진행 시) */}
+      <p className="mb-1.5 text-[11px] font-bold text-gray-400">경기 일정</p>
       {fixtures.length === 0 ? (
         <p className="text-[11px] text-gray-500">아직 치르거나 예정된 경기가 없습니다. 대회가 진행되면 내 팀의 경기가 여기에 표시됩니다. (경기를 누르면 상세가 열립니다)</p>
       ) : (
