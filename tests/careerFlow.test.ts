@@ -3,7 +3,10 @@ import { useCareerStore } from '../src/store/useCareerStore'
 import { useProgressStore } from '../src/store/useProgressStore'
 import { useQualificationStore } from '../src/store/useQualificationStore'
 import { advanceToNextEdition, clearAllHistory } from '../src/store/tournamentActions'
+import { autoSimulateCup } from '../src/store/seasonActions'
 import { useHistoryStore } from '../src/store/useHistoryStore'
+import { useContinentalHistoryStore } from '../src/store/useContinentalHistoryStore'
+import { useContinentalStore } from '../src/store/useContinentalStore'
 import { getCurrentHostIds } from '../src/engine/hostContext'
 import { basePointsFromRank } from '../src/engine/qualification/ranking'
 import { ALL_NATIONS_BY_ID } from '../src/data/nations'
@@ -109,5 +112,16 @@ describe('advanceToNextEdition — 다음 대회로 흐름 이어가기', () => 
     // 진행 이력 전체 삭제 시 역대 기록도 비워져야 한다.
     clearAllHistory()
     expect(useHistoryStore.getState().editions).toEqual([])
+  })
+
+  it('clearAllHistory는 대륙컵 역대 기록(트로피·통산)도 함께 삭제한다(회귀 방지)', () => {
+    // 대륙컵을 진행하면 대륙컵 역대 기록이 쌓인다.
+    autoSimulateCup('EURO', 2028, 'CLEAR-TEST')
+    expect(useContinentalHistoryStore.getState().editions.length).toBeGreaterThan(0)
+    // '전체 삭제'는 대륙컵 진행/역대 기록도 반드시 비워야 한다(이전엔 누락돼 남아 있었음).
+    clearAllHistory()
+    expect(useContinentalHistoryStore.getState().editions).toEqual([])
+    expect(useContinentalStore.getState().result).toBeNull()
+    expect(useContinentalStore.getState().activeCupId).toBeNull()
   })
 })
