@@ -25,14 +25,16 @@ interface ContinentalStore {
   seed: string | null
   /** 개최국 팀 ID(홈 이점·자동 진출). null이면 개최국 없음. */
   hostId: string | null
+  /** 이 대회의 개최 연도(시즌 타임라인에서 진입 시 설정). null이면 연도 미표시. */
+  cupYear: number | null
   /** 예선 결과(참가국을 가린다). */
   qualResult: CupQualResult | null
   result: CupResult | null
   probabilities: CupProbabilities | null
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
   stage: number
-  /** 대회 선택(결과 초기화). */
-  selectCup: (id: CupId | null) => void
+  /** 대회 선택(결과 초기화). year를 주면 그 개최 연도로 표시(시즌 타임라인 진입). */
+  selectCup: (id: CupId | null, year?: number | null) => void
   setHost: (teamId: string | null) => void
   /** 활성 대회를 참가국 선정 → 전과정 시뮬레이션한다(결과는 precompute, 단계별로 공개). */
   runActiveCup: (opts?: { seed?: string; rankByTeam?: Record<string, number> }) => void
@@ -51,11 +53,12 @@ export const useContinentalStore = create<ContinentalStore>()(
       activeCupId: null,
       seed: null,
       hostId: null,
+      cupYear: null,
       qualResult: null,
       result: null,
       probabilities: null,
       stage: 0,
-      selectCup: (id) => set({ activeCupId: id, qualResult: null, result: null, probabilities: null, seed: null, stage: 0 }),
+      selectCup: (id, year = null) => set({ activeCupId: id, cupYear: year, qualResult: null, result: null, probabilities: null, seed: null, stage: 0 }),
       setHost: (teamId) => set({ hostId: teamId, qualResult: null, result: null, probabilities: null, stage: 0 }),
       runActiveCup: (opts) => {
         const { activeCupId, hostId } = get()
@@ -102,7 +105,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const probabilities = computeCupProbabilities(format, field, ratings, hostIds, iterations, `${seedBase}-PROB`)
         set({ probabilities })
       },
-      reset: () => set({ activeCupId: null, seed: null, hostId: null, qualResult: null, result: null, probabilities: null, stage: 0 }),
+      reset: () => set({ activeCupId: null, seed: null, hostId: null, cupYear: null, qualResult: null, result: null, probabilities: null, stage: 0 }),
     }),
     { name: 'wc2026-continental-store', version: 1 },
   ),

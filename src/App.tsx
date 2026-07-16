@@ -190,7 +190,7 @@ function App() {
         ) : (
           <>
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
-            {tab === 'continental' && <ContinentalStage />}
+            {tab === 'continental' && <ContinentalStage onNavigateWC={() => setTab('qualifiers')} />}
             {tab === 'myteam' && <MyTeamTab />}
             {tab === 'ranking' && <FifaRankingTab />}
             {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
