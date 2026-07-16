@@ -8,6 +8,16 @@ export const GROUP_STAGE_DAYS = 12
 export const GROUP_STAGE_START = '2026-06-11'
 export const GROUP_STAGE_END = '2026-06-27'
 
+/** 기준(2026) 본선 연도. 다른 대회 연도는 이 기준에서 연도 델타만큼 통째로 이동한다(예선 캘린더와 동일 방식). */
+export const BASE_FINALS_YEAR = 2026
+
+/** ISO 날짜(yyyy-mm-dd)의 연도만 기준 연도 대비 델타만큼 이동한다. 본선 창은 한 해 안(6~7월)이라 단순 치환으로 충분. */
+export function shiftFinalsYear(iso: string, year: number): string {
+  if (year === BASE_FINALS_YEAR) return iso
+  const [y, m, d] = iso.split('-')
+  return `${Number(y) + (year - BASE_FINALS_YEAR)}-${m}-${d}`
+}
+
 export const ROUND_DATE_WINDOWS: Record<KnockoutRound, { start: string; end: string; label: string }> = {
   R32: { start: '2026-06-28', end: '2026-07-03', label: '32강' },
   R16: { start: '2026-07-04', end: '2026-07-07', label: '16강' },
@@ -22,12 +32,18 @@ export const ROUND_DATE_WINDOWS: Record<KnockoutRound, { start: string; end: str
  * day 1 → START, 마지막 day → END. 12개 진행일을 6/11~6/27 창에 분산하므로 중간중간 휴식일이
  * 생기고, 선언된 종료일(GROUP_STAGE_END)과 마지막 진행일 날짜가 일치한다.
  */
-export function dateForGroupStageDay(day: number): string {
+export function dateForGroupStageDay(day: number, year: number = BASE_FINALS_YEAR): string {
   const startMs = new Date(GROUP_STAGE_START + 'T00:00:00Z').getTime()
   const endMs = new Date(GROUP_STAGE_END + 'T00:00:00Z').getTime()
   const frac = GROUP_STAGE_DAYS <= 1 ? 0 : (Math.min(Math.max(day, 1), GROUP_STAGE_DAYS) - 1) / (GROUP_STAGE_DAYS - 1)
   const ms = startMs + Math.round(frac * (endMs - startMs))
-  return new Date(ms).toISOString().slice(0, 10)
+  return shiftFinalsYear(new Date(ms).toISOString().slice(0, 10), year)
+}
+
+/** 라운드별 날짜창을 지정 연도로 이동해 돌려준다(기본 2026). 커리어 연도에 맞춘 본선 일정 생성용. */
+export function roundDateWindow(round: KnockoutRound, year: number = BASE_FINALS_YEAR): { start: string; end: string; label: string } {
+  const w = ROUND_DATE_WINDOWS[round]
+  return { start: shiftFinalsYear(w.start, year), end: shiftFinalsYear(w.end, year), label: w.label }
 }
 
 export function formatKoreanDate(isoDate: string): string {
