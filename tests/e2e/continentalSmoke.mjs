@@ -32,6 +32,8 @@ try {
   // 예선 명시화: 현재 일정(월드컵)의 단계 표시(지역예선 진행 중)가 렌더된다.
   assert(await page.getByText('지역예선 진행 중', { exact: false }).first().isVisible(), '현재 일정의 진행 단계가 표시된다')
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
+  // 실제 달력(월별 그리드)이 캘린더 탭에 렌더된다.
+  assert(await page.getByText('📅 시즌 캘린더', { exact: false }).first().isVisible(), '실제 달력(월별 그리드)이 표시된다')
 
   // 캘린더 축: 대회를 임의로 고를 수 없다. 현재 일정(월드컵)을 자동 진행해 다음 일정(대륙컵)이 다가오게 한다.
   await page.getByRole('button', { name: '⏭ 자동 진행 후 다음 일정로' }).click()
@@ -39,6 +41,8 @@ try {
   await page.getByRole('button', { name: '▶ 이 일정 진행' }).click()
   await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).waitFor({ timeout: 10000 })
   assert(true, '캘린더에서 다가온 대륙컵으로 진입된다(임의 선택 불가)')
+  // 대륙대회 일정 상세화: 대회 화면에 라운드별 날짜(대회 일정)가 표시된다.
+  assert(await page.getByText('📅 대회 일정', { exact: false }).first().isVisible(), '대륙컵 라운드별 일정이 표시된다')
   await page.getByRole('textbox', { name: '대회 시드' }).fill('CUP-SMOKE')
   await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).click()
   // 조추첨(stage 0)부터 단계별 공개 — 조편성 확인 후 끝까지 진행.

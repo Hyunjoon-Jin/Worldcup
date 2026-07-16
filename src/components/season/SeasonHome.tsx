@@ -13,6 +13,7 @@ import { useContinentalStore, cupTotalStages } from '../../store/useContinentalS
 import { advanceToNextEdition } from '../../store/tournamentActions'
 import { autoSimulateSeasonEvent } from '../../store/seasonActions'
 import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seasonTimeline'
+import { CalendarView } from './CalendarView'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import type { CupId } from '../../data/continental/formats'
 import type { Confederation } from '../../types/team'
@@ -205,6 +206,9 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
           )
         })()}
       </GlassCard>
+
+      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화 */}
+      <CalendarView wcYear={wcYear} currentEvent={current} />
 
       {/* 내 팀 관련 일정(진행 상태 표시 — 캘린더 축이므로 임의 진입 불가) */}
       {myTeamId && (

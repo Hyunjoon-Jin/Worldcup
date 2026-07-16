@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { buildSeasonTimeline, eventsSharePossibleTeam, windowsOverlap, addDays } from '../src/engine/season/seasonTimeline'
+import {
+  buildSeasonTimeline,
+  eventsSharePossibleTeam,
+  windowsOverlap,
+  addDays,
+  buildCupPhases,
+  buildWcPhases,
+  buildEventPhases,
+  buildCycleCalendar,
+} from '../src/engine/season/seasonTimeline'
 
 describe('시즌 타임라인 + 충돌 불변식 (요구 ① 일정 충돌 방지)', () => {
   it('사이클마다 월드컵 1 + 대륙컵 7개 인스턴스(골드컵 2회)', () => {
@@ -48,5 +57,47 @@ describe('시즌 타임라인 + 충돌 불변식 (요구 ① 일정 충돌 방�
   it('addDays는 UTC 결정론적', () => {
     expect(addDays('2026-06-14', 30)).toBe('2026-07-14')
     expect(addDays('2026-12-21', 28)).toBe('2027-01-18')
+  })
+})
+
+describe('세부 일정 전개(대륙대회 일정 상세화 + 캘린더)', () => {
+  it('대륙컵을 조별 3차전 + 녹아웃 라운드로 날짜와 함께 전개한다', () => {
+    // EURO 2028: 개막 2028-06-14. groupDayOffsets [1,6,10], knockout R16:16,QF:22,SF:26,FINAL:31.
+    const phases = buildCupPhases('EURO', 2028)
+    const group = phases.filter((p) => p.key.startsWith('G'))
+    expect(group).toHaveLength(3)
+    expect(group[0].start).toBe('2028-06-14') // Day 1 = 개막
+    expect(group[1].start).toBe('2028-06-19') // +5
+    expect(group[2].start).toBe('2028-06-23') // +9
+    const final = phases.find((p) => p.key === 'FINAL')!
+    expect(final.start).toBe('2028-07-14') // +30
+    // 라운드는 날짜 순서(조별 → 녹아웃)로 정렬
+    for (let i = 1; i < phases.length; i++) expect(phases[i - 1].start <= phases[i].start).toBe(true)
+  })
+
+  it('3·4위전이 있는 대회는 결승보다 앞선 날짜로 포함된다(AFCON)', () => {
+    const phases = buildCupPhases('AFCON', 2027)
+    const third = phases.find((p) => p.key === 'THIRD')
+    const final = phases.find((p) => p.key === 'FINAL')
+    expect(third).toBeDefined()
+    expect(final).toBeDefined()
+    expect(third!.start <= final!.start).toBe(true)
+  })
+
+  it('월드컵 본선은 조별리그 + 32강~결승 라운드창으로 전개된다', () => {
+    const phases = buildWcPhases(2026)
+    expect(phases[0].label).toBe('조별리그')
+    expect(phases.some((p) => p.key === 'FINAL')).toBe(true)
+    expect(buildEventPhases({ kind: 'wc', id: 'WC', nameKo: 'x', confeds: 'ALL', year: 2026, start: '', end: '' })).toEqual(phases)
+  })
+
+  it('사이클 캘린더는 모든 대회의 세부 단계를 대회 컨텍스트와 함께 펼친다', () => {
+    const cal = buildCycleCalendar(2026)
+    // 월드컵 세부 단계가 포함된다
+    expect(cal.some((p) => p.eventKind === 'wc' && p.key === 'FINAL')).toBe(true)
+    // 각 대륙컵의 결승도 포함된다(7개 인스턴스)
+    expect(cal.filter((p) => p.eventKind === 'cup' && p.key === 'FINAL')).toHaveLength(7)
+    // 모든 항목은 대회명을 가진다
+    expect(cal.every((p) => p.eventNameKo.length > 0)).toBe(true)
   })
 })
