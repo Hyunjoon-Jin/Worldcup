@@ -6,7 +6,7 @@ import { useContinentalStore, cupTotalStages } from '../../store/useContinentalS
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
-import { ALL_NATIONS_BY_ID, nationsByConfederation } from '../../data/nations'
+import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { BASE_FINALS_YEAR, formatKoreanDate } from '../../data/calendar'
 import type { CupGroupResult, CupKnockoutMatch } from '../../engine/continental/runCup'
@@ -130,12 +130,11 @@ function KnockoutMatchRow({ m }: { m: CupKnockoutMatch }) {
 export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
   const seed = useContinentalStore((s) => s.seed)
-  const hostId = useContinentalStore((s) => s.hostId)
+  const hostIds = useContinentalStore((s) => s.hostIds)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const stage = useContinentalStore((s) => s.stage)
-  const setHost = useContinentalStore((s) => s.setHost)
   const runActiveCup = useContinentalStore((s) => s.runActiveCup)
   const advanceStage = useContinentalStore((s) => s.advanceStage)
   const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
@@ -164,14 +163,6 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
     return r ? `녹아웃 — ${ROUND_LABEL[r]}` : '대회 종료'
   })()
 
-  // 개최국 후보: 이 대회 참가 연맹 소속국(랭킹순 상위). '개최국 없음' 포함.
-  const hostCandidates = useMemo(() => {
-    if (!format) return []
-    const pool = format.confeds.flatMap((c) => nationsByConfederation(c))
-    return [...new Map(pool.map((t) => [t.id, t])).values()]
-      .sort((a, b) => a.fifaRankApprox - b.fifaRankApprox)
-      .slice(0, 30)
-  }, [format])
 
   const koByRound = useMemo<Array<{ round: KnockoutRound; matches: CupKnockoutMatch[] }>>(() => {
     if (!result || !format) return []
@@ -221,18 +212,11 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
           {format.teams}팀 · {format.groups}개 조 · {format.knockout.map((r) => ROUND_LABEL[r]).join('→')}
           {format.thirdPlace ? ' (+3·4위전)' : ''} · {MONTH_LABEL[format.schedule.monthWindow]}
         </p>
+        {/* 개최국은 에디션별로 경제·지역을 고려해 자동 선정된다(공동개최 가능). */}
+        <p className="mb-3 text-[11px] text-sky-300">
+          🏟️ 개최{hostIds.length > 1 ? '(공동)' : ''}: {hostIds.length > 0 ? hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(' · ') : '미정'}
+        </p>
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <select
-            value={hostId ?? ''}
-            onChange={(e) => setHost(e.target.value || null)}
-            aria-label="개최국 선택"
-            className="w-36 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white focus:border-emerald-400/50 focus:outline-none"
-          >
-            <option value="">개최국 없음</option>
-            {hostCandidates.map((t) => (
-              <option key={t.id} value={t.id}>{t.nameKo}</option>
-            ))}
-          </select>
           <input
             type="text"
             value={seedInput}
@@ -244,7 +228,6 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
           <GlassButton onClick={() => runActiveCup({ seed: seedInput })}>⚽ 대회 시뮬레이션</GlassButton>
           {result && <GlassButton variant="ghost" onClick={() => computeProbabilities()}>📊 우승 확률 계산</GlassButton>}
         </div>
-        {hostId && <p className="mt-2 text-[11px] text-sky-300">개최국: {ALL_NATIONS_BY_ID[hostId]?.nameKo ?? hostId}</p>}
         {seed && <p className="mt-2 text-[11px] text-gray-500">시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
       </GlassCard>
 
