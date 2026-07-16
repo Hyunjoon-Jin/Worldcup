@@ -6,6 +6,7 @@ import { runCup, type CupResult } from '../engine/continental/runCup'
 import { computeCupProbabilities, type CupProbabilities } from '../engine/continental/cupProbability'
 import { baseRatingsMap } from '../data/nations'
 import { generateSeed } from '../engine/rng'
+import { useContinentalHistoryStore } from './useContinentalHistoryStore'
 
 /**
  * 대륙별 대표 대회(컨티넨탈 챔피언십) 상태. 월드컵 스토어와 **완전히 분리**된 별도 persist 키로,
@@ -51,6 +52,15 @@ export const useContinentalStore = create<ContinentalStore>()(
         const ratings = baseRatingsMap(field)
         const result = runCup(format, field, ratings, hostIds, usedSeed)
         set({ seed: usedSeed, result, probabilities: null })
+        // 완주한 대회를 역대 기록에 축적(대회·시드 dedup). 팀 페이지 통산 성적에 반영.
+        useContinentalHistoryStore.getState().record({
+          cupId: activeCupId,
+          seed: usedSeed,
+          champion: result.champion,
+          runnerUp: result.runnerUp,
+          third: result.third,
+          qualified: result.qualified,
+        })
       },
       computeProbabilities: (iterations = CUP_PROB_ITERATIONS) => {
         const { activeCupId, hostId, result } = get()

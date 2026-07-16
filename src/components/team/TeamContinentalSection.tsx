@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { useContinentalStore } from '../../store/useContinentalStore'
-import { CUP_FORMATS } from '../../data/continental/formats'
+import { useContinentalHistoryStore, aggregateCupHonors } from '../../store/useContinentalHistoryStore'
+import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
 import type { KnockoutRound } from '../../types/match'
 
 const ROUND_LABEL: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
@@ -15,6 +16,16 @@ export function TeamContinentalSection({ teamId }: { teamId: string }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
+  const editions = useContinentalHistoryStore((s) => s.editions)
+
+  // 대륙컵 통산 성적(역대 기록 아카이브).
+  const honors = useMemo(() => aggregateCupHonors(editions, teamId), [editions, teamId])
+  const honorRows = useMemo(
+    () => (Object.entries(honors.byCup) as Array<[CupId, { titles: number; runnerUp: number; third: number; appearances: number }]>)
+      .filter(([, h]) => h.appearances > 0)
+      .sort((a, b) => b[1].titles - a[1].titles || b[1].appearances - a[1].appearances),
+    [honors],
+  )
 
   const view = useMemo(() => {
     if (!activeCupId || !result) return null
@@ -40,9 +51,36 @@ export function TeamContinentalSection({ teamId }: { teamId: string }) {
     return { format, group, rankInGroup, standing, advanced, groupMatches, koMatches, outcome }
   }, [activeCupId, result, teamId])
 
-  if (!view) return null
-  const champPct = probabilities?.byTeam[teamId]?.champion
-  const gd = view.standing.goalsFor - view.standing.goalsAgainst
+  // 활성 참가도 없고 통산 기록도 없으면 표시 안 함.
+  if (!view && honorRows.length === 0) return null
+
+  const champPct = view ? probabilities?.byTeam[teamId]?.champion : undefined
+  const gd = view ? view.standing.goalsFor - view.standing.goalsAgainst : 0
+
+  const honorsBlock = honorRows.length > 0 && (
+    <div className="mb-3">
+      <p className="mb-1.5 text-[11px] font-bold text-gray-400">대륙컵 통산 {honors.totalTitles > 0 && <span className="text-amber-300">🏆 {honors.totalTitles}회 우승</span>}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {honorRows.map(([cupId, h]) => (
+          <span key={cupId} className="rounded-lg bg-white/5 px-2 py-1 text-[11px] text-gray-300">
+            {CUP_FORMATS[cupId].nameKo}
+            {h.titles > 0 && <span className="ml-1 font-bold text-amber-300">🏆{h.titles}</span>}
+            {h.runnerUp > 0 && <span className="ml-1 text-gray-400">🥈{h.runnerUp}</span>}
+            <span className="ml-1 text-gray-500">· {h.appearances}회 진출</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+
+  if (!view) {
+    return (
+      <GlassCard className="p-4">
+        <h3 className="mb-3 text-sm font-bold text-violet-300">🌍 대륙컵 통산</h3>
+        {honorsBlock}
+      </GlassCard>
+    )
+  }
 
   return (
     <GlassCard className="p-4">
@@ -50,6 +88,7 @@ export function TeamContinentalSection({ teamId }: { teamId: string }) {
         <h3 className="text-sm font-bold text-violet-300">🌍 {view.format.nameKo} 현황</h3>
         <span className="rounded bg-violet-500/20 px-2 py-0.5 text-[11px] font-bold text-violet-200">{view.outcome}</span>
       </div>
+      {honorsBlock}
 
       <div className="mb-3 rounded-lg bg-white/5 p-3 text-sm text-gray-200">
         현재 <strong className="text-white">{view.group.groupIndex + 1}조 {view.rankInGroup}위</strong>
