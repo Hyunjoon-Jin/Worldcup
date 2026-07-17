@@ -30,8 +30,8 @@ try {
   // 진행 버튼(시간대별/경기일 단위 선택 + 다음 일정 진행)이 상단 고정 바에 있다.
   assert(await page.getByRole('button', { name: /다음 일정 진행/ }).first().isVisible(), '상단 고정 바에 다음 일정 진행 버튼이 있다')
   assert(await page.getByRole('button', { name: '경기일 단위' }).isVisible(), '진행 단위(경기일 단위) 선택 버튼이 있다')
-  // 예선 명시화: 현재 일정(월드컵)의 단계 표시(지역예선 진행 중)가 렌더된다.
-  assert(await page.getByText('지역예선 진행 중', { exact: false }).first().isVisible(), '현재 일정의 진행 단계가 표시된다')
+  // 예선 명시화: 현재 일정(월드컵)의 단계 표시(진입 시 '지역예선 시작 전' → 진행하면 '진행 중')가 렌더된다.
+  assert(await page.getByText('지역예선', { exact: false }).first().isVisible(), '현재 일정의 진행 단계가 표시된다')
   assert(await page.getByText('전체 일정', { exact: false }).first().isVisible(), '전체 일정이 표시된다')
   // 실제 달력(월별 그리드)이 캘린더에 렌더된다.
   assert(await page.getByText('📅 시즌 캘린더', { exact: false }).first().isVisible(), '실제 달력(월별 그리드)이 표시된다')
