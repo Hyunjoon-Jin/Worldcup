@@ -13,7 +13,7 @@ import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDe
 import { advanceToNextEdition, startFinalsFromQualification } from '../../store/tournamentActions'
 import { autoSimulateSeasonEvent, cupRankByTeam } from '../../store/seasonActions'
 import { formOffsetsFromResults } from '../../engine/qualification/ranking'
-import { buildQualCalendar } from '../../engine/qualification/calendar'
+import { buildQualCalendar, qualWindowDate } from '../../engine/qualification/calendar'
 import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seasonTimeline'
 import { cupStageReveal, cupStageLabel } from '../../engine/season/matchdaySteps'
 import { CalendarView } from './CalendarView'
@@ -392,6 +392,14 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     setBusy(false)
   }
 
+  // 캘린더 기준 날짜(진행 위치) — 월드컵 예선 중엔 그 예선 경기일, 그 외엔 현재 이벤트 시작일.
+  // 예선부터 캘린더가 시작되도록(사용자 지적) 예선 창 날짜를 기준으로 삼는다.
+  const focusDate = current
+    ? current.kind === 'wc' && !qualDone
+      ? qualWindowDate(Math.max(0, qualGlobalWindow().gw - 1), wcYear)
+      : current.start
+    : undefined
+
   return (
     <div className="flex flex-col gap-5">
       {/* 진행 척추 헤더 */}
@@ -456,6 +464,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         onStepModeChange={setStepMode}
         myTeamId={myTeamId ?? undefined}
         myFixtures={myFixtures}
+        focusDate={focusDate}
       />
 
       {/* 방금 진행한 경기일(라운드) 결과 — 각 경기 클릭 시 상세 모달 */}

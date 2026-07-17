@@ -49,6 +49,7 @@ export function CalendarView({
   onStepModeChange,
   myTeamId,
   myFixtures,
+  focusDate,
 }: {
   wcYear: number
   currentEvent?: SeasonEvent
@@ -65,11 +66,14 @@ export function CalendarView({
   /** 내 팀(설정 시) — 캘린더에 내 팀 경기를 별도 표시. */
   myTeamId?: string
   myFixtures?: MyFixture[]
+  /** 진행 위치 날짜(기본 표시 월·오늘 표시). 예선 중이면 그 예선 경기일. 없으면 현재 이벤트 시작일. */
+  focusDate?: string
 }) {
   const phases = useMemo(() => buildCycleCalendar(wcYear), [wcYear])
   // 일정이 있는 월만 네비게이션 대상(사이클 내 빈 달은 건너뛴다).
   const months = useMemo(() => [...new Set(phases.map((p) => ymKey(p.start)))].sort(), [phases])
-  const defaultMonth = (currentEvent && months.includes(ymKey(currentEvent.start)) ? ymKey(currentEvent.start) : months[0]) ?? `${wcYear}-06`
+  const focusIso = focusDate ?? currentEvent?.start
+  const defaultMonth = (focusIso && months.includes(ymKey(focusIso)) ? ymKey(focusIso) : months[0]) ?? `${wcYear}-06`
   const [month, setMonth] = useState(defaultMonth)
 
   const monthIdx = months.indexOf(month)
@@ -117,7 +121,7 @@ export function CalendarView({
     [myFixtures, month],
   )
 
-  const todayIso = currentEvent?.start
+  const todayIso = focusIso
   const usedEventIds = useMemo(() => [...new Set(phases.map((p) => p.eventId))], [phases])
 
   const cells: (number | null)[] = [...Array(lead).fill(null), ...Array.from({ length: totalDays }, (_, i) => i + 1)]

@@ -1,5 +1,6 @@
 import { CUP_FORMATS, ALL_CUP_IDS, type CupId, type MonthWindow } from '../../data/continental/formats'
 import { GROUP_STAGE_START, GROUP_STAGE_END, ROUND_DATE_WINDOWS, shiftFinalsYear } from '../../data/calendar'
+import { qualWindowDate, QUAL_TOTAL_WINDOWS } from '../qualification/calendar'
 import type { Confederation } from '../../types/team'
 import type { KnockoutRound } from '../../types/match'
 
@@ -125,11 +126,15 @@ export function buildCupPhases(cupId: CupId, editionYear: number): EventPhase[] 
   return phases
 }
 
-/** 월드컵 본선 한 에디션을 조별리그 + 녹아웃 라운드창으로 전개한다. */
+/** 월드컵 한 에디션을 지역예선(전년~) + 조별리그 + 녹아웃 라운드창으로 전개한다. 캘린더가 예선부터 시작한다. */
 export function buildWcPhases(wcYear: number): EventPhase[] {
-  const phases: EventPhase[] = [
-    { key: 'GROUP', label: '조별리그', start: shiftFinalsYear(GROUP_STAGE_START, wcYear), end: shiftFinalsYear(GROUP_STAGE_END, wcYear) },
-  ]
+  const phases: EventPhase[] = []
+  // 지역예선: 실제 예선 기간(전년 3월 ~ 개최년 3월)의 매치 윈도우를 경기일로 표시한다.
+  for (let w = 0; w < QUAL_TOTAL_WINDOWS; w++) {
+    const d = qualWindowDate(w, wcYear)
+    phases.push({ key: `Q${w + 1}`, label: `지역예선 ${w + 1}차`, start: d, end: d })
+  }
+  phases.push({ key: 'GROUP', label: '조별리그', start: shiftFinalsYear(GROUP_STAGE_START, wcYear), end: shiftFinalsYear(GROUP_STAGE_END, wcYear) })
   for (const r of ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL'] as KnockoutRound[]) {
     const w = ROUND_DATE_WINDOWS[r]
     phases.push({ key: r, label: w.label, start: shiftFinalsYear(w.start, wcYear), end: shiftFinalsYear(w.end, wcYear) })
