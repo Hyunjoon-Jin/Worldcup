@@ -13,7 +13,7 @@ import { advanceToNextEdition, startFinalsFromQualification } from '../../store/
 import { autoSimulateSeasonEvent, cupRankByTeam } from '../../store/seasonActions'
 import { formOffsetsFromResults } from '../../engine/qualification/ranking'
 import { buildQualCalendar, qualWindowDate } from '../../engine/qualification/calendar'
-import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seasonTimeline'
+import { buildSeasonTimeline, buildCupPhases, type SeasonEvent } from '../../engine/season/seasonTimeline'
 import { cupStageReveal, cupStageLabel } from '../../engine/season/matchdaySteps'
 import { CalendarView } from './CalendarView'
 import { MyTeamSchedule } from './MyTeamSchedule'
@@ -84,7 +84,13 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const cursorIndex = useSeasonStore((s) => s.cursorIndex)
   // 진행 상태(일정 축에서 각 이벤트의 완료 여부·월드컵 예선/본선 단계 판단).
   const progressPhase = useProgressStore((s) => s.phase)
-  const qualDone = useQualificationStore((s) => s.result != null)
+  const lastBatchDate = useProgressStore((s) => s.lastBatchDate)
+  // 예선 진행을 '반응형'으로 구독한다(result 존재만이 아니라 실제 공개된 경기일까지). 진행 척추의 날짜·단계가
+  // 실제 예선 진척(창 gw/total)을 따라가게 하기 위함(F1: 첫 클릭에 '예선 완료'로 점프하던 문제 해결).
+  const qualResult = useQualificationStore((s) => s.result)
+  const qualRevealed = useQualificationStore((s) => s.revealed)
+  const qualDrawPending = useQualificationStore((s) => s.drawPending)
+  const qualDone = qualResult != null
   const drawDone = useDrawStore((s) => s.isComplete && s.fieldTeams != null)
   const cupEditions = useContinentalHistoryStore((s) => s.editions)
   // 대륙컵 진행 단계 표시용(활성 대회 한정 실시간 단계).
@@ -104,8 +110,18 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const clampedCursor = Math.min(cursorIndex, events.length - 1)
   const current = events[clampedCursor]
 
-  // 월드컵 이벤트의 현재 단계(예선 → 조추첨 대기 → 본선 → 종료)를 스토어 상태에서 도출한다.
-  const wcPhase: WcPhase = progressPhase === 'complete' ? 'done' : drawDone ? 'finals' : qualDone ? 'drawReady' : 'qualifying'
+  // 지역예선 전역 경기일 진행(대륙 최대 라운드 기준) — QualificationStage와 동일 계산. 진행 척추가
+  // 실제 예선 진척을 추적하도록 반응형으로 산출한다. finished는 '전 창 공개 + 예비예선 조추첨 없음'(qualAtEnd).
+  const qualProgress = useMemo(() => {
+    if (!qualResult) return { gw: 0, total: 0, started: false, finished: false }
+    const total = buildQualCalendar(qualResult, wcYear).length
+    const gw = Math.min(total, Math.max(0, ...Object.keys(qualResult.byConfederation).map((c) => qualRevealed[c] ?? 0)))
+    return { gw, total, started: true, finished: gw >= total && qualDrawPending == null }
+  }, [qualResult, qualRevealed, qualDrawPending, wcYear])
+
+  // 월드컵 이벤트의 현재 단계(예선 → 조추첨 대기 → 본선 → 종료). '예선 완료'는 result 존재가 아니라
+  // 실제 예선 종료(qualProgress.finished)로 판단한다(F1).
+  const wcPhase: WcPhase = progressPhase === 'complete' ? 'done' : drawDone ? 'finals' : qualProgress.finished ? 'drawReady' : 'qualifying'
   const WC_PHASE_LABEL: Record<WcPhase, string> = {
     qualifying: '지역예선 진행 중',
     drawReady: '예선 완료 · 조추첨 대기',
@@ -128,7 +144,14 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
    */
   const stepInfo = (e: SeasonEvent): { steps: readonly string[]; activeIdx: number; label: string } => {
     if (e.kind === 'wc') {
-      return { steps: WC_STEPS, activeIdx: WC_ORDER.indexOf(wcPhase), label: WC_PHASE_LABEL[wcPhase] }
+      // 예선 중엔 경기일 진척(gw/total)을 함께 보여준다(FM식 '지금 며칠·몇 번째 경기일').
+      const label =
+        wcPhase === 'qualifying'
+          ? qualProgress.started
+            ? `지역예선 진행 중 · 경기일 ${qualProgress.gw}/${qualProgress.total}`
+            : '지역예선 시작 전'
+          : WC_PHASE_LABEL[wcPhase]
+      return { steps: WC_STEPS, activeIdx: WC_ORDER.indexOf(wcPhase), label }
     }
     // 대륙컵: 활성 대회로 진행 중이면 실시간 stage로 단계를 도출.
     if (cupActiveId === e.id && cupActiveYear === e.year && cupHasResult) {
@@ -346,19 +369,30 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
       if (cs.stage < cupTotalStages(cupId)) return cupStageLabel(cupId, cs.stage + 1)
       return `${CUP_FORMATS[cupId].nameKo} · 대회 종료 → 다음 일정`
     }
-    if (!qualDone) return '🏆 FIFA 월드컵 · 지역예선'
+    if (!qualProgress.finished) return '🏆 FIFA 월드컵 · 지역예선'
     if (!drawDone) return '🏆 FIFA 월드컵 · 본선 조추첨'
     if (progressPhase !== 'complete') return '🏆 FIFA 월드컵 · 본선 경기'
     return '🏆 FIFA 월드컵 종료 → 다음 일정'
   })()
 
-  // 캘린더 기준 날짜(진행 위치) — 월드컵 예선 중엔 그 예선 경기일, 그 외엔 현재 이벤트 시작일.
-  // 예선부터 캘린더가 시작되도록(사용자 지적) 예선 창 날짜를 기준으로 삼는다.
-  const focusDate = current
-    ? current.kind === 'wc' && !qualDone
-      ? qualWindowDate(Math.max(0, qualGlobalWindow().gw - 1), wcYear)
-      : current.start
-    : undefined
+  // 캘린더 기준 날짜(진행 위치) = 지금 실제로 진행 중인 날짜. 전 단계에서 실제 현재 날짜를 따라가게 해
+  // 상단 바·달력이 시간과 함께 움직인다(F1·F2). 예선=현재 창일, 조추첨 대기=예선 마지막 창일(개최년 3월),
+  // 본선=현재 진행 배치일, 대륙컵=현재 단계(라운드) 날짜.
+  const focusDate = useMemo<string | undefined>(() => {
+    if (!current) return undefined
+    if (current.kind === 'wc') {
+      if (!qualProgress.finished) return qualWindowDate(Math.max(0, qualProgress.gw - 1), wcYear)
+      if (!drawDone) return qualWindowDate(Math.max(0, qualProgress.total - 1), wcYear)
+      return lastBatchDate ?? current.start
+    }
+    // 대륙컵: 활성 대회면 현재 단계(라운드)의 날짜, 아니면 대회 시작일.
+    if (cupActiveId === current.id && cupActiveYear === current.year && cupHasResult) {
+      const phases = buildCupPhases(current.id as CupId, current.year)
+      const idx = Math.max(0, Math.min(cupStage - 1, phases.length - 1))
+      return phases[idx]?.start ?? current.start
+    }
+    return current.start
+  }, [current, qualProgress, drawDone, lastBatchDate, wcYear, cupActiveId, cupActiveYear, cupHasResult, cupStage])
 
   return (
     <div className="flex flex-col gap-5">
