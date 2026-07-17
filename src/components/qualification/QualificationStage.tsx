@@ -1588,7 +1588,6 @@ function ConfederationStandings({
 export function QualificationStage({ onStartFinals }: { onStartFinals?: () => void }) {
   const seed = useQualificationStore((s) => s.seed)
   const result = useQualificationStore((s) => s.result)
-  const simulate = useQualificationStore((s) => s.simulate)
   const probabilities = useQualificationStore((s) => s.probabilities)
   const probLoading = useQualificationStore((s) => s.probLoading)
   const computeProbabilities = useQualificationStore((s) => s.computeProbabilities)
@@ -1613,7 +1612,6 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
   // 스테일(예전 대회) 진행이면 잃을 게 없으므로 '다시하기'가 아니라 '조추첨 진행하기'로 안내한다.
   const finalsUnderway = finalsPhase !== 'idle' && finalsMatchesCurrent
   const champion = useProgressStore((s) => s.champion)
-  const [seedInput, setSeedInput] = useState('')
   // 내 팀이 지정돼 있으면 그 팀의 대륙을 기본 선택한다 (E1).
   const [confed, setConfed] = useState<Confederation>(
     () => (myTeamId && ALL_NATIONS_BY_ID[myTeamId]?.confederation) || 'UEFA',
@@ -1693,35 +1691,30 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </GlassButton>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <input
-            type="text"
-            value={seedInput}
-            onChange={(e) => setSeedInput(e.target.value)}
-            placeholder="시드 (선택)"
-            aria-label="예선 시드"
-            className="w-36 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
-          />
-          <GlassButton onClick={() => simulate(seedInput)} title="예선을 시작하면 첫 경기일부터 하루씩 진행합니다">
-            ⚽ 지역예선 시작
-          </GlassButton>
-        </div>
-        <p className="mt-2 text-[11px] text-gray-500">
-          시작하면 <strong className="text-gray-300">첫 경기일</strong>부터 진행됩니다. 아래 <strong className="text-gray-300">📅 일별 진행</strong>에서
-          <strong className="text-emerald-300"> 다음 경기일 ▶</strong>로 하루씩 넘기며 관전하세요(⏭ 전체로 끝까지 건너뛸 수 있습니다).
-        </p>
-        {seed && <p className="mt-2 text-[11px] text-gray-500">예선 시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
+        {/* 진행은 캘린더가 주도한다(사용자는 대회를 임의로 시작·시드하지 않는다). 이 탭은 관전·상세 화면이므로
+            시작/시드 조작을 두지 않고, 상태만 안내한다. */}
+        {!result ? (
+          <p className="mx-auto max-w-md rounded-xl border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-gray-300">
+            지역예선은 <strong className="text-emerald-300">캘린더</strong>에서 진행됩니다. 상단 고정 바의{' '}
+            <strong className="text-emerald-300">▶ 다음 일정 진행</strong>을 눌러 예선을 시작·진행하면, 여기에서 6개 대륙의
+            경기·순위·본선 진출 현황을 관전할 수 있어요.
+          </p>
+        ) : (
+          <p className="text-[11px] text-gray-500">
+            아래 <strong className="text-gray-300">📅 일별 진행</strong>의 <strong className="text-emerald-300">다음 경기일 ▶</strong> 또는
+            캘린더의 <strong className="text-emerald-300">▶ 다음 일정 진행</strong>으로 진행합니다.
+            {seed && <> · 예선 시드 <span className="font-mono text-emerald-300">{seed}</span></>}
+          </p>
+        )}
       </GlassCard>
 
       {!result ? (
-        <GlassCard className="flex flex-col items-center gap-3 p-8 text-center">
+        <GlassCard className="p-8 text-center">
           <p className="text-sm text-gray-400">
-            먼저 지역예선을 진행해 본선 진출 48개국을 가립니다. 예선을 마쳐야 조추첨으로 넘어갈 수 있어요.
-            시작하면 <strong className="text-gray-300">첫 경기일부터 하루씩</strong> 진행됩니다.
+            아직 지역예선이 시작되지 않았습니다. <strong className="text-gray-300">캘린더</strong>에서{' '}
+            <strong className="text-emerald-300">▶ 다음 일정 진행</strong>으로 예선을 시작하면, 여기에서 6개 대륙의
+            경기·순위·본선 진출 현황을 관전할 수 있어요.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <GlassButton onClick={() => simulate(seedInput)}>⚽ 예선 시작 (하루씩 진행)</GlassButton>
-          </div>
         </GlassCard>
       ) : (
         <>
