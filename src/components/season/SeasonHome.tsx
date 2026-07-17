@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
-import { GlassButton } from '../common/GlassButton'
 import { useCareerStore } from '../../store/useCareerStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useSeasonStore } from '../../store/useSeasonStore'
@@ -83,7 +82,6 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const hostIds = useCareerStore((s) => s.hostIds)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const cursorIndex = useSeasonStore((s) => s.cursorIndex)
-  const advance = useSeasonStore((s) => s.advance)
   // 진행 상태(일정 축에서 각 이벤트의 완료 여부·월드컵 예선/본선 단계 판단).
   const progressPhase = useProgressStore((s) => s.phase)
   const qualDone = useQualificationStore((s) => s.result != null)
@@ -105,10 +103,6 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const events = useMemo(() => buildSeasonTimeline(wcYear), [wcYear])
   const clampedCursor = Math.min(cursorIndex, events.length - 1)
   const current = events[clampedCursor]
-  const enter = (e: SeasonEvent) => {
-    if (e.kind === 'wc') onNavigateWC()
-    else onSelectCup(e.id as CupId, e.year)
-  }
 
   // 월드컵 이벤트의 현재 단계(예선 → 조추첨 대기 → 본선 → 종료)를 스토어 상태에서 도출한다.
   const wcPhase: WcPhase = progressPhase === 'complete' ? 'done' : drawDone ? 'finals' : qualDone ? 'drawReady' : 'qualifying'
@@ -145,15 +139,6 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     }
     if (isDone(e)) return { steps: CUP_STEPS, activeIdx: 4, label: '대회 종료' }
     return { steps: CUP_STEPS, activeIdx: 0, label: '미진행' }
-  }
-
-  // 현재 일정을 자동 시뮬레이션한 뒤 다음 일정로 커서를 넘긴다(일정 축: 넘기는 일정도 결과가 남는다).
-  const skipCurrent = () => {
-    if (!current) return
-    setBusy(true)
-    autoSimulateSeasonEvent(current)
-    advance(events.length, advanceToNextEdition)
-    setBusy(false)
   }
 
   const yieldPaint = () => new Promise((r) => setTimeout(r, 24))
@@ -367,31 +352,6 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     return '🏆 FIFA 월드컵 종료 → 다음 일정'
   })()
 
-  /**
-   * 이 사이클(현재 커서~마지막)을 전부 자동 진행하고 다음 월드컵 사이클로 넘어간다(커리어 자동 진행).
-   * 진행률(어떤 대회를 진행 중인지·전체 대비 몇 번째인지)을 화면에 갱신하기 위해 이벤트마다 페인트를 양보한다.
-   */
-  const runAutoCycle = async () => {
-    if (!window.confirm('현재 커서부터 이번 사이클의 남은 모든 일정(월드컵·대륙컵)을 자동 시뮬레이션하고 다음 월드컵 사이클로 넘어갑니다. 진행할까요?')) return
-    const remaining = events.slice(clampedCursor)
-    setBusy(true)
-    setCycleProgress({ done: 0, total: remaining.length, label: remaining[0] ? `${remaining[0].nameKo} ${remaining[0].year}` : '' })
-    await yieldPaint()
-    for (let i = 0; i < remaining.length; i++) {
-      const e = remaining[i]
-      setCycleProgress({ done: i, total: remaining.length, label: `${e.nameKo} ${e.year}` })
-      await yieldPaint()
-      autoSimulateSeasonEvent(e)
-    }
-    setCycleProgress({ done: remaining.length, total: remaining.length, label: '사이클 마무리 · 다음 대회로' })
-    await yieldPaint()
-    // 사이클 종료 → 커리어 롤(연도·개최국·폼·랭킹 이월) + 커서 리셋.
-    advanceToNextEdition()
-    useSeasonStore.getState().reset()
-    setCycleProgress(null)
-    setBusy(false)
-  }
-
   // 캘린더 기준 날짜(진행 위치) — 월드컵 예선 중엔 그 예선 경기일, 그 외엔 현재 이벤트 시작일.
   // 예선부터 캘린더가 시작되도록(사용자 지적) 예선 창 날짜를 기준으로 삼는다.
   const focusDate = current
@@ -413,39 +373,23 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
           const info = stepInfo(current)
           return (
           <div className="mx-auto max-w-md rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
-            <p className="text-[11px] text-emerald-300/80">지금 진행할 일정 · {fmtYmd(current.start)}</p>
+            <p className="text-[11px] text-emerald-300/80">지금 진행 위치 · {fmtYmd(focusDate ?? current.start)}</p>
             <p className="my-1 text-base font-bold text-emerald-100">{current.kind === 'wc' ? '🏆 ' : '🌍 '}{current.nameKo} {current.year}</p>
-            {/* 예선 명시화: 월드컵·대륙컵 모두 예선→…→종료 단계를 캘린더 위에 드러낸다. */}
+            {/* 예선 명시화: 월드컵·대륙컵 모두 예선→…→종료 단계를 캘린더 위에 드러낸다(표시 전용). */}
             <StepBar steps={info.steps} activeIdx={info.activeIdx} />
             <p className="mt-0.5 text-[10px] text-emerald-300/70">{info.label}</p>
             {cycleProgress ? (
-              // 자동 진행 진행률 — 현재 진행 대회 + 전체 대비 진척도.
               <div className="mx-auto mt-3 max-w-xs">
                 <div className="mb-1 flex items-center justify-between text-[10px] text-emerald-200">
-                  <span>⏩ 자동 진행 중 · {cycleProgress.label}</span>
+                  <span>⏩ 진행 중 · {cycleProgress.label}</span>
                   <span className="tabular-nums">{cycleProgress.done}/{cycleProgress.total}</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-emerald-900/40">
-                  <div
-                    className="h-full rounded-full bg-emerald-400 transition-[width]"
-                    style={{ width: `${cycleProgress.total ? (cycleProgress.done / cycleProgress.total) * 100 : 0}%` }}
-                  />
+                  <div className="h-full rounded-full bg-emerald-400 transition-[width]" style={{ width: `${cycleProgress.total ? (cycleProgress.done / cycleProgress.total) * 100 : 0}%` }} />
                 </div>
               </div>
             ) : (
-              <>
-                <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-                  <GlassButton onClick={() => enter(current)}>▶ 이 일정 진행</GlassButton>
-                  <GlassButton variant="ghost" disabled={busy} onClick={skipCurrent}>⏭ 자동 진행 후 다음 일정로</GlassButton>
-                </div>
-                <button
-                  disabled={busy}
-                  onClick={runAutoCycle}
-                  className="mt-2 text-[11px] text-emerald-300/70 underline-offset-2 hover:text-emerald-200 hover:underline disabled:opacity-50"
-                >
-                  ⏩ 이 사이클 전부 자동 진행 (커리어 다음 대회로)
-                </button>
-              </>
+              <p className="mt-2 text-[10px] text-emerald-300/60">아래 캘린더의 <strong className="text-emerald-200">▶ 다음 일정 진행</strong>(시간대별·경기일 단위)으로 진행하세요.</p>
             )}
           </div>
           )
