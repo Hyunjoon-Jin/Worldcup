@@ -19,6 +19,7 @@ import { CalendarView } from './CalendarView'
 import { MyTeamSchedule } from './MyTeamSchedule'
 import { useMyTeamFixtures } from './useMyTeamFixtures'
 import { TeamLink } from '../common/TeamLink'
+import { FlagIcon } from '../common/FlagIcon'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { formatKoreanDate } from '../../data/calendar'
 import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
@@ -406,6 +407,10 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         </div>
         {current && (() => {
           const info = stepInfo(current)
+          // 내 팀 다음 경기(예정)·직전 결과 — 상단 바에 구체적 경기 정보를 드러낸다(누구와·무슨 경기·언제·결과).
+          const myNext = myTeamId ? myFixtures.find((f) => !f.score) : undefined
+          const myLast = myTeamId ? [...myFixtures].reverse().find((f) => f.score) : undefined
+          const oppOf = (id: string | null | undefined) => (id ? ALL_NATIONS_BY_ID[id] : null)
           return (
           <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
@@ -414,6 +419,34 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
             </div>
             {/* 예선 명시화: 월드컵·대륙컵 모두 예선→…→종료 단계를 상단에 드러낸다. */}
             <StepBar steps={info.steps} activeIdx={info.activeIdx} />
+            {/* 내 팀 다음 경기·직전 결과(설정 시) — 상대(국기+이름)·경기 종류·날짜·스코어. 클릭 시 경기 상세. */}
+            {myTeamId && (myNext || myLast) && (
+              <div className="mt-2 flex flex-col gap-1">
+                {myNext && (() => {
+                  const opp = oppOf(myNext.opponentId)
+                  return (
+                    <button onClick={myNext.onClick} className="flex w-full items-center gap-2 rounded-lg bg-black/25 px-2 py-1.5 text-left transition-colors hover:bg-black/35">
+                      <span className="shrink-0 rounded bg-amber-400/25 px-1.5 py-0.5 text-[9px] font-bold text-amber-200">다음 경기</span>
+                      {opp && <FlagIcon iso2={opp.iso2} className="h-3 w-4 shrink-0" />}
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-emerald-50">vs {opp?.nameKo ?? '미정'}</span>
+                      <span className="shrink-0 text-[10px] text-emerald-200/70">{myNext.comp === 'wc' ? '🏆' : '🌍'} {myNext.roundLabel}{myNext.date ? ` · ${fmtYmd(myNext.date)}` : ''}</span>
+                    </button>
+                  )
+                })()}
+                {myLast && (() => {
+                  const opp = oppOf(myLast.opponentId)
+                  const resCls = myLast.result === 'W' ? 'bg-emerald-500/30 text-emerald-200' : myLast.result === 'L' ? 'bg-red-500/30 text-red-200' : 'bg-white/15 text-gray-200'
+                  return (
+                    <button onClick={myLast.onClick} className="flex w-full items-center gap-2 rounded-lg bg-black/15 px-2 py-1 text-left transition-colors hover:bg-black/30">
+                      <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-gray-300">직전</span>
+                      {opp && <FlagIcon iso2={opp.iso2} className="h-2.5 w-3.5 shrink-0" />}
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-gray-200">vs {opp?.nameKo ?? '미정'} · {myLast.comp === 'wc' ? '🏆' : '🌍'} {myLast.roundLabel}</span>
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${resCls}`}>{myLast.score}</span>
+                    </button>
+                  )
+                })()}
+              </div>
+            )}
             {cycleProgress ? (
               <div className="mt-2">
                 <div className="mb-1 flex items-center justify-between text-[10px] text-emerald-200">
