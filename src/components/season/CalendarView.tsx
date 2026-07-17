@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
+import { FlagIcon } from '../common/FlagIcon'
+import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { buildCycleCalendar, type SeasonEvent } from '../../engine/season/seasonTimeline'
 import type { MyFixture } from './useMyTeamFixtures'
 
@@ -205,25 +207,59 @@ export function CalendarView({
           const myDay = myByDay.get(d) ?? []
           const isToday = iso === todayIso
           const wd = wdOf(iso)
+          const dayTitle = [...myDay.map((f) => `${f.score ? f.score + ' ' : ''}vs ${f.opponentId ? ALL_NATIONS_BY_ID[f.opponentId]?.nameKo ?? f.opponentId : 'TBD'} · ${f.roundLabel}`), ...dayPhases.map((p) => `${p.eventNameKo} · ${p.label}`)].join('\n')
+          const dayNumCls = `text-[11px] tabular-nums ${myDay.length > 0 ? 'font-bold text-amber-200' : wd === 0 ? 'text-rose-300/80' : wd === 6 ? 'text-sky-300/80' : 'text-gray-400'}`
+
+          // 내 팀 경기가 있는 날: 날짜 칸에 상대·경기 종류·결과(또는 예정)를 직접 표시하고 클릭 시 상세로 이동.
+          if (myDay.length > 0) {
+            return (
+              <button
+                key={d}
+                onClick={myDay[0].onClick}
+                title={dayTitle}
+                className={`flex aspect-square flex-col items-stretch gap-0.5 overflow-hidden rounded-md p-1 text-left transition-colors hover:bg-amber-400/25 ${myDay.some((f) => f.score) ? 'bg-amber-400/20' : 'bg-amber-400/10'} ring-1 ring-amber-300/40 ${isToday ? 'ring-2 ring-emerald-400/70' : ''}`}
+              >
+                <span className={dayNumCls}>{d}</span>
+                <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                  {myDay.slice(0, 2).map((f) => {
+                    const opp = f.opponentId ? ALL_NATIONS_BY_ID[f.opponentId] : null
+                    const resCls = f.result === 'W' ? 'bg-emerald-500/30 text-emerald-200' : f.result === 'L' ? 'bg-red-500/30 text-red-200' : f.result === 'D' ? 'bg-white/15 text-gray-200' : ''
+                    return (
+                      <div key={f.key} className="flex flex-col gap-0.5 rounded bg-black/25 px-1 py-0.5">
+                        <div className="flex min-w-0 items-center gap-1">
+                          {opp ? <FlagIcon iso2={opp.iso2} className="h-2.5 w-3.5 shrink-0" /> : null}
+                          <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-amber-50">{opp?.nameKo ?? 'TBD'}</span>
+                          {f.score ? (
+                            <span className={`shrink-0 rounded px-1 text-[9px] font-bold tabular-nums ${resCls}`}>{f.score}</span>
+                          ) : (
+                            <span className="shrink-0 text-[8px] font-bold text-amber-300/80">예정</span>
+                          )}
+                        </div>
+                        <span className="truncate text-[8px] leading-none text-amber-200/60">{f.comp === 'wc' ? '🏆' : '🌍'} {f.roundLabel}</span>
+                      </div>
+                    )
+                  })}
+                  {myDay.length > 2 && <span className="text-[8px] text-amber-300/70">+{myDay.length - 2}경기</span>}
+                </div>
+              </button>
+            )
+          }
+
           return (
             <div
               key={d}
-              title={[...myDay.map((f) => `⭐ vs ${f.opponentId ?? 'TBD'} · ${f.roundLabel}`), ...dayPhases.map((p) => `${p.eventNameKo} · ${p.label}`)].join('\n')}
+              title={dayTitle}
               className={`flex aspect-square flex-col items-center justify-start rounded-md p-0.5 text-[10px] ${
-                myDay.length > 0 ? 'bg-amber-400/15 ring-1 ring-amber-300/40' : dayPhases.length > 0 ? 'bg-white/[0.07]' : 'bg-white/[0.02]'
+                dayPhases.length > 0 ? 'bg-white/[0.07]' : 'bg-white/[0.02]'
               } ${isToday ? 'ring-1 ring-emerald-400/70' : ''}`}
             >
-              <span className={`tabular-nums ${myDay.length > 0 ? 'font-bold text-amber-200' : wd === 0 ? 'text-rose-300/80' : wd === 6 ? 'text-sky-300/80' : 'text-gray-400'}`}>{d}</span>
-              {myDay.length > 0 ? (
-                <span className="mt-0.5 text-[9px] leading-none text-amber-300">⭐</span>
-              ) : (
-                dayPhases.length > 0 && (
-                  <div className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
-                    {[...new Set(dayPhases.map((p) => p.eventId))].slice(0, 4).map((id) => (
-                      <span key={id} className={`h-1.5 w-1.5 rounded-full ${EVENT_COLOR[id] ?? 'bg-gray-400'}`} />
-                    ))}
-                  </div>
-                )
+              <span className={dayNumCls}>{d}</span>
+              {dayPhases.length > 0 && (
+                <div className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
+                  {[...new Set(dayPhases.map((p) => p.eventId))].slice(0, 4).map((id) => (
+                    <span key={id} className={`h-1.5 w-1.5 rounded-full ${EVENT_COLOR[id] ?? 'bg-gray-400'}`} />
+                  ))}
+                </div>
               )}
             </div>
           )
