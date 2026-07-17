@@ -455,18 +455,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         })()}
       </GlassCard>
 
-      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행.
-          진행 버튼은 상단 고정 바로 옮겼으므로 여기서는 표시/일정 클릭만 담당한다. */}
-      <CalendarView
-        wcYear={wcYear}
-        currentEvent={current}
-        onProgressTo={busy ? undefined : progressToEvent}
-        myTeamId={myTeamId ?? undefined}
-        myFixtures={myFixtures}
-        focusDate={focusDate}
-      />
-
-      {/* 방금 진행한 경기일(라운드) 결과 — 각 경기 클릭 시 상세 모달 */}
+      {/* 방금 진행한 경기일(라운드) 결과 — '다음 일정 진행' 직후 스크롤 없이 상단에서 바로 확인(각 경기 클릭 시 상세 모달) */}
       {reveal && (
         <GlassCard className="p-4">
           <div className="mb-2 flex items-center justify-between">
@@ -492,6 +481,17 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
           )}
         </GlassCard>
       )}
+
+      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행.
+          진행 버튼은 상단 고정 바로 옮겼으므로 여기서는 표시/일정 클릭만 담당한다. */}
+      <CalendarView
+        wcYear={wcYear}
+        currentEvent={current}
+        onProgressTo={busy ? undefined : progressToEvent}
+        myTeamId={myTeamId ?? undefined}
+        myFixtures={myFixtures}
+        focusDate={focusDate}
+      />
 
       {/* 진행 중인 대회 — 캘린더 밑에서 각 대회 실황 페이지로 진입 */}
       <GlassCard className="p-4">

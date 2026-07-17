@@ -4,6 +4,8 @@ import { TeamLink } from '../common/TeamLink'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useContinentalHistoryStore } from '../../store/useContinentalHistoryStore'
 import { useCareerStore } from '../../store/useCareerStore'
+import { useQualificationStore } from '../../store/useQualificationStore'
+import { useDrawStore } from '../../store/useDrawStore'
 import { formatKoreanDate } from '../../data/calendar'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { buildSeasonTimeline } from '../../engine/season/seasonTimeline'
@@ -24,17 +26,28 @@ export function MyTeamSchedule({ teamId, onSelectCup }: { teamId: string; onSele
   const wcYear = useCareerStore((s) => s.year)
   const progressPhase = useProgressStore((s) => s.phase)
   const cupEditions = useContinentalHistoryStore((s) => s.editions)
+  const qualResult = useQualificationStore((s) => s.result)
+  const drawComplete = useDrawStore((s) => s.isComplete && s.fieldTeams != null)
 
   // 내 팀이 이번 사이클에 참가하는 대회 일정(월드컵 + 소속 연맹 대륙컵) — 경기가 없어도 항상 표시.
+  // 월드컵은 예선 진행/본선 진출·탈락 상태를 함께 보여준다(F4). 진출·탈락은 스포일러 방지를 위해 조추첨이
+  // 끝난 뒤(예선 실제 종료)에만 확정 표기하고, 그전엔 '예선 진행 중'으로 둔다.
   const myConfed = ALL_NATIONS_BY_ID[teamId]?.confederation
   const myTournaments = useMemo(() => {
+    const wcStatus = (): { label: string; tone: string } => {
+      if (progressPhase === 'complete') return { label: '본선 종료', tone: 'text-emerald-300' }
+      if (drawComplete) return qualResult?.qualified48.includes(teamId) ? { label: '본선 진출', tone: 'text-emerald-300' } : { label: '예선 탈락', tone: 'text-red-300' }
+      if (qualResult) return { label: '예선 진행 중', tone: 'text-amber-300' }
+      return { label: '예정', tone: 'text-gray-500' }
+    }
     return buildSeasonTimeline(wcYear)
       .filter((e) => e.kind === 'wc' || (myConfed != null && (e.confeds === 'ALL' || (e.confeds as Confederation[]).includes(myConfed))))
       .map((e) => {
-        const done = e.kind === 'wc' ? progressPhase === 'complete' : cupEditions.some((x) => x.cupId === e.id && x.year === e.year)
-        return { e, done }
+        if (e.kind === 'wc') return { e, status: wcStatus() }
+        const done = cupEditions.some((x) => x.cupId === e.id && x.year === e.year)
+        return { e, status: done ? { label: '✅ 완료', tone: 'text-emerald-300' } : { label: '예정', tone: 'text-gray-500' } }
       })
-  }, [wcYear, myConfed, progressPhase, cupEditions])
+  }, [wcYear, myConfed, progressPhase, cupEditions, qualResult, drawComplete, teamId])
 
   const fixtures = useMyTeamFixtures(teamId, onSelectCup)
 
@@ -46,11 +59,11 @@ export function MyTeamSchedule({ teamId, onSelectCup }: { teamId: string; onSele
       <div className="mb-3">
         <p className="mb-1.5 text-[11px] font-bold text-gray-400">참가 대회 ({wcYear} 시즌)</p>
         <div className="space-y-1">
-          {myTournaments.map(({ e, done }) => (
+          {myTournaments.map(({ e, status }) => (
             <div key={`${e.id}-${e.year}`} className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs">
               <span className="w-20 shrink-0 tabular-nums text-[10px] text-gray-400">{fmtYmd(e.start)}</span>
               <span className="min-w-0 flex-1 font-medium text-gray-200">{e.kind === 'wc' ? '🏆 ' : '🌍 '}{e.nameKo} <span className="text-gray-500">{e.year}</span></span>
-              <span className={`shrink-0 text-[10px] font-bold ${done ? 'text-emerald-300' : 'text-gray-500'}`}>{done ? '✅ 완료' : '예정'}</span>
+              <span className={`shrink-0 text-[10px] font-bold ${status.tone}`}>{status.label}</span>
             </div>
           ))}
         </div>
