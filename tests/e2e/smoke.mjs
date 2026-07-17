@@ -30,11 +30,12 @@ try {
   const skip = page.getByText('건너뛰기')
   if (await skip.isVisible().catch(() => false)) await skip.click()
 
-  // 일정 축: 기본 진입은 시즌 홈. '이 일정 진행'으로 현재 일정(월드컵 지역예선)에 진입한다.
-  await page.getByText('지금 진행할 일정', { exact: false }).first().waitFor({ timeout: 10000 })
-  await page.getByRole('button', { name: '▶ 이 일정 진행' }).click()
+  // 일정 축: 기본 진입은 캘린더(시즌 홈). 진행 버튼이 상단 고정 바에 있는지 확인한다.
+  await page.getByRole('button', { name: /다음 일정 진행/ }).first().waitFor({ timeout: 10000 })
+  assert(true, '캘린더 상단에 다음 일정 진행 버튼이 표시된다')
 
-  // 예선 시작(결과가 없으면 시작 화면) → 첫 경기일 조추첨 완료 → 예선 끝까지 자동 진행
+  // 예선은 지역예선 탭에서 진행한다(항상 접근 가능). 예선 시작 → 첫 경기일 조추첨 완료 → 예선 끝까지 자동 진행
+  await page.getByRole('tab', { name: '지역예선' }).click()
   await page.getByRole('button', { name: '⚽ 지역예선 시작' }).click()
   // 첫 경기일이 조추첨으로 시작하면 조추첨을 완료해 경기 진행 단계로 넘어간다(있을 때만).
   const drawDone = page.getByRole('button', { name: /조추첨 완료/ })

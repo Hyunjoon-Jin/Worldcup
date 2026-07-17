@@ -362,26 +362,28 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
 
   return (
     <div className="flex flex-col gap-5">
-      {/* 진행 척추 헤더 */}
-      <GlassCard strong className="p-5 text-center">
-        <p className="mb-1 text-sm font-semibold text-white">🗓 {wcYear} 시즌 캘린더 — 일정 진행</p>
-        <p className="mb-3 text-[11px] text-gray-400">
-          달력에서 일정을 클릭하면 그때까지 시간 순서대로 진행되고, 그 사이 대회들이 자연스럽게 함께 진행됩니다. 월드컵도 캘린더 위의 한 이벤트입니다.
-          {hostIds.length > 0 && <> 월드컵 개최국: {hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(', ')}.</>}
-        </p>
+      {/* 진행 척추 헤더 = 상단 고정 진행 바. 날짜(경기일)/시간대 단위 진행 버튼을 항상 화면 상단에 둔다. */}
+      <GlassCard strong className="sticky top-16 z-[9] p-3">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+          <p className="text-sm font-semibold text-white">🗓 {wcYear} 시즌 · 일정 진행</p>
+          {hostIds.length > 0 && (
+            <p className="text-[10px] text-gray-500">개최국 {hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join('·')}</p>
+          )}
+        </div>
         {current && (() => {
           const info = stepInfo(current)
           return (
-          <div className="mx-auto max-w-md rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
-            <p className="text-[11px] text-emerald-300/80">지금 진행 위치 · {fmtYmd(focusDate ?? current.start)}</p>
-            <p className="my-1 text-base font-bold text-emerald-100">{current.kind === 'wc' ? '🏆 ' : '🌍 '}{current.nameKo} {current.year}</p>
-            {/* 예선 명시화: 월드컵·대륙컵 모두 예선→…→종료 단계를 캘린더 위에 드러낸다(표시 전용). */}
+          <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <p className="text-sm font-bold text-emerald-100">{current.kind === 'wc' ? '🏆 ' : '🌍 '}{current.nameKo} {current.year}</p>
+              <p className="text-[10px] text-emerald-300/80">{fmtYmd(focusDate ?? current.start)} · {info.label}</p>
+            </div>
+            {/* 예선 명시화: 월드컵·대륙컵 모두 예선→…→종료 단계를 상단에 드러낸다. */}
             <StepBar steps={info.steps} activeIdx={info.activeIdx} />
-            <p className="mt-0.5 text-[10px] text-emerald-300/70">{info.label}</p>
             {cycleProgress ? (
-              <div className="mx-auto mt-3 max-w-xs">
+              <div className="mt-2">
                 <div className="mb-1 flex items-center justify-between text-[10px] text-emerald-200">
-                  <span>⏩ 진행 중 · {cycleProgress.label}</span>
+                  <span className="truncate">⏩ 진행 중 · {cycleProgress.label}</span>
                   <span className="tabular-nums">{cycleProgress.done}/{cycleProgress.total}</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-emerald-900/40">
@@ -389,23 +391,42 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
                 </div>
               </div>
             ) : (
-              <p className="mt-2 text-[10px] text-emerald-300/60">아래 캘린더의 <strong className="text-emerald-200">▶ 다음 일정 진행</strong>(시간대별·경기일 단위)으로 진행하세요.</p>
+              // 상단 진행 컨트롤: 진행 단위(시간대별/경기일) 선택 + 다음 일정 진행 버튼.
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex items-center justify-center gap-1 text-[11px]">
+                  <span className="mr-0.5 text-emerald-300/70">진행 단위</span>
+                  <div className="flex rounded-lg bg-black/20 p-0.5">
+                    {(['slot', 'day'] as const).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setStepMode(m)}
+                        className={`rounded-md px-2.5 py-1 font-bold transition-colors ${stepMode === m ? 'bg-emerald-500/40 text-emerald-50' : 'text-emerald-300/60 hover:text-emerald-200'}`}
+                      >
+                        {m === 'slot' ? '시간대별' : '경기일 단위'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={advanceOneStep}
+                  disabled={busy}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/25 px-3 py-2 text-sm font-bold text-emerald-50 transition-colors hover:bg-emerald-500/35 disabled:opacity-50"
+                >
+                  {busy ? '진행 중…' : <>▶ 다음 일정 진행{nextStepLabel && <span className="hidden font-normal text-emerald-200/80 sm:inline"> · {nextStepLabel}</span>}</>}
+                </button>
+              </div>
             )}
           </div>
           )
         })()}
       </GlassCard>
 
-      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행 */}
+      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행.
+          진행 버튼은 상단 고정 바로 옮겼으므로 여기서는 표시/일정 클릭만 담당한다. */}
       <CalendarView
         wcYear={wcYear}
         currentEvent={current}
         onProgressTo={busy ? undefined : progressToEvent}
-        onProgressNext={busy ? undefined : advanceOneStep}
-        nextLabel={nextStepLabel}
-        busy={busy}
-        stepMode={stepMode}
-        onStepModeChange={setStepMode}
         myTeamId={myTeamId ?? undefined}
         myFixtures={myFixtures}
         focusDate={focusDate}
