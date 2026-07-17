@@ -18,6 +18,7 @@ import { buildSeasonTimeline, type SeasonEvent } from '../../engine/season/seaso
 import { cupStageReveal, cupStageLabel } from '../../engine/season/matchdaySteps'
 import { CalendarView } from './CalendarView'
 import { MyTeamSchedule } from './MyTeamSchedule'
+import { useMyTeamFixtures } from './useMyTeamFixtures'
 import { TeamLink } from '../common/TeamLink'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { formatKoreanDate } from '../../data/calendar'
@@ -94,6 +95,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   const cupHasResult = useContinentalStore((s) => s.result != null)
   const cupStage = useContinentalStore((s) => s.stage)
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
+  // 내 팀 경기(날짜 포함) — 캘린더 그리드/일정에 내 팀 일정을 표시하기 위해.
+  const myFixtures = useMyTeamFixtures(myTeamId ?? '', onSelectCup)
   const [busy, setBusy] = useState(false)
   const [cycleProgress, setCycleProgress] = useState<CycleProgress | null>(null)
   const [reveal, setReveal] = useState<RevealPanel | null>(null)
@@ -451,6 +454,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         busy={busy}
         stepMode={stepMode}
         onStepModeChange={setStepMode}
+        myTeamId={myTeamId ?? undefined}
+        myFixtures={myFixtures}
       />
 
       {/* 방금 진행한 경기일(라운드) 결과 — 각 경기 클릭 시 상세 모달 */}

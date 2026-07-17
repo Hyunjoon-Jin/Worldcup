@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
+import { TeamLink } from '../common/TeamLink'
 import { buildCycleCalendar, type SeasonEvent } from '../../engine/season/seasonTimeline'
+import type { MyFixture } from './useMyTeamFixtures'
 
 const WD = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -45,6 +47,8 @@ export function CalendarView({
   busy,
   stepMode,
   onStepModeChange,
+  myTeamId,
+  myFixtures,
 }: {
   wcYear: number
   currentEvent?: SeasonEvent
@@ -58,6 +62,9 @@ export function CalendarView({
   /** 진행 단위(시간대별/경기일). */
   stepMode?: 'slot' | 'day'
   onStepModeChange?: (m: 'slot' | 'day') => void
+  /** 내 팀(설정 시) — 캘린더에 내 팀 경기를 별도 표시. */
+  myTeamId?: string
+  myFixtures?: MyFixture[]
 }) {
   const phases = useMemo(() => buildCycleCalendar(wcYear), [wcYear])
   // 일정이 있는 월만 네비게이션 대상(사이클 내 빈 달은 건너뛴다).
@@ -91,6 +98,23 @@ export function CalendarView({
   const agenda = useMemo(
     () => phases.filter((p) => ymKey(p.start) === month).sort((a, b) => a.start.localeCompare(b.start)),
     [phases, month],
+  )
+
+  // 내 팀 경기: 날짜(day)별 + 이 달의 목록. 날짜 있는 경기만.
+  const myByDay = useMemo<Map<number, MyFixture[]>>(() => {
+    const map = new Map<number, MyFixture[]>()
+    for (const f of myFixtures ?? []) {
+      if (!f.date || ymKey(f.date) !== month) continue
+      const d = Number(f.date.slice(8, 10))
+      const arr = map.get(d) ?? []
+      arr.push(f)
+      map.set(d, arr)
+    }
+    return map
+  }, [myFixtures, month])
+  const myAgenda = useMemo<MyFixture[]>(
+    () => (myFixtures ?? []).filter((f) => f.date && ymKey(f.date) === month).sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '')),
+    [myFixtures, month],
   )
 
   const todayIso = currentEvent?.start
@@ -163,28 +187,54 @@ export function CalendarView({
           if (d == null) return <div key={`b${i}`} className="aspect-square" />
           const iso = `${yy}-${pad(mm)}-${pad(d)}`
           const dayPhases = byDay.get(d) ?? []
+          const myDay = myByDay.get(d) ?? []
           const isToday = iso === todayIso
           const wd = wdOf(iso)
           return (
             <div
               key={d}
-              title={dayPhases.map((p) => `${p.eventNameKo} · ${p.label}`).join('\n')}
+              title={[...myDay.map((f) => `⭐ vs ${f.opponentId ?? 'TBD'} · ${f.roundLabel}`), ...dayPhases.map((p) => `${p.eventNameKo} · ${p.label}`)].join('\n')}
               className={`flex aspect-square flex-col items-center justify-start rounded-md p-0.5 text-[10px] ${
-                dayPhases.length > 0 ? 'bg-white/[0.07]' : 'bg-white/[0.02]'
+                myDay.length > 0 ? 'bg-amber-400/15 ring-1 ring-amber-300/40' : dayPhases.length > 0 ? 'bg-white/[0.07]' : 'bg-white/[0.02]'
               } ${isToday ? 'ring-1 ring-emerald-400/70' : ''}`}
             >
-              <span className={`tabular-nums ${wd === 0 ? 'text-rose-300/80' : wd === 6 ? 'text-sky-300/80' : 'text-gray-400'}`}>{d}</span>
-              {dayPhases.length > 0 && (
-                <div className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
-                  {[...new Set(dayPhases.map((p) => p.eventId))].slice(0, 4).map((id) => (
-                    <span key={id} className={`h-1.5 w-1.5 rounded-full ${EVENT_COLOR[id] ?? 'bg-gray-400'}`} />
-                  ))}
-                </div>
+              <span className={`tabular-nums ${myDay.length > 0 ? 'font-bold text-amber-200' : wd === 0 ? 'text-rose-300/80' : wd === 6 ? 'text-sky-300/80' : 'text-gray-400'}`}>{d}</span>
+              {myDay.length > 0 ? (
+                <span className="mt-0.5 text-[9px] leading-none text-amber-300">⭐</span>
+              ) : (
+                dayPhases.length > 0 && (
+                  <div className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
+                    {[...new Set(dayPhases.map((p) => p.eventId))].slice(0, 4).map((id) => (
+                      <span key={id} className={`h-1.5 w-1.5 rounded-full ${EVENT_COLOR[id] ?? 'bg-gray-400'}`} />
+                    ))}
+                  </div>
+                )
               )}
             </div>
           )
         })}
       </div>
+
+      {/* 내 팀 경기(설정 시) — 이 달의 내 팀 경기 목록. 클릭 시 경기 상세/대회 페이지. */}
+      {myTeamId && (
+        <div className="mt-3 border-t border-amber-300/20 pt-2">
+          <p className="mb-1 flex items-center gap-1 text-[11px] font-bold text-amber-300">⭐ 내 팀 <TeamLink teamId={myTeamId} /> 경기</p>
+          {myAgenda.length === 0 ? (
+            <p className="text-[11px] text-gray-500">이 달엔 내 팀 경기가 없습니다.</p>
+          ) : (
+            <div className="space-y-1">
+              {myAgenda.map((f) => (
+                <button key={f.key} onClick={f.onClick} className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-[11px] transition-colors hover:bg-white/10">
+                  <span className="w-16 shrink-0 tabular-nums text-gray-400">{mm}월 {Number((f.date ?? '').slice(8, 10))}일 ({WD[wdOf(f.date!)]})</span>
+                  <span className="shrink-0 text-gray-400">{f.comp === 'wc' ? '🏆' : '🌍'} {f.roundLabel}</span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1"><span className="text-gray-500">vs</span>{f.opponentId ? <TeamLink teamId={f.opponentId} wrap className="min-w-0" /> : <span className="text-gray-500">TBD</span>}</span>
+                  {f.score ? <span className={`shrink-0 rounded px-1 py-0.5 font-bold ${f.result === 'W' ? 'bg-emerald-500/20 text-emerald-300' : f.result === 'L' ? 'bg-red-500/20 text-red-300' : 'bg-white/10 text-gray-300'}`}>{f.score}</span> : <span className="shrink-0 text-[10px] text-amber-300/70">▶</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 이 달의 일정 목록(라운드별 날짜) */}
       <div className="mt-3 border-t border-white/10 pt-2">
