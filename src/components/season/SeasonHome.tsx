@@ -398,7 +398,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
   return (
     <div className="flex flex-col gap-5">
       {/* 진행 척추 헤더 = 상단 고정 진행 바. 날짜(경기일)/시간대 단위 진행 버튼을 항상 화면 상단에 둔다. */}
-      <GlassCard strong className="sticky top-16 z-[9] p-3">
+      <GlassCard strong className="progress-bar-solid sticky top-16 z-[9] p-3 shadow-xl shadow-black/40">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
           <p className="text-sm font-semibold text-white">🗓 {wcYear} 시즌 · 일정 진행</p>
           {hostIds.length > 0 && (
