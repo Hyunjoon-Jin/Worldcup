@@ -8,6 +8,7 @@ import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDe
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { qualWindowDate } from '../../engine/qualification/calendar'
+import { deriveQualStages, stageNameOfGroup } from '../../engine/qualification/rules'
 import type { CupId } from '../../data/continental/formats'
 import type { GroupLetter } from '../../types/group'
 import type { KnockoutRound } from '../../types/match'
@@ -58,12 +59,17 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
         const myMatches = r.matches.filter((m) => m.homeTeamId === teamId || m.awayTeamId === teamId)
         if (myMatches.length === 0) continue
         const revealedMd = qualRevealed[confed] ?? 0
+        // 예선은 대륙마다 1·2·3차 예선 단계로 나뉜다. 전역 경기일(11차 등)이 아니라 '단계 + 단계 내 경기 번호'로
+        // 표기한다(예: 2차 예선 6경기). 각 단계의 시작 경기일(startMd)로 단계 내 경기 번호를 구한다.
+        const stageStart = new Map(deriveQualStages(r).map((s) => [s.name, s.startMd]))
         for (const m of myMatches) {
           const isHome = m.homeTeamId === teamId
           const oppId = isHome ? m.awayTeamId : m.homeTeamId
           const date = qualWindowDate(m.matchday - 1, wcYear)
           const played = revealedMd >= m.matchday
-          const roundLabel = `지역예선 ${m.matchday}차`
+          const stageName = stageNameOfGroup(r, m.group)
+          const matchInStage = m.matchday - (stageStart.get(stageName) ?? m.matchday) + 1
+          const roundLabel = `${stageName} ${matchInStage}경기`
           if (played) {
             const gf = isHome ? m.homeGoals : m.awayGoals
             const ga = isHome ? m.awayGoals : m.homeGoals
