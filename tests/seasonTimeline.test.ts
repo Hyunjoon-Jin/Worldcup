@@ -86,7 +86,10 @@ describe('세부 일정 전개(대륙대회 일정 상세화 + 캘린더)', () =
 
   it('월드컵 본선은 조별리그 + 32강~결승 라운드창으로 전개된다', () => {
     const phases = buildWcPhases(2026)
-    expect(phases[0].label).toBe('조별리그')
+    // 지역예선(전년)부터 시작해 조별리그·결승으로 이어진다.
+    expect(phases[0].label).toContain('지역예선')
+    expect(phases[0].start.startsWith('2025')).toBe(true) // 예선은 개최 전년부터
+    expect(phases.some((p) => p.label === '조별리그')).toBe(true)
     expect(phases.some((p) => p.key === 'FINAL')).toBe(true)
     expect(buildEventPhases({ kind: 'wc', id: 'WC', nameKo: 'x', confeds: 'ALL', year: 2026, start: '', end: '' })).toEqual(phases)
   })

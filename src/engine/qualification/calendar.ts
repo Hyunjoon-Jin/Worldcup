@@ -13,6 +13,8 @@ import type { QualMatch } from '../../types/qualification'
 const BASE_WC_YEAR = 2026
 const QUAL_WINDOW_START = '2025-03-21'
 const QUAL_WINDOW_END = '2026-03-31'
+/** 표준 예선 매치 윈도우 수(가장 긴 AFC 예선 22라운드). 캘린더 표시용 근사. */
+export const QUAL_TOTAL_WINDOWS = 22
 
 /** 윈도우 인덱스 w(0..total-1)를 예선 기간에 균등 매핑한 ISO 날짜로 변환한다. wcYear에 맞춰 연도를 이동한다. */
 function windowDate(w: number, total: number, wcYear: number): string {
@@ -24,6 +26,11 @@ function windowDate(w: number, total: number, wcYear: number): string {
   if (deltaYears === 0) return iso
   const [y, m, d] = iso.split('-')
   return `${Number(y) + deltaYears}-${m}-${d}`
+}
+
+/** 예선 윈도우 w(0부터)의 ISO 날짜(캘린더 표시용, 결과 없이도 계산). */
+export function qualWindowDate(w: number, wcYear: number = BASE_WC_YEAR, total: number = QUAL_TOTAL_WINDOWS): string {
+  return windowDate(w, total, wcYear)
 }
 
 export interface CalendarMatch {
