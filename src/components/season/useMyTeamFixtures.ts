@@ -2,9 +2,12 @@ import { useMemo } from 'react'
 import { useDrawStore } from '../../store/useDrawStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useContinentalStore } from '../../store/useContinentalStore'
+import { useQualificationStore } from '../../store/useQualificationStore'
+import { useCareerStore } from '../../store/useCareerStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
+import { qualWindowDate } from '../../engine/qualification/calendar'
 import type { CupId } from '../../data/continental/formats'
 import type { GroupLetter } from '../../types/group'
 import type { KnockoutRound } from '../../types/match'
@@ -34,6 +37,9 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
   const cupActiveId = useContinentalStore((s) => s.activeCupId)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const cupResult = useContinentalStore((s) => s.result)
+  const qualResult = useQualificationStore((s) => s.result)
+  const qualRevealed = useQualificationStore((s) => s.revealed)
+  const wcYear = useCareerStore((s) => s.year)
 
   const group = useMemo<GroupLetter | null>(() => {
     for (const g of GROUP_LETTERS) {
@@ -44,6 +50,33 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
 
   return useMemo<MyFixture[]>(() => {
     const out: MyFixture[] = []
+
+    // ── 지역예선: 내 팀 경기(치른 경기=스코어, 예정 경기=대진). 경기일(matchday)로 날짜를 부여한다. ──
+    // 캘린더가 예선부터 시작하므로, 게임 초반 내내 내 팀 일정이 달력에 뜬다(F3).
+    if (qualResult) {
+      for (const [confed, r] of Object.entries(qualResult.byConfederation)) {
+        const myMatches = r.matches.filter((m) => m.homeTeamId === teamId || m.awayTeamId === teamId)
+        if (myMatches.length === 0) continue
+        const revealedMd = qualRevealed[confed] ?? 0
+        for (const m of myMatches) {
+          const isHome = m.homeTeamId === teamId
+          const oppId = isHome ? m.awayTeamId : m.homeTeamId
+          const date = qualWindowDate(m.matchday - 1, wcYear)
+          const played = revealedMd >= m.matchday
+          const roundLabel = `지역예선 ${m.matchday}차`
+          if (played) {
+            const gf = isHome ? m.homeGoals : m.awayGoals
+            const ga = isHome ? m.awayGoals : m.homeGoals
+            const mdGroup = (Math.min(Math.max(m.matchday, 1), 3) || 1) as 1 | 2 | 3
+            const ref: MatchDetailRef = { kind: 'group', external: true, match: { group: 'A', matchday: mdGroup, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals } }
+            out.push({ key: `q-${confed}-${m.matchday}-${m.group}-${oppId}`, comp: 'wc', date, roundLabel, opponentId: oppId, score: `${gf}-${ga}`, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', onClick: () => selectMatch(ref) })
+          } else {
+            out.push({ key: `q-up-${confed}-${m.matchday}-${m.group}-${oppId}`, comp: 'wc', date, roundLabel, opponentId: oppId, onClick: () => selectMatch({ kind: 'upcoming', homeTeamId: teamId, awayTeamId: oppId, label: roundLabel, date }) })
+          }
+        }
+        break // 내 팀 소속 대륙을 찾았으면 종료
+      }
+    }
 
     // ── 월드컵 본선: 치른 조별/녹아웃 경기 + 예정 경기 ──
     if (group) {
@@ -108,5 +141,5 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
     }
 
     return out.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'))
-  }, [group, groupMatches, knockoutSlots, schedule, drawGroups, teamId, selectMatch, cupActiveId, cupResult, cupYear, onSelectCup])
+  }, [group, groupMatches, knockoutSlots, schedule, drawGroups, teamId, selectMatch, cupActiveId, cupResult, cupYear, onSelectCup, qualResult, qualRevealed, wcYear])
 }

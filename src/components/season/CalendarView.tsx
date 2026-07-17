@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { buildCycleCalendar, type SeasonEvent } from '../../engine/season/seasonTimeline'
@@ -73,8 +73,19 @@ export function CalendarView({
   // 일정이 있는 월만 네비게이션 대상(사이클 내 빈 달은 건너뛴다).
   const months = useMemo(() => [...new Set(phases.map((p) => ymKey(p.start)))].sort(), [phases])
   const focusIso = focusDate ?? currentEvent?.start
-  const defaultMonth = (focusIso && months.includes(ymKey(focusIso)) ? ymKey(focusIso) : months[0]) ?? `${wcYear}-06`
+  const focusMonth = focusIso ? ymKey(focusIso) : undefined
+  const defaultMonth = (focusMonth && months.includes(focusMonth) ? focusMonth : months[0]) ?? `${wcYear}-06`
   const [month, setMonth] = useState(defaultMonth)
+
+  // 진행에 따라 캘린더가 '현재 날짜'를 따라간다(F2). focus 월이 바뀌면(=일정을 진행하면) 그 달로 스냅한다.
+  // 사용자가 수동으로 달을 넘긴 것은 다음 진행 전까지 유지된다(진행하면 다시 현재 달로 복귀).
+  const prevFocusMonth = useRef(focusMonth)
+  useEffect(() => {
+    if (focusMonth && focusMonth !== prevFocusMonth.current) {
+      prevFocusMonth.current = focusMonth
+      if (months.includes(focusMonth)) setMonth(focusMonth)
+    }
+  }, [focusMonth, months])
 
   const monthIdx = months.indexOf(month)
   const [yy, mm] = month.split('-').map(Number)
