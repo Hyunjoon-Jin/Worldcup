@@ -127,6 +127,15 @@ html[data-skin="amber"] {
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+/* 상단 고정(sticky) 진행 바는 스크롤되는 캘린더가 뒤로 비쳐 읽기 어렵다 → 불투명 배경으로 덮는다.
+   (.glass-strong.progress-bar-solid 로 특이도를 높여 glass-strong의 반투명 배경을 확실히 덮는다.) */
+.glass-strong.progress-bar-solid {
+  background: rgba(13, 16, 26, 0.97);
+}
+html[data-theme="light"] .glass-strong.progress-bar-solid {
+  background: rgba(246, 248, 252, 0.98);
+}
+
 /* 다른 콘텐츠 위에 겹쳐 뜨는 팝오버·드롭다운은 반드시 불투명해야 읽힌다.
    backdrop-filter(blur)가 렌더되지 않는 모바일 브라우저에서도 배경이 비치지 않도록 solid 배경. */
 .popover-solid {
