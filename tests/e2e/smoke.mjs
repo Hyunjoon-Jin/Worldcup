@@ -37,7 +37,7 @@ try {
   // 예선은 캘린더가 시작·진행한다(지역예선 탭엔 시작/시드 조작이 없다). 캘린더에서 한 번 진행해 예선을 시작한 뒤,
   // 지역예선 탭에서 '예선 끝까지 자동 진행'으로 마무리한다.
   await page.getByRole('button', { name: /다음 일정 진행/ }).first().click()
-  await page.getByRole('tab', { name: '지역예선' }).click()
+  await page.getByRole('tab', { name: '월드컵 지역예선', exact: true }).click()
   // 첫 경기일이 조추첨으로 시작하면 조추첨을 완료해 경기 진행 단계로 넘어간다(있을 때만).
   const drawDone = page.getByRole('button', { name: /조추첨 완료/ })
   if (await drawDone.isVisible().catch(() => false)) await drawDone.click()
