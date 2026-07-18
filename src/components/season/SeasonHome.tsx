@@ -10,7 +10,7 @@ import { useContinentalHistoryStore } from '../../store/useContinentalHistorySto
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import { advanceToNextEdition, startFinalsFromQualification, prepareFinalsDrawFromQualification } from '../../store/tournamentActions'
-import { autoSimulateSeasonEvent, cupRankByTeam } from '../../store/seasonActions'
+import { autoSimulateSeasonEvent, autoSimulateCup, autoSimulateWorldCupFinals, cupRankByTeam, myTeamInCup, isCupSimulated } from '../../store/seasonActions'
 import { formOffsetsFromResults } from '../../engine/qualification/ranking'
 import { buildQualCalendar, qualWindowDate } from '../../engine/qualification/calendar'
 import { buildSeasonTimeline, buildCupPhases, buildWcPhases, type SeasonEvent } from '../../engine/season/seasonTimeline'
@@ -82,6 +82,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
   const wcYear = useCareerStore((s) => s.year)
   const hostIds = useCareerStore((s) => s.hostIds)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
+  const autoSkipOthers = useMyTeamStore((s) => s.autoSkipOthers)
+  const setAutoSkipOthers = useMyTeamStore((s) => s.setAutoSkipOthers)
   const cursorIndex = useSeasonStore((s) => s.cursorIndex)
   // 진행 상태(일정 축에서 각 이벤트의 완료 여부·월드컵 예선/본선 단계 판단).
   const progressPhase = useProgressStore((s) => s.phase)
@@ -353,6 +355,89 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
     setBusy(false)
   }
 
+  // 내 팀이 월드컵 본선에 참가하는가(본선 직행 48 또는 개최국). 내 팀 중심 진행에서 '본선 자동 넘김' 판단.
+  const myTeamInWcFinals = (): boolean => {
+    if (!myTeamId) return false
+    const qr = useQualificationStore.getState().result
+    return (qr?.qualified48.includes(myTeamId) ?? false) || hostIds.includes(myTeamId)
+  }
+
+  /**
+   * 내 팀 중심 진행 — 커서 위치부터 '내 팀이 참가하지 않는' 일정을 자동 시뮬레이션으로 넘긴다.
+   * 대륙컵: 내 팀이 참가국이 아니면 통째로 자동 진행. 월드컵: 예선은 내 팀이 늘 뛰므로 넘기지 않고,
+   * 예선을 마쳤는데 내 팀이 본선에 못 들었으면 본선만 자동 진행한다. 내 팀 일정에 닿으면 멈춘다.
+   * 사이클 마지막까지 넘겨야 하면 롤은 하지 않고 멈춘다(롤은 사용자의 다음 진행에서). 넘긴 대회명을 반환.
+   */
+  const skipNonMyTeamEvents = (): { skipped: string[]; rolled: boolean } => {
+    if (!myTeamId) return { skipped: [], rolled: false }
+    const skipped: string[] = []
+    let rolled = false
+    for (let guard = 0; guard < 30; guard++) {
+      const idx = Math.min(useSeasonStore.getState().cursorIndex, events.length - 1)
+      const e = events[idx]
+      if (!e) break
+      // advance=이 이벤트를 지나 다음으로 진행할지. stop=내 팀 차례라 멈출지.
+      let advance = false
+      if (e.kind === 'cup') {
+        if (myTeamInCup(myTeamId, e.id as CupId, e.year)) {
+          // 내 팀의 대회 — 사용자가 직접 단계별로 본다. 전 단계를 다 본(공개한) 뒤에만 지나간다.
+          const cs = useContinentalStore.getState()
+          const fullyRevealed = cs.activeCupId === e.id && cs.cupYear === e.year && cs.stage >= cupTotalStages(e.id as CupId)
+          if (!fullyRevealed) break // 아직 진행 중/시작 전 → 멈춘다.
+          advance = true // 다 봤다 → 다음 일정으로.
+        } else {
+          // 내 팀 비참가 대회 — 자동 시뮬(이미 진행됐으면 그대로) 후 다음으로.
+          if (!isCupSimulated(e.id as CupId, e.year)) {
+            autoSimulateCup(e.id as CupId, e.year, `${e.id}-${e.year}`)
+            skipped.push(`${e.nameKo} ${e.year}`)
+          }
+          advance = true
+        }
+      } else {
+        // 월드컵: 본선이 끝났으면 지나가고, 아직이면 — 내 팀 본선 탈락 시 본선만 자동 진행, 아니면 멈춘다.
+        const finalsDone = useProgressStore.getState().phase === 'complete'
+        if (finalsDone) {
+          advance = true
+        } else if (useQualificationStore.getState().result && qualAtEnd() && !myTeamInWcFinals()) {
+          autoSimulateWorldCupFinals(`WC-${e.year}`)
+          skipped.push(`FIFA 월드컵 ${e.year} 본선`)
+          advance = true
+        } else {
+          break // 내 팀이 예선/본선을 진행 중 → 멈춘다.
+        }
+      }
+      if (!advance) break
+      if (idx >= events.length - 1) {
+        // 남은 일정이 전부 내 팀 비참가였다 → 사이클 종료로 롤(다음 시즌 예선부터 내 팀이 다시 뛴다).
+        advanceToNextEdition()
+        useSeasonStore.getState().reset()
+        rolled = true
+        break
+      }
+      useSeasonStore.getState().setCursor(idx + 1)
+    }
+    return { skipped, rolled }
+  }
+
+  /** 상단 진행 버튼 핸들러 — 내 팀 중심이 켜져 있으면 내 팀 비참가 일정을 먼저 자동으로 넘긴 뒤 진행한다. */
+  const handleAdvance = () => {
+    if (busy || !current) return
+    if (autoSkipOthers && myTeamId) {
+      setBusy(true)
+      const before = useSeasonStore.getState().cursorIndex
+      const { skipped, rolled } = skipNonMyTeamEvents()
+      const moved = rolled || useSeasonStore.getState().cursorIndex !== before
+      setBusy(false)
+      if (skipped.length > 0) {
+        setReveal({ label: `⏩ 내 팀 비참가 일정 ${skipped.length}개 자동 진행 · ${skipped.join(' · ')}${rolled ? ' → 다음 시즌 시작' : ''}`, rows: [] })
+      }
+      // 커서가 이동했으면(스킵/완료 일정 통과) 여기서 멈춘다 — advanceOneStep은 렌더 시점의 옛 current를 참조하므로.
+      // 다음 리렌더에서 갱신된 현재 일정(내 팀 차례)이 표시되고, 사용자가 다시 진행 버튼을 눌러 그 일정을 진행한다.
+      if (moved || skipped.length > 0) return
+    }
+    advanceOneStep()
+  }
+
   /** 캘린더 상단 버튼 라벨 — 다음에 진행할 경기일(라운드). */
   const nextStepLabel = ((): string => {
     if (!current) return ''
@@ -370,9 +455,18 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
     return '🏆 FIFA 월드컵 종료 → 다음 일정'
   })()
 
+  // 내 팀 중심 진행에서 '지금 이벤트'가 자동으로 넘길 대상인가(내 팀 비참가). 이때는 조추첨 버튼을 감추고
+  // 일반 진행 버튼(자동 넘김)을 노출해, 내 팀이 안 뛰는 대회의 조추첨을 사용자가 눌러야 하는 번거로움을 없앤다.
+  const currentAutoSkippable =
+    autoSkipOthers && !!myTeamId && !!current
+      ? current.kind === 'cup'
+        ? !myTeamInCup(myTeamId, current.id as CupId, current.year)
+        : qualProgress.finished && !drawDone && !myTeamInWcFinals() // 월드컵 본선(내 팀 탈락)만 넘김
+      : false
+
   // 조추첨 단계인가 — 이때는 상단 버튼이 '{대회명} 조추첨 진행하기'가 되고, 클릭 시 해당 대회의 조추첨
   // 하위탭으로 자동 이동한다. 월드컵: 예선 완료 후 본선 조추첨 전. 대륙컵: 아직 대회를 추첨/진행하기 전.
-  const drawStep: { kind: 'wc' } | { kind: 'cup'; cupId: CupId; year: number } | null = !current
+  const drawStep: { kind: 'wc' } | { kind: 'cup'; cupId: CupId; year: number } | null = !current || currentAutoSkippable
     ? null
     : current.kind === 'wc'
       ? qualProgress.finished && !drawDone
@@ -514,13 +608,29 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
                   </div>
                 </div>
                 <button
-                  onClick={advanceOneStep}
+                  onClick={handleAdvance}
                   disabled={busy}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/25 px-3 py-2 text-sm font-bold text-emerald-50 transition-colors hover:bg-emerald-500/35 disabled:opacity-50"
                 >
                   {busy ? '진행 중…' : <>▶ 다음 일정 진행{nextStepLabel && <span className="hidden font-normal text-emerald-200/80 sm:inline"> · {nextStepLabel}</span>}</>}
                 </button>
               </div>
+            )}
+            {/* 내 팀 중심 진행 토글 — 내 팀이 설정돼 있을 때만. 내 팀이 안 뛰는 대회는 자동 진행으로 넘긴다. */}
+            {myTeamId && (
+              <button
+                onClick={() => setAutoSkipOthers(!autoSkipOthers)}
+                role="switch"
+                aria-checked={autoSkipOthers}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-black/15 px-3 py-1.5 text-[11px] text-emerald-200/80 transition-colors hover:bg-black/25"
+                title="켜면 내 팀이 참가하지 않는 대회(대륙컵 등)는 자동으로 진행돼요."
+              >
+                <span className={`flex h-4 w-7 shrink-0 items-center rounded-full p-0.5 transition-colors ${autoSkipOthers ? 'bg-emerald-500/70' : 'bg-white/15'}`}>
+                  <span className={`block h-3 w-3 rounded-full bg-white transition-transform ${autoSkipOthers ? 'translate-x-3' : ''}`} />
+                </span>
+                <span className="font-bold">내 팀 중심 진행</span>
+                <span className="text-emerald-300/50">{autoSkipOthers ? '내 팀 비참가 대회는 자동 진행' : '모든 일정 직접 진행'}</span>
+              </button>
             )}
           </div>
           )
