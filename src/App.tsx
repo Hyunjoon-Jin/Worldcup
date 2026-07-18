@@ -63,6 +63,11 @@ function App() {
     if (cs.activeCupId !== id || cs.cupYear !== year) cs.selectCup(id, year)
     setTab('continental')
   }
+  // 캘린더의 '조추첨 진행하기' → 해당 대회 탭의 조추첨 하위탭으로 이동(신호를 올려 하위탭이 조추첨으로 전환).
+  const [wcDrawSignal, setWcDrawSignal] = useState(0)
+  const [cupDrawSignal, setCupDrawSignal] = useState(0)
+  const enterWCDraw = () => { setTab('worldcup'); setWcDrawSignal((s) => s + 1) }
+  const enterCupDraw = (id: CupId, year: number) => { enterCup(id, year); setCupDrawSignal((s) => s + 1) }
   const visibleTabs = TOP_TABS
   // 새로고침/재방문으로 저장된 대회를 이어가는 경우에만 안내 배너를 띄운다.
   const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
@@ -182,17 +187,18 @@ function App() {
           <TeamDetailPage />
         ) : (
           <>
-            {tab === 'season' && <SeasonHome onNavigateWC={enterWC} onSelectCup={enterCup} />}
+            {tab === 'season' && <SeasonHome onNavigateWC={enterWC} onSelectCup={enterCup} onNavigateWCDraw={enterWCDraw} onNavigateCupDraw={enterCupDraw} />}
             {tab === 'friendlies' && <FriendliesTab />}
             {tab === 'cupqual' && <CupQualificationTab />}
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('worldcup')} />}
-            {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} />}
+            {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} openDrawSignal={cupDrawSignal} />}
             {tab === 'worldcup' && (
               <WorldCupTab
                 onNextEdition={() => {
                   advanceToNextEdition()
                   setTab('qualifiers')
                 }}
+                openDrawSignal={wcDrawSignal}
               />
             )}
             {tab === 'myteam' && <MyTeamTab />}

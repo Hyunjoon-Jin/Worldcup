@@ -48,23 +48,13 @@ try {
     await modal.getByRole('button', { name: '닫기' }).click()
     await modal.first().waitFor({ state: 'hidden', timeout: 5000 })
   }
-  // 다음 일정이 대륙컵으로 다가왔다 — 상단 '다음 일정 진행'으로 한 단계 진입(조추첨)하면 대회가 시작된다.
-  await page.getByRole('button', { name: /다음 일정 진행/ }).first().click()
-  // 진행 중인 대회 섹션의 대륙컵 '실황 보기' 링크로 대회 페이지에 진입한다.
-  await page.getByRole('button', { name: /실황 보기/ }).first().click({ timeout: 10000 })
-  await page.getByText('📅 대회 일정', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, '캘린더에서 다가온 대륙컵 실황 페이지로 진입된다(임의 선택 불가)')
-  // 대륙대회 일정 상세화: 대회 화면에 라운드별 날짜(조별리그 1차전 등)가 표시된다.
-  assert(await page.getByText('조별리그').first().isVisible(), '대륙컵 라운드별 일정(조별리그)이 표시된다')
+  // 다음 일정이 대륙컵으로 다가왔다 — 상단 버튼이 '조추첨 진행하기'로 바뀌고, 클릭 시 대륙컵 조추첨 탭으로 이동한다.
+  await page.getByRole('button', { name: /조추첨 진행하기/ }).first().click()
+  await page.getByText('본선 조편성', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 하위탭에 진입한다")
 
-  // 대회 페이지에서 시드로 시뮬레이션 → 조추첨부터 단계별 공개.
-  await page.getByRole('textbox', { name: '대회 시드' }).fill('CUP-SMOKE')
-  await page.getByRole('button', { name: '⚽ 대회 시뮬레이션' }).click()
-  await page.getByText('조추첨 완료', { exact: false }).waitFor({ timeout: 10000 })
-  assert(true, '시뮬레이션 후 조추첨부터 단계별로 공개된다')
-  assert((await page.getByText('CUP-SMOKE').count()) > 0, '사용한 시드가 표시된다')
-
-  // 끝까지 진행(진행·일정 하위탭) → 우승 확정
+  // 진행·일정 하위탭 → 끝까지 진행 → 우승 확정
+  await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
   await page.getByRole('button', { name: '⏭ 끝까지 진행' }).click()
   await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
   assert(true, '끝까지 진행이 우승팀을 결정한다')

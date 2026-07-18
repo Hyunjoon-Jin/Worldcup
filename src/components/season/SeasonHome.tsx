@@ -9,11 +9,11 @@ import { useDrawStore } from '../../store/useDrawStore'
 import { useContinentalHistoryStore } from '../../store/useContinentalHistoryStore'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
-import { advanceToNextEdition, startFinalsFromQualification } from '../../store/tournamentActions'
+import { advanceToNextEdition, startFinalsFromQualification, prepareFinalsDrawFromQualification } from '../../store/tournamentActions'
 import { autoSimulateSeasonEvent, cupRankByTeam } from '../../store/seasonActions'
 import { formOffsetsFromResults } from '../../engine/qualification/ranking'
 import { buildQualCalendar, qualWindowDate } from '../../engine/qualification/calendar'
-import { buildSeasonTimeline, buildCupPhases, type SeasonEvent } from '../../engine/season/seasonTimeline'
+import { buildSeasonTimeline, buildCupPhases, buildWcPhases, type SeasonEvent } from '../../engine/season/seasonTimeline'
 import { cupStageReveal, cupStageLabel } from '../../engine/season/matchdaySteps'
 import { CalendarView } from './CalendarView'
 import { MyTeamSchedule } from './MyTeamSchedule'
@@ -78,7 +78,7 @@ function fmtYmd(iso: string): string {
  * 이벤트(월드컵·6개 대륙컵)를 시간 순서로 하나씩 진행하며, 지금 진행할 일정을 강조한다. 월드컵은 그 위의
  * 한 이벤트일 뿐이다. 커서(useSeasonStore)가 진행 위치를 소유하고, 사이클을 다 마치면 다음 월드컵 사이클로 넘어간다.
  */
-export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: CupId, year: number) => void; onNavigateWC: () => void }) {
+export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavigateCupDraw }: { onSelectCup: (id: CupId, year: number) => void; onNavigateWC: () => void; onNavigateWCDraw: () => void; onNavigateCupDraw: (id: CupId, year: number) => void }) {
   const wcYear = useCareerStore((s) => s.year)
   const hostIds = useCareerStore((s) => s.hostIds)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
@@ -370,6 +370,41 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     return '🏆 FIFA 월드컵 종료 → 다음 일정'
   })()
 
+  // 조추첨 단계인가 — 이때는 상단 버튼이 '{대회명} 조추첨 진행하기'가 되고, 클릭 시 해당 대회의 조추첨
+  // 하위탭으로 자동 이동한다. 월드컵: 예선 완료 후 본선 조추첨 전. 대륙컵: 아직 대회를 추첨/진행하기 전.
+  const drawStep: { kind: 'wc' } | { kind: 'cup'; cupId: CupId; year: number } | null = !current
+    ? null
+    : current.kind === 'wc'
+      ? qualProgress.finished && !drawDone
+        ? { kind: 'wc' }
+        : null
+      : cupActiveId === current.id && cupActiveYear === current.year && cupHasResult
+        ? null
+        : { kind: 'cup', cupId: current.id as CupId, year: current.year }
+
+  const drawButtonLabel =
+    drawStep?.kind === 'wc'
+      ? '🎲 FIFA 월드컵 · 본선 조추첨 진행하기'
+      : drawStep?.kind === 'cup'
+        ? `🎲 ${CUP_FORMATS[drawStep.cupId].nameKo} · 조추첨 진행하기`
+        : ''
+
+  // 조추첨 진행: 대진을 준비(월드컵)하거나 대회를 시작(대륙컵)하고, 해당 대회의 조추첨 하위탭으로 이동한다.
+  const handleDraw = () => {
+    if (busy || !drawStep) return
+    if (drawStep.kind === 'wc') {
+      const qr = useQualificationStore.getState().result
+      if (!qr) return
+      prepareFinalsDrawFromQualification(qr.qualified48, formOffsetsFromResults(qr))
+      onNavigateWCDraw()
+    } else {
+      const cs = useContinentalStore.getState()
+      cs.selectCup(drawStep.cupId, drawStep.year)
+      useContinentalStore.getState().runActiveCup({ seed: `${drawStep.cupId}-${drawStep.year}`, rankByTeam: cupRankByTeam(drawStep.cupId) })
+      onNavigateCupDraw(drawStep.cupId, drawStep.year)
+    }
+  }
+
   // 캘린더 기준 날짜(진행 위치) = 지금 실제로 진행 중인 날짜. 전 단계에서 실제 현재 날짜를 따라가게 해
   // 상단 바·달력이 시간과 함께 움직인다(F1·F2). 예선=현재 창일, 조추첨 대기=예선 마지막 창일(개최년 3월),
   // 본선=현재 진행 배치일, 대륙컵=현재 단계(라운드) 날짜.
@@ -377,16 +412,17 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     if (!current) return undefined
     if (current.kind === 'wc') {
       if (!qualProgress.finished) return qualWindowDate(Math.max(0, qualProgress.gw - 1), wcYear)
-      if (!drawDone) return qualWindowDate(Math.max(0, qualProgress.total - 1), wcYear)
+      // 예선 완료~본선 조추첨 전: 캘린더가 '조추첨 날짜'를 가리키게 한다.
+      if (!drawDone) return buildWcPhases(wcYear).find((p) => p.key === 'DRAW')?.start ?? qualWindowDate(Math.max(0, qualProgress.total - 1), wcYear)
       return lastBatchDate ?? current.start
     }
-    // 대륙컵: 활성 대회면 현재 단계(라운드)의 날짜, 아니면 대회 시작일.
+    // 대륙컵: 활성 대회면 현재 단계(라운드)의 날짜, 아직 추첨 전이면 '조추첨 날짜'.
     if (cupActiveId === current.id && cupActiveYear === current.year && cupHasResult) {
       const phases = buildCupPhases(current.id as CupId, current.year)
       const idx = Math.max(0, Math.min(cupStage - 1, phases.length - 1))
       return phases[idx]?.start ?? current.start
     }
-    return current.start
+    return buildCupPhases(current.id as CupId, current.year).find((p) => p.key === 'DRAW')?.start ?? current.start
   }, [current, qualProgress, drawDone, lastBatchDate, wcYear, cupActiveId, cupActiveYear, cupHasResult, cupStage])
 
   return (
@@ -451,6 +487,15 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
                   <div className="h-full rounded-full bg-emerald-400 transition-[width]" style={{ width: `${cycleProgress.total ? (cycleProgress.done / cycleProgress.total) * 100 : 0}%` }} />
                 </div>
               </div>
+            ) : drawStep ? (
+              // 조추첨 단계: '다음 일정 진행' 대신 '{대회명} 조추첨 진행하기' — 클릭 시 해당 대회 조추첨 하위탭으로 이동.
+              <button
+                onClick={handleDraw}
+                disabled={busy}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/25 px-3 py-2.5 text-sm font-bold text-amber-50 transition-colors hover:bg-amber-500/35 disabled:opacity-50"
+              >
+                {busy ? '진행 중…' : <>{drawButtonLabel} →</>}
+              </button>
             ) : (
               // 상단 진행 컨트롤: 진행 단위(시간대별/경기일) 선택 + 다음 일정 진행 버튼.
               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
