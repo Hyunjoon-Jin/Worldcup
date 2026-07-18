@@ -295,7 +295,7 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
               <CupProbabilityView
                 probabilities={probabilities}
                 chainRounds={format.knockout}
-                onRefresh={() => computeProbabilities()}
+                onRefresh={(n) => computeProbabilities(n)}
               />
             ) : (
               <GlassCard className="p-8 text-center text-[11px] text-gray-500">
