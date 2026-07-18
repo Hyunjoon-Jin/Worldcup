@@ -2,10 +2,18 @@ import { usePerformanceStore } from './usePerformanceStore'
 import { useCareerStore } from './useCareerStore'
 import { useQualificationStore } from './useQualificationStore'
 import { useProgressStore } from './useProgressStore'
+import { useContinentalStore } from './useContinentalStore'
 import { useContinentalHistoryStore } from './useContinentalHistoryStore'
-import { overallDeltasFromResults } from '../engine/qualification/ranking'
+import {
+  overallDeltasFromPlay,
+  MATCH_IMPORTANCE,
+  IMPORTANCE_QUALIFIER,
+  IMPORTANCE_WC_GROUP,
+  IMPORTANCE_WC_KO,
+  type EloPlayMatch,
+} from '../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed } from '../engine/qualification/conditional'
-import { finalsFormDeltas } from '../engine/finalsForm'
+import { CUP_FORMATS } from '../data/continental/formats'
 
 const clamp8 = (n: number) => Math.max(-8, Math.min(8, n))
 
@@ -24,26 +32,58 @@ function continentalDeltas(): Record<string, number> {
 }
 
 /**
- * 성적→능력치 보정을 '모든 대회'에서 종합해 계산하고 store에 반영한다(성적 반영 흐름의 단일 소유자).
- * - 지역예선: 진행된 경기의 FIFA 점수 변동 → ±5.
- * - 월드컵 본선: 진출 라운드(우승/준우승/4강 …) → 라이브 반영(×0.5 가중).
- * - 대륙컵: 역대 우승·입상 → 라이브 반영(×0.5 가중).
- * - 커리어 폼: 직전 대회들에서 이월된 누적 보정.
- * 합계는 ±8로 클램프한다. getRatings가 이 값을 공격·수비·종합에 더한다.
+ * 성적→능력치 보정을 '치른 모든 경기'에서 종합해 계산하고 store에 반영한다(성적 반영 흐름의 단일 소유자).
+ * 예선·친선·대륙컵·월드컵 본선에서 치른 각 경기를 대회별 FIFA 중요도로 Elo 누적해, '매 경기마다' 능력치가
+ * 조금씩 오르내리도록 한다(월드컵이 아니어도). 여기에 커리어 폼(이월)과 역대 대륙컵 입상 prestige를 더하고
+ * ±8로 클램프한다. getRatings가 이 값을 공격·수비·종합에 더한다.
  */
 export function recomputePerformanceDeltas(): void {
   const qr = useQualificationStore.getState().result
   const revealed = useQualificationStore.getState().revealed
+  const friendlies = useQualificationStore.getState().friendlies
   const carriedForm = useCareerStore.getState().carriedForm
-  const qualD = qr ? overallDeltasFromResults(qr, flattenPlayed(collectPlayedByConfed(qr, revealed))) : {}
+
+  const groups: Array<{ matches: EloPlayMatch[]; importance: number }> = []
+
+  // 1) 월드컵/대륙 지역예선 + 2) 친선전 — 공개된 경기까지.
+  if (qr) {
+    groups.push({ matches: flattenPlayed(collectPlayedByConfed(qr, revealed)), importance: IMPORTANCE_QUALIFIER })
+    const globalRevealed = Math.max(0, ...Object.values(revealed))
+    groups.push({ matches: friendlies.filter((f) => f.matchday <= globalRevealed), importance: MATCH_IMPORTANCE.friendlyInWindow })
+  }
+
+  // 3) 대륙컵 본선(현재 활성 대회) — 공개 단계까지의 조별·녹아웃.
+  const cs = useContinentalStore.getState()
+  if (cs.activeCupId && cs.result) {
+    const revealedGroupMd = Math.min(cs.stage, 3)
+    const revealedKoRounds = Math.max(0, cs.stage - 3)
+    const koOrder = CUP_FORMATS[cs.activeCupId].knockout
+    const mainRounds = koOrder.filter((r) => r !== 'THIRD')
+    const revealedRounds = new Set<string>(mainRounds.slice(0, revealedKoRounds))
+    if (CUP_FORMATS[cs.activeCupId].thirdPlace && revealedKoRounds >= mainRounds.length) revealedRounds.add('THIRD')
+    groups.push({ matches: cs.result.groups.flatMap((g) => g.matches.filter((m) => m.matchday <= revealedGroupMd)), importance: MATCH_IMPORTANCE.continentalGroup })
+    groups.push({
+      matches: cs.result.knockout
+        .filter((m) => revealedRounds.has(m.round))
+        .map((m) => ({ homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.result.homeGoals, awayGoals: m.result.awayGoals, wentToPenalties: m.result.wentToPenalties, winnerTeamId: m.result.winnerTeamId })),
+      importance: MATCH_IMPORTANCE.continentalKnockout,
+    })
+  }
+
+  // 4) 월드컵 본선 — 치른 조별·녹아웃.
   const prog = useProgressStore.getState()
-  const finalsD = prog.phase !== 'idle' ? finalsFormDeltas(prog.knockoutSlots, prog.champion) : {}
-  const contD = continentalDeltas()
+  if (prog.phase !== 'idle') {
+    groups.push({ matches: prog.groupMatches, importance: IMPORTANCE_WC_GROUP })
+    groups.push({ matches: Object.values(prog.knockoutSlots).map((s) => s.result).filter((m): m is NonNullable<typeof m> => m != null), importance: IMPORTANCE_WC_KO })
+  }
+
+  const playD = overallDeltasFromPlay(groups)
+  const contTrophy = continentalDeltas() // 역대 대륙컵 우승·입상 prestige(지난 대회 경기는 저장 안 되므로 별도 유지)
 
   const combined: Record<string, number> = {}
-  const ids = new Set([...Object.keys(qualD), ...Object.keys(carriedForm), ...Object.keys(finalsD), ...Object.keys(contD)])
+  const ids = new Set([...Object.keys(playD), ...Object.keys(carriedForm), ...Object.keys(contTrophy)])
   for (const id of ids) {
-    combined[id] = clamp8((qualD[id] ?? 0) + (carriedForm[id] ?? 0) + (finalsD[id] ?? 0) * 0.5 + (contD[id] ?? 0) * 0.5)
+    combined[id] = clamp8((playD[id] ?? 0) + (carriedForm[id] ?? 0) + (contTrophy[id] ?? 0) * 0.5)
   }
   usePerformanceStore.getState().setDeltas(combined)
 }
@@ -69,6 +109,10 @@ export function initPerformanceTracking(): void {
   initialized = true
   useProgressStore.subscribe((s, p) => {
     if (s.groupMatches !== p.groupMatches || s.knockoutSlots !== p.knockoutSlots || s.phase !== p.phase) scheduleRecompute()
+  })
+  // 대륙컵 본선 진행(단계 공개)마다 성적 반영을 갱신 — 대륙컵 경기도 매 경기 능력치에 반영되도록.
+  useContinentalStore.subscribe((s, p) => {
+    if (s.stage !== p.stage || s.result !== p.result || s.activeCupId !== p.activeCupId) scheduleRecompute()
   })
   useContinentalHistoryStore.subscribe((s, p) => {
     if (s.editions !== p.editions) scheduleRecompute()
