@@ -54,8 +54,9 @@ try {
   await page.getByRole('button', { name: /다음 국가 뽑기|전체 공개/ }).first().waitFor({ timeout: 10000 })
   assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 연출(하위탭)에 진입한다")
   await page.getByRole('button', { name: '⏭ 전체 공개' }).click()
-  await page.getByText('본선 조편성', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, '전체 공개 시 본선 조편성이 확정 표시된다')
+  // 월드컵 DrawStage와 동형: 전체 공개 시 조추첨 완료 안내 + '일정 진행으로 이동' 버튼이 표시된다.
+  await page.getByText('조추첨이 완료되었습니다', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(await page.getByRole('button', { name: /일정 진행으로 이동/ }).isVisible(), '전체 공개 시 조편성 확정 + 일정 진행으로 이동 버튼(월드컵과 동일)')
 
   // 일정 진행 하위탭 → 결승까지 자동 진행 → 우승 확정(월드컵 ScheduleStage와 동형)
   await page.getByRole('tab', { name: '일정 진행', exact: true }).click()

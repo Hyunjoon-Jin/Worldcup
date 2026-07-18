@@ -69,14 +69,13 @@ function QualSummaryCard() {
 /** 대륙컵 본선 하위 화면(월드컵과 동일 수준): 조추첨(조편성)/진행·일정/조별리그/토너먼트/확률. */
 export type ContinentalView = 'draw' | 'progress' | 'groups' | 'knockout' | 'probability'
 
-export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNavigateWC?: () => void; view?: ContinentalView }) {
+export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progress' }: { onNavigateWC?: () => void; onGoToProgress?: () => void; view?: ContinentalView }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
   const hostIds = useContinentalStore((s) => s.hostIds)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const stage = useContinentalStore((s) => s.stage)
-  const drawRevealCount = useContinentalStore((s) => s.drawRevealCount)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
@@ -192,50 +191,9 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
             </>
           )}
 
-          {/* 조추첨: 팀을 하나씩 뽑는 연출(월드컵 DrawStage와 동형) → 완료되거나 조별리그 시작 후엔 포트·조편성 요약 */}
-          {view === 'draw' && drawInfo && format && stage === 0 && drawRevealCount < result.groups.reduce((n, g) => n + g.teams.length, 0) && (
-            <CupDrawCeremony result={result} format={format} drawInfo={drawInfo} hostIds={hostIds} />
-          )}
-          {view === 'draw' && drawInfo && (stage > 0 || drawRevealCount >= result.groups.reduce((n, g) => n + g.teams.length, 0)) && (
-            <>
-              <GlassCard className="p-4">
-                <h3 className="mb-1 text-sm font-bold text-gray-200">🎡 시드 포트 <span className="text-[11px] font-normal text-gray-500">(능력치 등급별 · 각 포트에서 조마다 1팀)</span></h3>
-                <p className="mb-3 text-[11px] text-gray-500">능력치 상위부터 {format.groups}팀씩 같은 포트로 묶어, 각 조에 포트마다 한 팀씩 배정합니다. 괄호는 배정된 조입니다.</p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {drawInfo?.pots.map((pot, pi) => (
-                    <GlassCard key={pi} className="p-3">
-                      <p className="mb-2 text-xs font-bold text-sky-200">포트 {pi + 1}</p>
-                      <div className="space-y-1">
-                        {pot.map((tid) => (
-                          <div key={tid} className="flex items-center justify-between gap-1 text-[11px]">
-                            <TeamLink teamId={tid} wrap className="min-w-0" />
-                            <span className="shrink-0 text-[9px] font-bold text-emerald-300/80">{String.fromCharCode(65 + (drawInfo.groupOf.get(tid) ?? 0))}조</span>
-                          </div>
-                        ))}
-                      </div>
-                    </GlassCard>
-                  ))}
-                </div>
-              </GlassCard>
-              <GlassCard className="p-4">
-                <h3 className="mb-3 text-sm font-bold text-gray-200">🎲 본선 조편성 <span className="text-[11px] font-normal text-gray-500">(조추첨 결과 · 숫자=포트)</span></h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {result.groups.map((g) => (
-                    <GlassCard key={g.groupIndex} className="p-3">
-                      <p className="mb-2 text-xs font-bold text-emerald-200">{String.fromCharCode(65 + g.groupIndex)}조</p>
-                      <div className="space-y-1">
-                        {g.teams.map((tid) => (
-                          <div key={tid} className="flex items-center gap-1.5 text-[11px]">
-                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-sky-500/20 text-[8px] font-bold text-sky-300">{(drawInfo?.potOf.get(tid) ?? 0) + 1}</span>
-                            <TeamLink teamId={tid} wrap className="min-w-0" />
-                          </div>
-                        ))}
-                      </div>
-                    </GlassCard>
-                  ))}
-                </div>
-              </GlassCard>
-            </>
+          {/* 조추첨: 팀을 하나씩 뽑는 연출(월드컵 DrawStage와 동형). 대회가 시작되면(stage>0) 전체 공개로 고정. */}
+          {view === 'draw' && drawInfo && format && (
+            <CupDrawCeremony result={result} format={format} drawInfo={drawInfo} hostIds={hostIds} onComplete={onGoToProgress} complete={stage > 0} />
           )}
 
           {/* 조별리그 — 월드컵 조별리그 뷰와 완전히 동일(같은 컴포넌트 재사용) */}

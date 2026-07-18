@@ -30,7 +30,7 @@ export function ContinentalTab({ onNavigateWC, openDrawSignal }: { onNavigateWC?
           { id: 'probability', label: '확률 대시보드', disabled: !hasResult },
         ]}
       />
-      <ContinentalStage onNavigateWC={onNavigateWC} view={hasResult ? sub : 'progress'} />
+      <ContinentalStage onNavigateWC={onNavigateWC} onGoToProgress={() => setSub('progress')} view={hasResult ? sub : 'progress'} />
     </div>
   )
 }

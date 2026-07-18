@@ -1,0 +1,18 @@
+import { chromium } from 'playwright'
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM })
+const page = await browser.newPage()
+page.on('console', (m) => { if (m.type()==='error') console.log('CONSOLE ERR:', m.text()) })
+page.on('pageerror', (e) => console.log('PAGE ERR:', String(e)))
+await page.goto('http://localhost:4173', { waitUntil: 'networkidle' })
+const skip = page.getByText('건너뛰기'); if (await skip.isVisible().catch(()=>false)) await skip.click()
+const scheduleCard = page.getByText('전체 일정', { exact: false }).locator('..')
+await scheduleCard.getByRole('button', { name: /FIFA 월드컵/ }).first().click()
+const modal = page.locator('div.fixed.inset-0.z-50')
+await modal.first().waitFor({ state:'visible', timeout:15000 }).catch(()=>{})
+if (await modal.first().isVisible().catch(()=>false)) { await modal.getByRole('button',{name:'닫기'}).click(); await modal.first().waitFor({state:'hidden',timeout:5000}) }
+await page.getByRole('button', { name: /조추첨 진행하기/ }).first().click()
+await page.waitForTimeout(2000)
+const html = await page.locator('body').innerText()
+console.log('--- PAGE TEXT (first 600) ---')
+console.log(html.slice(0,600))
+await browser.close()
