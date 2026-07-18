@@ -263,7 +263,9 @@ export const useQualificationStore = create<QualificationStore>()(
         const hostIds = getCurrentHostIds()
         // 진행 상황(실황)을 반영: 부분 진행이면 치른 경기 고정 + 갱신 전력으로 조건부 계산.
         const { ratings, locked, lockedByConfed } = buildProbInputs()
-        set({ probLoading: true, probabilities: null, stageProbabilities: null })
+        // 재계산 중에도 기존 확률을 그대로 두어 화면이 깜빡이지 않게 한다(자동 갱신 시 특히 중요).
+        // 새 값은 계산 완료 시 교체된다(오래된 run은 runId로 무시).
+        set({ probLoading: true })
         if (probWorker) {
           probWorker.terminate()
           probWorker = null

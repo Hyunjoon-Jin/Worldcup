@@ -24,6 +24,7 @@ import { useDrawStore } from './store/useDrawStore'
 import { useContinentalStore } from './store/useContinentalStore'
 import type { CupId } from './data/continental/formats'
 import { useProgressStore } from './store/useProgressStore'
+import { useQualificationStore } from './store/useQualificationStore'
 import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
 import { useSimulationStore } from './store/useSimulationStore'
@@ -133,6 +134,26 @@ function App() {
     return () => {
       unsubProgress()
       unsubSandbox()
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
+
+  // 지역예선을 한 경기(경기일) 진행할 때마다 진출 확률을 버튼 없이 자동으로 재계산한다(디바운스).
+  // computeProbabilities는 치른 경기를 고정한 조건부 확률을 워커에서 계산하므로 진행할수록 정밀해진다.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const schedule = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        const qs = useQualificationStore.getState()
+        if (qs.result && !qs.probLoading) qs.computeProbabilities()
+      }, 500)
+    }
+    const unsub = useQualificationStore.subscribe((state, prev) => {
+      if (state.revealed !== prev.revealed && state.result) schedule()
+    })
+    return () => {
+      unsub()
       if (timer) clearTimeout(timer)
     }
   }, [])
