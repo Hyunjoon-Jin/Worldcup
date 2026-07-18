@@ -3,7 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { SubTabNav } from '../layout/SubTabNav'
 import { useContinentalStore } from '../../store/useContinentalStore'
-import { useQualificationStore, buildProbInputs } from '../../store/useQualificationStore'
+import { useQualificationStore, buildConfedLockedProbInputs } from '../../store/useQualificationStore'
 import { useCareerStore } from '../../store/useCareerStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
@@ -189,9 +189,10 @@ function CupQualProbView({ format, hostIds }: { format: CupFormat; hostIds: stri
       const iters = isCombined ? 150 : 240
       let res: Record<string, number>
       if (isCombined) {
-        // 진행 반영: 치른 경기를 고정(locked)하고 캠페인 갱신 전력으로 조건부 계산 → 확정 팀 100%·탈락 0%로 수렴.
-        const { ratings, lockedByConfed } = buildProbInputs()
-        res = computeCupQualProbabilities(format, ratings, hostIds, iters, `${format.id}-QPROB`, { rankByTeam, locked: lockedByConfed?.[confed], cupHostIds })
+        // 진행 반영: 공개된 경기를 예선 완료 여부와 무관하게 고정(locked)하고 캠페인 전력으로 조건부 계산
+        // → 이미 통과한 팀(예: 대만 2차 통과)은 100%, 탈락 팀은 0%로 결정론적으로 수렴한다.
+        const { ratings, locked } = buildConfedLockedProbInputs(confed)
+        res = computeCupQualProbabilities(format, ratings, hostIds, iters, `${format.id}-QPROB`, { rankByTeam, locked, cupHostIds })
       } else {
         const pool = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
         res = computeCupQualProbabilities(format, baseRatingsMap(pool), hostIds, iters, `${format.id}-QPROB`, { rankByTeam })
