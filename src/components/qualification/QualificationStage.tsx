@@ -96,7 +96,7 @@ function NationLabel({
   const inner = (
     <>
       <FlagIcon iso2={nation.iso2} className="h-3 w-4 shrink-0" />
-      <span className="font-medium text-gray-100">{nation.nameKo}</span>
+      <span className="whitespace-nowrap font-medium text-gray-100">{nation.nameKo}</span>
     </>
   )
   if (!interactive) {
@@ -1377,7 +1377,7 @@ function ConfederationStandings({
       {useStageTabs && selStageIdx > 0 && !selectedStageUpcoming && stageTeamsSorted.some((id) => isSeedAdvanced(id)) && (
         <p className="mb-3 rounded-lg bg-sky-500/10 px-3 py-2 text-[10px] text-sky-200">
           🎖️ FIFA 랭킹 상위국은 하위 라운드를 건너뛰고 <strong>{selectedStage?.name}부터 자동 진출</strong>합니다
-          (순위표에 <span className="rounded bg-sky-500/25 px-1 font-bold">시드 자동진출</span> 표시).
+          (순위표에 <span className="rounded bg-sky-500/15 px-1 font-bold text-sky-300/80">🔹시드</span> 표시).
         </p>
       )}
 
@@ -1486,11 +1486,11 @@ function ConfederationStandings({
                       className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : ''}`}
                     >
                       <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
-                      <th scope="row" className="py-1.5 font-normal">
+                      <th scope="row" className="whitespace-nowrap py-1.5 font-normal">
                         <span className="inline-flex items-center gap-1.5">
                           <NationLabel teamId={teamId} />
-                          {teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
-                          {isSeedAdvanced(teamId) && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200" title="FIFA 랭킹 시드로 하위 라운드 없이 자동진출">시드 자동진출</span>}
+                          {teamId === myTeamId && <span className="shrink-0 rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+                          {isSeedAdvanced(teamId) && <span className="shrink-0 rounded bg-sky-500/15 px-1 text-[9px] font-bold text-sky-300/80" title="FIFA 랭킹 시드로 하위 라운드 없이 2차 예선부터 자동진출">🔹시드</span>}
                         </span>
                       </th>
                       <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
@@ -1511,7 +1511,7 @@ function ConfederationStandings({
                           </td>
                         ))
                       )}
-                      <td className="py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} qualifyPct={qualifyPct} poPct={poPct} /></td>
+                      <td className="whitespace-nowrap py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} qualifyPct={qualifyPct} poPct={poPct} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1530,8 +1530,8 @@ function ConfederationStandings({
                   <div className="min-w-0 flex-1">
                     <span className="inline-flex items-center gap-1.5">
                       <NationLabel teamId={teamId} />
-                      {teamId === myTeamId && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
-                      {isSeedAdvanced(teamId) && <span className="rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">시드 자동진출</span>}
+                      {teamId === myTeamId && <span className="shrink-0 rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
+                      {isSeedAdvanced(teamId) && <span className="shrink-0 rounded bg-sky-500/15 px-1 text-[9px] font-bold text-sky-300/80" title="FIFA 랭킹 시드로 2차 예선부터 자동진출">🔹시드</span>}
                     </span>
                     <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400 tabular-nums">
                       <span>{s.played}경기</span>
