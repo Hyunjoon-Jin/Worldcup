@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
+import { SubTabNav } from '../layout/SubTabNav'
 import { useContinentalStore } from '../../store/useContinentalStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import { CUP_FORMATS } from '../../data/continental/formats'
@@ -60,6 +62,7 @@ export function CupQualificationTab() {
   const qualResult = useContinentalStore((s) => s.qualResult)
   const hostIds = useContinentalStore((s) => s.hostIds)
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
+  const [sub, setSub] = useState<'draw' | 'schedule' | 'standings'>('standings')
 
   if (!activeCupId || !qualResult) {
     return (
@@ -92,26 +95,44 @@ export function CupQualificationTab() {
       </GlassCard>
 
       {groupBased ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {qualResult.groups.map((g, gi) => (
-            <GlassCard key={gi} className="p-3">
-              <p className="mb-2 text-xs font-bold text-emerald-200">예선 {GROUP_LETTER(gi)}조</p>
-              <StandingsTable standings={g.standings} ranking={g.ranking} qualified={qualifiedSet} hostSet={hostSet} />
-              <details className="group mt-2">
-                <summary className="cursor-pointer list-none rounded bg-white/5 px-2 py-1 text-[10px] text-gray-400 hover:bg-white/10">⚽ 조 경기 보기 ({g.matches.length}경기) ▾</summary>
-                <div className="mt-1.5 space-y-1">
-                  {g.matches.map((m, i) => (
-                    <button key={i} onClick={() => selectMatch(matchRef(m))} className="flex w-full items-center gap-1.5 rounded-md bg-white/5 px-1.5 py-1 text-[11px] transition-colors hover:bg-white/15">
-                      <span className="flex min-w-0 flex-1 items-center justify-end gap-1 text-right"><TeamLink teamId={m.homeTeamId} reverse wrap className="min-w-0" /></span>
-                      <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
-                      <span className="flex min-w-0 flex-1 items-center gap-1"><TeamLink teamId={m.awayTeamId} wrap className="min-w-0" /></span>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </GlassCard>
-          ))}
-        </div>
+        <>
+          <SubTabNav
+            ariaLabel="대륙컵 지역예선 상세"
+            active={sub}
+            onChange={(id) => setSub(id as typeof sub)}
+            tabs={[
+              { id: 'draw', label: '조편성' },
+              { id: 'schedule', label: '일정·진행' },
+              { id: 'standings', label: '조별 순위' },
+            ]}
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {qualResult.groups.map((g, gi) => (
+              <GlassCard key={gi} className="p-3">
+                <p className="mb-2 text-xs font-bold text-emerald-200">예선 {GROUP_LETTER(gi)}조</p>
+                {sub === 'draw' && (
+                  <div className="space-y-1">
+                    {g.teams.map((tid) => (
+                      <div key={tid} className="flex items-center gap-1 text-[11px]"><TeamLink teamId={tid} wrap className="min-w-0" />{hostSet.has(tid) && <span className="text-[9px] text-sky-300">🏟</span>}</div>
+                    ))}
+                  </div>
+                )}
+                {sub === 'standings' && <StandingsTable standings={g.standings} ranking={g.ranking} qualified={qualifiedSet} hostSet={hostSet} />}
+                {sub === 'schedule' && (
+                  <div className="space-y-1">
+                    {g.matches.map((m, i) => (
+                      <button key={i} onClick={() => selectMatch(matchRef(m))} className="flex w-full items-center gap-1.5 rounded-md bg-white/5 px-1.5 py-1 text-[11px] transition-colors hover:bg-white/15">
+                        <span className="flex min-w-0 flex-1 items-center justify-end gap-1 text-right"><TeamLink teamId={m.homeTeamId} reverse wrap className="min-w-0" /></span>
+                        <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
+                        <span className="flex min-w-0 flex-1 items-center gap-1"><TeamLink teamId={m.awayTeamId} wrap className="min-w-0" /></span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GlassCard>
+            ))}
+          </div>
+        </>
       ) : (
         <GlassCard className="p-4">
           <p className="mb-2 text-xs font-bold text-emerald-200">본선 진출 {qualResult.qualified.length}개국</p>
