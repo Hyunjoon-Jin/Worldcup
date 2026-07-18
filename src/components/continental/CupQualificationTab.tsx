@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
-import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { SubTabNav } from '../layout/SubTabNav'
 import { useContinentalStore } from '../../store/useContinentalStore'
@@ -144,35 +143,52 @@ function ProbBarCell({ value }: { value: number }) {
   )
 }
 
-/** 대륙컵 지역예선 진출 확률(버튼 눌러 몬테카를로 계산) — 월드컵 지역예선 확률 탭과 동형. */
+// 확률 계산은 무거우므로 대회+개최국+랭킹 조합별로 모듈 캐시에 담아 재열람 시 재계산을 피한다.
+const cupQualProbCache = new Map<string, Record<string, number>>()
+
+/** 대륙컵 지역예선 진출 확률 — 탭을 열면 버튼 없이 자동으로 몬테카를로 계산한다(월드컵 확률 탭과 동형). */
 function CupQualProbView({ format, hostIds }: { format: CupFormat; hostIds: string[] }) {
-  const [probs, setProbs] = useState<Record<string, number> | null>(null)
-  const [busy, setBusy] = useState(false)
-  const compute = () => {
-    setBusy(true)
+  const rankByTeam = cupRankByTeam(format.id) ?? {}
+  // 랭킹(월드컵 예선 반영) 변화까지 캐시 키에 넣어, 예선 진행에 따라 확률이 갱신되게 한다.
+  const cacheKey = `${format.id}|${[...hostIds].sort().join(',')}|${Object.keys(rankByTeam).length}`
+  const [probs, setProbs] = useState<Record<string, number> | null>(() => cupQualProbCache.get(cacheKey) ?? null)
+
+  useEffect(() => {
+    const cached = cupQualProbCache.get(cacheKey)
+    if (cached) {
+      setProbs(cached)
+      return
+    }
+    setProbs(null)
     // 무거운 계산이라 다음 틱으로 넘겨 '계산 중' 표시가 먼저 그려지게 한다.
-    setTimeout(() => {
+    let cancelled = false
+    const t = setTimeout(() => {
       const pool = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
       const iters = format.qual.style === 'combinedWcq' ? 150 : 240
-      setProbs(computeCupQualProbabilities(format, baseRatingsMap(pool), hostIds, iters, `${format.id}-QPROB`, { rankByTeam: cupRankByTeam(format.id) ?? {} }))
-      setBusy(false)
+      const res = computeCupQualProbabilities(format, baseRatingsMap(pool), hostIds, iters, `${format.id}-QPROB`, { rankByTeam })
+      cupQualProbCache.set(cacheKey, res)
+      if (!cancelled) setProbs(res)
     }, 20)
-  }
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey])
+
   if (!probs) {
     return (
       <GlassCard className="p-8 text-center">
-        <p className="text-sm text-gray-300">📊 본선 진출 확률</p>
-        <p className="mt-1 text-[11px] text-gray-500">예선을 여러 번 시뮬레이션해 각 팀이 본선에 진출하는 빈도를 확률로 구합니다.</p>
-        <GlassButton className="mt-3" onClick={compute} disabled={busy}>{busy ? '계산 중…' : '📊 진출 확률 계산'}</GlassButton>
+        <p className="text-sm text-gray-300">📊 본선 진출 확률 계산 중…</p>
+        <p className="mt-1 text-[11px] text-gray-500">예선을 여러 번 시뮬레이션해 각 팀이 본선에 진출하는 빈도를 확률로 구하고 있어요.</p>
       </GlassCard>
     )
   }
   const rows = Object.entries(probs).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 40)
   return (
     <GlassCard className="p-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-2 flex items-center gap-2">
         <h3 className="text-sm font-bold text-gray-200">📊 본선 진출 확률 <span className="text-[11px] font-normal text-gray-500">(상위 {rows.length})</span></h3>
-        <GlassButton variant="ghost" onClick={compute} disabled={busy}>{busy ? '계산 중…' : '↻ 재계산'}</GlassButton>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
