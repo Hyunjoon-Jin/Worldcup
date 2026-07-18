@@ -16,10 +16,10 @@ import {
   initRankingPoints,
   updateRankingPoints,
   updatedRatingsFromPoints,
-  overallDeltasFromResults,
   computeLiveRanking,
 } from '../engine/qualification/ranking'
 import { useRankHistoryStore } from './useRankHistoryStore'
+import { recomputePerformanceDeltas } from './performanceActions'
 import type { LockedLookup } from '../engine/qualification/generic'
 import { generateSeed } from '../engine/rng'
 import { getRatings } from '../engine/matchEngine'
@@ -111,21 +111,15 @@ function buildProbInputs(): {
 }
 
 /**
- * 성적(진행 결과) + 커리어 폼(이전 대회 누적)에 따른 능력치 보정을 계산해 성적 보정 store에 반영한다.
+ * 성적→능력치 보정을 갱신한다. 실제 계산은 모든 대회(예선·본선·대륙컵)를 종합하는 중앙
+ * recomputePerformanceDeltas가 담당한다(성적 반영 흐름의 단일 소유자). 예선이 없으면 초기화.
  */
-function syncPerformanceDeltas(result: AllQualificationResult | null, revealed: Record<string, number>): void {
+function syncPerformanceDeltas(result: AllQualificationResult | null, _revealed: Record<string, number>): void {
   if (!result) {
     usePerformanceStore.getState().reset()
     return
   }
-  const carriedForm = useCareerStore.getState().carriedForm
-  const played = flattenPlayed(collectPlayedByConfed(result, revealed))
-  const editionDeltas = overallDeltasFromResults(result, played)
-  const combined: Record<string, number> = {}
-  for (const id of new Set([...Object.keys(editionDeltas), ...Object.keys(carriedForm)])) {
-    combined[id] = Math.max(-8, Math.min(8, (editionDeltas[id] ?? 0) + (carriedForm[id] ?? 0)))
-  }
-  usePerformanceStore.getState().setDeltas(combined)
+  recomputePerformanceDeltas()
 }
 
 /** 워커 미지원/실패 시 메인스레드 비동기 청크 폴백 (D5). */

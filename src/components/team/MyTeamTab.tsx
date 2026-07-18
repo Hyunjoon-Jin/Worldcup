@@ -10,6 +10,7 @@ import { useProbabilityChain } from '../probability/useProbabilityChain'
 import { useMyTeamStore, MY_TEAM_BUFF_LEVELS, MY_TEAM_BUFF_LABEL } from '../../store/useMyTeamStore'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
+import { usePerformanceStore } from '../../store/usePerformanceStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useLiveFifaRanking, useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { getRatings } from '../../engine/matchEngine'
@@ -110,9 +111,11 @@ export function MyTeamTab() {
   // 예선·본선 진행이 반영된 라이브 FIFA 순위(단일 출처). 진행 이력이 없으면 정적 근사 순위로 대체.
   const { rankByTeam: liveRankByTeam } = useLiveFifaRanking()
   const liveRank = myTeamId ? liveRankByTeam[myTeamId] : undefined
-  // buff 변경 시 표시 능력치도 갱신되도록 의존성에 buff 포함(getRatings가 store에서 버프를 읽음).
+  // 성적 반영 보정(예선·본선·대륙컵 → 능력치). 값이 바뀌면 표시 능력치도 갱신되도록 구독한다.
+  const perfDelta = usePerformanceStore((s) => (myTeamId ? (s.deltas[myTeamId] ?? 0) : 0))
+  // buff·성적 반영 변경 시 표시 능력치도 갱신되도록 의존성에 포함(getRatings가 store에서 값을 읽음).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const ratings = useMemo(() => (myTeamId ? getRatings(myTeamId) : null), [myTeamId, buff])
+  const ratings = useMemo(() => (myTeamId ? getRatings(myTeamId) : null), [myTeamId, buff, perfDelta])
 
   // 예선 경기(내 팀, 공개된 라운드까지)
   const qualMatches = useMemo(() => {
@@ -179,6 +182,11 @@ export function MyTeamTab() {
               </div>
             ))}
           </div>
+        )}
+        {perfDelta !== 0 && (
+          <p className={`mt-2 text-center text-[11px] font-medium ${perfDelta > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+            {perfDelta > 0 ? '📈' : '📉'} 성적 반영(예선·본선·대륙컵): 공격·수비·종합 {perfDelta > 0 ? '+' : ''}{perfDelta} (기본 능력치에서 {perfDelta > 0 ? '상승' : '하락'})
+          </p>
         )}
 
         {/* 내 팀 버프 — 응원 팀에 능력치 가점을 줘 유리하게 진행 */}

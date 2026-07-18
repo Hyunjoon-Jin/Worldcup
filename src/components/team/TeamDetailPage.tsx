@@ -433,7 +433,7 @@ export function TeamDetailPage() {
           const up = perfDelta > 0
           return (
             <p className={`mt-2 text-[11px] font-medium ${up ? 'text-emerald-300' : 'text-red-300'}`}>
-              {up ? '📈' : '📉'} 예선 성적 반영: 공격·수비·종합 {up ? '+' : ''}{perfDelta} (기본 능력치에서 {up ? '상승' : '하락'})
+              {up ? '📈' : '📉'} 성적 반영(예선·본선·대륙컵): 공격·수비·종합 {up ? '+' : ''}{perfDelta} (기본 능력치에서 {up ? '상승' : '하락'})
             </p>
           )
         })()}
