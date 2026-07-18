@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useSimulationStore } from '../../store/useSimulationStore'
 import { useQualificationStore } from '../../store/useQualificationStore'
+import { useDrawStore } from '../../store/useDrawStore'
 import type { TeamProbabilities } from '../../types/simulation'
 
 export interface ChainRow {
@@ -19,11 +20,15 @@ export type ChainMode = 'finals' | 'qualification' | 'none'
  * - 없고 예선 결과만 있으면(예선 중): 예선 진출 확률(본선진출)만. 필요 시 예선 확률 계산을 트리거한다.
  */
 export function useProbabilityChain(): { rows: ChainRow[]; mode: ChainMode; loading: boolean } {
-  const simResult = useSimulationStore((s) => s.result)
+  const simResultRaw = useSimulationStore((s) => s.result)
   const qualResult = useQualificationStore((s) => s.result)
   const qualProbs = useQualificationStore((s) => s.probabilities)
   const qualProbLoading = useQualificationStore((s) => s.probLoading)
   const computeQualProbs = useQualificationStore((s) => s.computeProbabilities)
+  // 본선 조추첨이 완료돼 실제 본선 필드가 있을 때만 '본선 모드'로 본다. 조추첨 전에는 (빈/이전 대회의)
+  // 본선 시뮬 결과가 있어도 예선 모드로 취급해, 예선 진행 중 팀이 '본선 진출 실패'로 잘못 표시되지 않게 한다.
+  const drawComplete = useDrawStore((s) => s.isComplete)
+  const simResult = drawComplete ? simResultRaw : null
 
   // 본선 시뮬이 아직 없고 예선 결과만 있으면, 예선 진출 확률을 계산해 둔다(본선진출 그래프용).
   useEffect(() => {
