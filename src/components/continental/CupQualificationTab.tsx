@@ -5,7 +5,7 @@ import { SubTabNav } from '../layout/SubTabNav'
 import { useContinentalStore } from '../../store/useContinentalStore'
 import { useQualificationStore } from '../../store/useQualificationStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
-import { CUP_FORMATS } from '../../data/continental/formats'
+import { CUP_FORMATS, ALL_CUP_IDS, type CupId } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import type { GroupStanding } from '../../types/group'
 import type { CupMatch } from '../../engine/continental/runCup'
@@ -117,38 +117,62 @@ function CombinedCampaignView({ confed, slots, qualifiedSet, hostSet, cutLabel }
 }
 
 /**
- * 대륙컵 지역예선 탭(단일 페이지). 캘린더로 다가온 대륙컵의 예선(조편성·조별 순위·경기 일정)을 월드컵 예선처럼
- * 한 화면에서 훑어본다. 하위탭 없이 조별 순위 + (조별) 경기 목록을 함께 나열한다.
- * 통합예선(아시안컵)·네이션스리그(골드컵)는 별도 예선 경기가 없으므로 산출 방식과 진출국을 안내한다.
+ * 통합 예선(combinedWcq: 아시안컵 등) 실황 섹션. 월드컵 지역예선과 '동시 진행'되므로, 월드컵 예선이
+ * 시작되면 대회가 아직 활성이 아니어도 항상 실황(같은 캠페인 순위 + 진행률)을 보여준다.
  */
-export function CupQualificationTab() {
+function CombinedCupQualSection({ cupId }: { cupId: CupId }) {
+  const wcQual = useQualificationStore((s) => s.result)
+  const wcRevealed = useQualificationStore((s) => s.revealed)
   const activeCupId = useContinentalStore((s) => s.activeCupId)
+  const cupQualResult = useContinentalStore((s) => s.qualResult)
+  const cupHostIds = useContinentalStore((s) => s.hostIds)
+  const cupYear = useContinentalStore((s) => s.cupYear)
+  const format = CUP_FORMATS[cupId]
+  const confed = format.confeds[0]
+  const confResult = wcQual?.byConfederation[confed]
+  if (!confResult) return null
+  // 이 대회가 현재 활성이면 개최국·확정 진출국 정보를 함께 반영한다.
+  const isActive = activeCupId === cupId && cupQualResult != null
+  const hostSet = isActive ? new Set(cupHostIds) : new Set<string>()
+  const qualifiedSet = isActive ? new Set(cupQualResult.qualified) : new Set<string>()
+  const revealed = wcRevealed[confed] ?? 0
+  const total = confResult.matchdays || 1
+  const done = revealed >= total
+  const pct = Math.min(100, Math.round((revealed / total) * 100))
+  return (
+    <div className="flex flex-col gap-3">
+      <GlassCard strong className="p-5 text-center">
+        <p className="mb-1 text-sm font-semibold text-white">🌍 {format.nameKo}{isActive && cupYear ? ` ${cupYear}` : ''} · 지역예선</p>
+        {isActive && cupHostIds.length > 0 && (
+          <p className="mb-1 text-[11px] text-sky-300">🏟️ 개최국: {cupHostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(' · ')}</p>
+        )}
+        <div className="mx-auto mt-2 h-2 max-w-md overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width]" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="mt-1 text-[10px] text-gray-500">{done ? '✅ 예선 완료' : `진행 중 · ${CONFED_KO[confed] ?? confed} 월드컵 예선 경기일 ${revealed}/${total}`}</p>
+      </GlassCard>
+      <CombinedCampaignView confed={confed} slots={format.teams} qualifiedSet={qualifiedSet} hostSet={hostSet} cutLabel={format.nameKo} />
+    </div>
+  )
+}
+
+/** 자체 예선(조별리그·네이션스리그 등)을 치르는 활성 대륙컵의 예선 실황. */
+function ActiveCupQualView({ activeCupId }: { activeCupId: CupId }) {
   const cupYear = useContinentalStore((s) => s.cupYear)
   const qualResult = useContinentalStore((s) => s.qualResult)
   const hostIds = useContinentalStore((s) => s.hostIds)
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const [sub, setSub] = useState<'draw' | 'schedule' | 'standings'>('standings')
-
-  if (!activeCupId || !qualResult) {
-    return (
-      <GlassCard className="p-8 text-center text-sm text-gray-400">
-        🌍 진행 중인 대륙컵 예선이 없습니다. <strong className="text-gray-300">캘린더</strong>에서 대륙컵이 다가오면
-        (▶ 다음 일정 진행) 그 예선의 조편성·조별 순위·경기 일정을 여기에서 볼 수 있어요.
-      </GlassCard>
-    )
-  }
-
+  if (!qualResult) return null
   const format = CUP_FORMATS[activeCupId]
   const hostSet = new Set(hostIds)
   const qualifiedSet = new Set(qualResult.qualified)
   const groupBased = qualResult.groups.length > 0
-
   const matchRef = (m: CupMatch): MatchDetailRef => ({
     kind: 'group',
     external: true,
     match: { group: 'A', matchday: 1, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals },
   })
-
   return (
     <div className="flex flex-col gap-5">
       <GlassCard strong className="p-5 text-center">
@@ -158,7 +182,6 @@ export function CupQualificationTab() {
         )}
         <p className="text-[11px] text-gray-400">{QUAL_STYLE_KO[format.qual.style] ?? '예선을 거쳐 본선 참가국을 가립니다.'}</p>
       </GlassCard>
-
       {groupBased ? (
         <>
           <SubTabNav
@@ -198,9 +221,6 @@ export function CupQualificationTab() {
             ))}
           </div>
         </>
-      ) : format.qual.style === 'combinedWcq' ? (
-        // 통합 예선(아시안컵): 월드컵 지역예선과 같은 캠페인 — 그 대륙의 월드컵 예선 순위를 그대로 보여준다.
-        <CombinedCampaignView confed={format.confeds[0]} slots={format.teams} qualifiedSet={qualifiedSet} hostSet={hostSet} cutLabel={format.nameKo} />
       ) : (
         <GlassCard className="p-4">
           <p className="mb-2 text-xs font-bold text-emerald-200">본선 진출 {qualResult.qualified.length}개국</p>
@@ -214,6 +234,43 @@ export function CupQualificationTab() {
           </div>
         </GlassCard>
       )}
+    </div>
+  )
+}
+
+/**
+ * 대륙컵 지역예선 탭. 통합 예선(아시안컵 등, combinedWcq)은 월드컵 지역예선과 '동시 진행'되므로 월드컵
+ * 예선이 시작되면 항상 실황을 보여준다(대회 활성 여부와 무관). 자체 예선을 치르는 대회(유로·아프리카컵·
+ * 골드컵 등)는 캘린더에서 그 대회가 다가와 활성일 때 그 예선을 함께 표시한다.
+ */
+export function CupQualificationTab() {
+  const activeCupId = useContinentalStore((s) => s.activeCupId)
+  const qualResult = useContinentalStore((s) => s.qualResult)
+  const wcQual = useQualificationStore((s) => s.result)
+
+  // 통합 예선 대회(월드컵 예선과 동시 진행) — 월드컵 예선이 있으면 항상 실황 표시.
+  const combinedCups = wcQual ? ALL_CUP_IDS.filter((id) => CUP_FORMATS[id].qual.style === 'combinedWcq') : []
+  // 활성 대회가 통합 예선이면 위 실황에서 이미 다루므로 중복 표시하지 않는다.
+  const activeIsCombined = activeCupId != null && CUP_FORMATS[activeCupId].qual.style === 'combinedWcq'
+  const showActive = activeCupId != null && qualResult != null && !activeIsCombined
+
+  if (combinedCups.length === 0 && !showActive) {
+    return (
+      <GlassCard className="p-8 text-center text-sm text-gray-400">
+        🌍 진행 중인 대륙컵 예선이 없습니다. <strong className="text-gray-300">캘린더</strong>에서 대륙컵이 다가오면
+        (▶ 다음 일정 진행) 그 예선의 조편성·조별 순위·경기 일정을 여기에서 볼 수 있어요.
+        <br />
+        <span className="text-[11px] text-gray-500">아시안컵처럼 월드컵 지역예선과 통합된 예선은 월드컵 예선을 시작하면 여기에 함께 표시됩니다.</span>
+      </GlassCard>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {combinedCups.map((id) => (
+        <CombinedCupQualSection key={id} cupId={id} />
+      ))}
+      {showActive && activeCupId && <ActiveCupQualView activeCupId={activeCupId} />}
     </div>
   )
 }
