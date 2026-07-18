@@ -5,7 +5,9 @@ import { runCup, type CupResult } from '../engine/continental/runCup'
 import { runCupQualification, type CupQualResult } from '../engine/continental/cupQualification'
 import { computeCupProbabilitiesLive, type CupProbabilities } from '../engine/continental/cupProbability'
 import { selectCupHosts } from '../engine/continental/hostSelection'
+import { cupScheduleDays } from '../engine/continental/cupSchedule'
 import { baseRatingsMap, nationsByConfederation } from '../data/nations'
+import { BASE_FINALS_YEAR } from '../data/calendar'
 import { generateSeed } from '../engine/rng'
 import { useContinentalHistoryStore } from './useContinentalHistoryStore'
 
@@ -36,6 +38,8 @@ interface ContinentalStore {
   championTrend: Array<{ stage: number; byTeam: Record<string, number> }>
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
   stage: number
+  /** 진행 중 단계(stage+1) 안에서 공개된 시간대 수(월드컵 '다음 시간대 진행'과 동형). 단계가 바뀌면 0으로 리셋. */
+  slotStep: number
   /** 조추첨 공개 팀 수(0=아직 안 뽑음). 월드컵 조추첨처럼 팀을 하나씩 뽑는 연출용. field 크기에 도달하면 완료. */
   drawRevealCount: number
   /** 대회 선택(결과 초기화). year를 주면 그 개최 연도로 표시하고, 개최국을 자동 선정한다. */
@@ -48,7 +52,9 @@ interface ContinentalStore {
   undoDrawTeam: () => void
   /** 조추첨 — 전체 즉시 공개. */
   revealAllDraw: () => void
-  /** 한 단계 진행(다음 경기일/라운드 공개). */
+  /** 다음 시간대 진행(월드컵 '다음 시간대 진행'과 동형) — 현재 단계의 다음 시간대 경기만 공개. */
+  advanceTimeSlot: () => void
+  /** 한 단계(하루=매치데이/라운드) 진행 — 남은 시간대까지 모두 공개(월드컵 '다음 날 전체 진행'과 동형). */
   advanceStage: () => void
   /** 끝까지 진행(전 결과 공개). */
   advanceToEnd: () => void
@@ -69,6 +75,7 @@ export const useContinentalStore = create<ContinentalStore>()(
       probabilities: null,
       championTrend: [],
       stage: 0,
+      slotStep: 0,
       drawRevealCount: 0,
       selectCup: (id, year = null) =>
         set({
@@ -82,6 +89,7 @@ export const useContinentalStore = create<ContinentalStore>()(
           championTrend: [],
           seed: null,
           stage: 0,
+          slotStep: 0,
           drawRevealCount: 0,
         }),
       runActiveCup: (opts) => {
@@ -97,7 +105,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const result = runCup(format, field, ratings, hostIds, usedSeed)
         // 결과는 즉시 계산하되 조추첨(stage 0)부터 단계별로 공개한다(월드컵 '일정 진행'과 동형).
         // drawRevealCount=0 → 조추첨은 팀을 하나씩 뽑는 연출로 시작(월드컵 조추첨과 동형).
-        set({ seed: usedSeed, qualResult, result, probabilities: null, championTrend: [], stage: 0, drawRevealCount: 0 })
+        set({ seed: usedSeed, qualResult, result, probabilities: null, championTrend: [], stage: 0, slotStep: 0, drawRevealCount: 0 })
         // 완주한 대회를 역대 기록에 축적(대회·시드 dedup). 팀 페이지 통산 성적에 반영.
         useContinentalHistoryStore.getState().record({
           cupId: activeCupId,
@@ -121,15 +129,27 @@ export const useContinentalStore = create<ContinentalStore>()(
         if (!result) return
         set({ drawRevealCount: result.groups.reduce((n, g) => n + g.teams.length, 0) })
       },
+      advanceTimeSlot: () => {
+        const { activeCupId, result, stage, slotStep, cupYear } = get()
+        if (!activeCupId || !result) return
+        const total = cupTotalStages(activeCupId)
+        if (stage >= total) return
+        const days = cupScheduleDays(result, CUP_FORMATS[activeCupId], activeCupId, cupYear ?? BASE_FINALS_YEAR)
+        const day = days[stage]
+        const slotCount = day ? day.slots.length : 0
+        // 이 단계(하루)의 다음 시간대를 공개. 마지막 시간대를 공개하면 하루 완료 → stage 진행, slotStep 리셋.
+        if (!day || slotStep + 1 >= slotCount) set({ stage: Math.min(stage + 1, total), slotStep: 0 })
+        else set({ slotStep: slotStep + 1 })
+      },
       advanceStage: () => {
         const { activeCupId, result, stage } = get()
         if (!activeCupId || !result) return
-        set({ stage: Math.min(stage + 1, cupTotalStages(activeCupId)) })
+        set({ stage: Math.min(stage + 1, cupTotalStages(activeCupId)), slotStep: 0 })
       },
       advanceToEnd: () => {
         const { activeCupId, result } = get()
         if (!activeCupId || !result) return
-        set({ stage: cupTotalStages(activeCupId) })
+        set({ stage: cupTotalStages(activeCupId), slotStep: 0 })
       },
       computeProbabilities: (iterations = CUP_PROB_ITERATIONS) => {
         const { activeCupId, hostIds, result, stage, championTrend } = get()
@@ -149,7 +169,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const trend = [...(championTrend ?? []).filter((t) => t.stage !== stage), { stage, byTeam: championByTeam }].sort((a, b) => a.stage - b.stage)
         set({ probabilities, championTrend: trend })
       },
-      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, championTrend: [], stage: 0, drawRevealCount: 0 }),
+      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, championTrend: [], stage: 0, slotStep: 0, drawRevealCount: 0 }),
     }),
     { name: 'wc2026-continental-store', version: 2 },
   ),

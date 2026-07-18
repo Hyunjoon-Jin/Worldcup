@@ -12,8 +12,8 @@ import { rankGroupTeams } from '../../engine/tiebreakers'
 import type { CrisisInfo } from '../../store/useCrisisTeams'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { GROUP_LETTERS } from '../../data/hostSlots'
-import { formatKoreanDate } from '../../data/calendar'
-import { buildCupPhases } from '../../engine/season/seasonTimeline'
+import { formatKoreanDate, BASE_FINALS_YEAR } from '../../data/calendar'
+import { cupScheduleDays } from '../../engine/continental/cupSchedule'
 import { classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import { marginOfError95 } from '../../engine/confidence'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
@@ -55,8 +55,10 @@ const koRef = (m: CupKnockoutMatch): MatchDetailRef => ({ kind: 'knockout', exte
 export function ContinentalProgressView({ result, format, onNavigate }: { result: CupResult; format: CupFormat; onNavigate?: () => void }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)!
   const stage = useContinentalStore((s) => s.stage)
+  const slotStep = useContinentalStore((s) => s.slotStep)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const hostIds = useContinentalStore((s) => s.hostIds)
+  const advanceTimeSlot = useContinentalStore((s) => s.advanceTimeSlot)
   const advanceStage = useContinentalStore((s) => s.advanceStage)
   const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
   const probabilities = useContinentalStore((s) => s.probabilities)
@@ -80,62 +82,61 @@ export function ContinentalProgressView({ result, format, onNavigate }: { result
 
   const totalStages = cupTotalStages(activeCupId)
   const revealedGroupMd = Math.min(stage, 3)
-  const revealedKoRounds = Math.max(0, stage - 3)
   const fullyRevealed = stage >= totalStages
   const mainRounds = useMemo(() => format.knockout.filter((r) => r !== 'THIRD'), [format])
-  const currentRound: KnockoutRound | null = stage > 3 ? mainRounds[stage - 4] ?? null : null
 
-  const phases = useMemo(() => buildCupPhases(activeCupId, cupYear ?? new Date().getFullYear()), [activeCupId, cupYear])
-  const dateByKey = useMemo(() => Object.fromEntries(phases.map((p) => [p.key, p.start])), [phases])
+  // 월드컵과 동일한 '일·시간대' 편성. days[stage]가 진행 중인 하루, slotStep이 그 하루의 공개된 시간대 수.
+  const days = useMemo(() => cupScheduleDays(result, format, activeCupId, cupYear ?? BASE_FINALS_YEAR), [result, format, activeCupId, cupYear])
+  const currentDay = stage < days.length ? days[stage] : null
+  const nextSlot = currentDay && slotStep < currentDay.slots.length ? currentDay.slots[slotStep] : null
 
   const statusText = fullyRevealed
     ? '🏆 대회 종료'
-    : stage === 0
-      ? '조별리그 시작 전'
-      : stage <= 3
-        ? `조별리그 진행 중 — ${stage}/3차전`
-        : `녹아웃 진행 중 — ${currentRound ? ROUND_LABEL[currentRound] : ''}`
+    : currentDay?.kind === 'group'
+      ? `그룹스테이지 진행 중 — Day ${currentDay.groupDay} / 3`
+      : `토너먼트 진행 중 — ${currentDay?.label ?? ''}`
 
-  // 다음 경기 예정 — 다음 단계의 경기들.
+  // 다음 경기 예정 — 다음 시간대의 경기들(월드컵 ScheduleStage와 동형).
   const nextPreview = useMemo(() => {
-    if (fullyRevealed) return null
-    if (stage < 3) {
-      const md = stage + 1
-      const fixtures = result.groups.flatMap((g) => g.matches.filter((m) => m.matchday === md).map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, label: `조 ${letterOf(g.groupIndex)}` })))
-      return { date: dateByKey[`G${md}`], label: `조별리그 ${md}차전`, fixtures }
-    }
-    const round = mainRounds[stage - 3]
-    if (!round) return null
-    const fixtures = result.knockout.filter((m) => m.round === round).map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, label: ROUND_LABEL[round] }))
-    return { date: dateByKey[round], label: ROUND_LABEL[round], fixtures }
-  }, [fullyRevealed, stage, result, mainRounds, dateByKey])
+    if (fullyRevealed || !currentDay || !nextSlot) return null
+    const fixtures = [
+      ...nextSlot.group.map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, label: `조 ${letterOf(m.group)}` })),
+      ...nextSlot.ko.map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, label: currentDay.label })),
+    ]
+    return { date: currentDay.date, timeSlot: nextSlot.timeSlot, fixtures }
+  }, [fullyRevealed, currentDay, nextSlot])
 
-  // 결과 피드 — 방금 공개된 단계의 경기.
+  // 결과 피드 — 방금 공개된 하루(진행 중이면 그 하루의 공개된 시간대까지).
   const feed = useMemo(() => {
-    if (stage === 0) return null
-    if (stage <= 3) {
-      const md = stage
-      const groupMatches = result.groups.flatMap((g) => g.matches.filter((m) => m.matchday === md))
-      const touched = result.groups.filter((g) => g.matches.some((m) => m.matchday === md))
-      return { kind: 'group' as const, label: `조별리그 ${md}차전 결과`, groupMatches, touched, koMatches: [] as CupKnockoutMatch[] }
-    }
-    const round = currentRound
-    const koMatches = round ? result.knockout.filter((m) => m.round === round) : []
-    // 결승 단계면 3·4위전도 함께 보여준다(월드컵과 동일).
-    const extra = fullyRevealed && format.thirdPlace ? result.knockout.filter((m) => m.round === 'THIRD') : []
-    return { kind: 'ko' as const, label: `${round ? ROUND_LABEL[round] : ''} 결과`, groupMatches: [] as CupMatch[], touched: [], koMatches: [...koMatches, ...extra] }
-  }, [stage, result, currentRound, fullyRevealed, format])
+    const frontierIdx = currentDay && slotStep > 0 ? stage : stage - 1
+    const frontierDay = frontierIdx >= 0 && frontierIdx < days.length ? days[frontierIdx] : null
+    if (!frontierDay) return null
+    const revealedSlotCount = frontierIdx === stage ? slotStep : frontierDay.slots.length
+    const shown = frontierDay.slots.slice(0, revealedSlotCount)
+    const groupMatches = shown.flatMap((s) => s.group)
+    const koMatches = shown.flatMap((s) => s.ko)
+    const lastSlot = shown[shown.length - 1]
+    const touched = result.groups.filter((g) => groupMatches.some((m) => m.group === g.groupIndex))
+    return { label: `${formatKoreanDate(frontierDay.date)}${lastSlot ? ` ${lastSlot.timeSlot}` : ''} 결과`, groupMatches, koMatches, touched }
+  }, [currentDay, slotStep, stage, days, result])
 
-  // 대회 통계용(공개분 전체).
-  const revealedGroupMatches: GroupMatch[] = useMemo(
-    () => result.groups.flatMap((g) => g.matches.filter((m) => m.matchday <= revealedGroupMd).map((m) => ({ group: letterOf(g.groupIndex), matchday: m.matchday as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals }))),
-    [result, revealedGroupMd],
-  )
+  // 대회 통계·순위 변동용 공개 경기(완료된 하루 전부 + 진행 중 하루의 공개 시간대까지).
+  const revealedGroupMatches: GroupMatch[] = useMemo(() => {
+    const out: GroupMatch[] = []
+    days.forEach((d, i) => {
+      const limit = i < stage ? d.slots.length : i === stage ? slotStep : 0
+      d.slots.slice(0, limit).forEach((s) => s.group.forEach((m) => out.push({ group: letterOf(m.group), matchday: m.matchday as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals })))
+    })
+    return out
+  }, [days, stage, slotStep])
   const revealedKoMatches: KnockoutMatch[] = useMemo(() => {
-    const shownRounds = new Set(mainRounds.slice(0, revealedKoRounds))
-    if (fullyRevealed && format.thirdPlace) shownRounds.add('THIRD')
-    return result.knockout.filter((m) => shownRounds.has(m.round)).map(toKnockoutMatch)
-  }, [result, mainRounds, revealedKoRounds, fullyRevealed, format])
+    const out: KnockoutMatch[] = []
+    days.forEach((d, i) => {
+      const limit = i < stage ? d.slots.length : i === stage ? slotStep : 0
+      d.slots.slice(0, limit).forEach((s) => s.ko.forEach((m) => out.push(toKnockoutMatch(m))))
+    })
+    return out
+  }, [days, stage, slotStep])
 
   // 순위 변동 표의 진출확정/탈락확정·위기 배지·순위 변동 화살표(월드컵 DayResultFeed와 동형).
   const statusByTeam = useMemo(() => computeCupStatuses(result, format, revealedGroupMd), [result, format, revealedGroupMd])
@@ -152,16 +153,21 @@ export function ContinentalProgressView({ result, format, onNavigate }: { result
   }, [probabilities, mainRounds])
   const deltaByGroup = useMemo<Record<string, Record<string, number>>>(() => {
     const out: Record<string, Record<string, number>> = {}
-    if (!feed || feed.kind !== 'group' || revealedGroupMd < 1) return out
+    if (!feed) return out
+    const keyOf = (m: { homeTeamId: string; awayTeamId: string; matchday: number }) => `${m.homeTeamId}-${m.awayTeamId}-${m.matchday}`
+    const frontierKeys = new Set(feed.groupMatches.map(keyOf))
     for (const g of feed.touched) {
-      const curr = rankGroupTeams(g.teams, g.matches.filter((m) => m.matchday <= revealedGroupMd), format.groupTiebreak)
-      const prev = rankGroupTeams(g.teams, g.matches.filter((m) => m.matchday <= revealedGroupMd - 1), format.groupTiebreak)
+      const letter = letterOf(g.groupIndex)
+      const all = revealedGroupMatches.filter((m) => m.group === letter)
+      const before = all.filter((m) => !frontierKeys.has(keyOf(m)))
+      const curr = rankGroupTeams(g.teams, all, format.groupTiebreak)
+      const prev = rankGroupTeams(g.teams, before, format.groupTiebreak)
       const d: Record<string, number> = {}
       for (const id of g.teams) d[id] = prev.indexOf(id) - curr.indexOf(id)
-      out[letterOf(g.groupIndex)] = d
+      out[letter] = d
     }
     return out
-  }, [feed, revealedGroupMd, format])
+  }, [feed, revealedGroupMatches, format])
 
   const shareResult = () => {
     const name = (id?: string | null) => (id ? TEAMS_BY_ID[id]?.nameKo ?? id : '-')
@@ -177,10 +183,15 @@ export function ContinentalProgressView({ result, format, onNavigate }: { result
     })
   }
 
-  const timeline: { key: string; label: string; done: boolean; now: boolean; ko: boolean }[] = [
-    ...[1, 2, 3].map((md) => ({ key: `G${md}`, label: `${md}차전`, done: stage > md, now: stage === md, ko: false })),
-    ...mainRounds.map((r, i) => ({ key: r, label: ROUND_LABEL[r], done: stage > 4 + i, now: stage === 4 + i, ko: true })),
-  ]
+  // 타임라인 — 월드컵 CalendarTimeline과 동형: 조별은 D1·D2·D3(일), 녹아웃은 라운드 칩.
+  const timeline = days.map((d) => ({
+    key: d.kind === 'group' ? `G${d.groupDay}` : d.round!,
+    label: d.kind === 'group' ? `D${d.groupDay}` : d.label,
+    date: d.date,
+    done: stage > d.stageIndex,
+    now: stage === d.stageIndex,
+    ko: d.kind === 'knockout',
+  }))
 
   return (
     <div className="flex flex-col gap-5">
@@ -191,20 +202,21 @@ export function ContinentalProgressView({ result, format, onNavigate }: { result
           {timeline.map((t, i) => (
             <div key={t.key} className={`flex shrink-0 flex-col items-center rounded-lg px-2 py-1.5 text-[10px] ${t.now ? `glass-strong ring-1 ${t.ko ? 'ring-amber-300/70' : 'ring-emerald-300/70'}` : t.done ? 'bg-white/10 text-gray-400' : 'bg-white/[0.03] text-gray-600'} ${i === 3 ? 'ml-2 border-l border-white/15 pl-3' : ''}`}>
               <span className="font-bold">{t.label}</span>
-              {dateByKey[t.key] && <span>{formatKoreanDate(dateByKey[t.key])}</span>}
+              {t.date && <span>{formatKoreanDate(t.date)}</span>}
             </div>
           ))}
         </div>
         {!fullyRevealed ? (
           <div className="mt-3 flex flex-col items-center gap-3">
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <GlassButton onClick={advanceStage}>▶ 다음 단계 진행</GlassButton>
+              <GlassButton onClick={advanceTimeSlot} disabled={!nextSlot}>⏱ 다음 시간대 진행{nextSlot ? ` (${nextSlot.timeSlot})` : ''}</GlassButton>
+              <GlassButton variant="ghost" onClick={advanceStage}>▶ 다음 날 전체 진행</GlassButton>
               <GlassButton variant="ghost" onClick={advanceToEnd}>⏭ 결승까지 자동 진행</GlassButton>
             </div>
             {nextPreview && nextPreview.fixtures.length > 0 && (
               <div className="w-full max-w-lg rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
                 <p className="mb-1.5 text-[11px] font-bold text-sky-300">
-                  📋 다음 경기 예정 — {nextPreview.label}{nextPreview.date ? ` · ${formatKoreanDate(nextPreview.date)}` : ''} · {nextPreview.fixtures.length}경기
+                  📋 다음 경기 예정 — {nextPreview.date ? `${formatKoreanDate(nextPreview.date)} ` : ''}{nextPreview.timeSlot} 현지시간 · {nextPreview.fixtures.length}경기
                 </p>
                 <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                   {nextPreview.fixtures.map((fx, i) => (

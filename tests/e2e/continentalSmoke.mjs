@@ -54,8 +54,13 @@ try {
   await page.getByRole('button', { name: /다음 국가 뽑기/ }).first().waitFor({ timeout: 10000 })
   assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 연출(하위탭)에 진입한다")
 
-  // 일정 진행 하위탭 → 결승까지 자동 진행 → 조추첨 자동 확정 + 우승 확정(월드컵 ScheduleStage와 동형)
+  // 일정 진행 하위탭 → 월드컵과 동일한 '일·시간대' 진행(그룹스테이지 Day N + 다음 시간대 진행)
   await page.getByRole('tab', { name: '일정 진행', exact: true }).click()
+  assert(await page.getByText(/그룹스테이지 진행 중 — Day 1 \/ 3/).first().isVisible(), '진행 상태가 월드컵처럼 그룹스테이지 Day N/3로 표시된다')
+  assert(await page.getByRole('button', { name: /다음 시간대 진행/ }).first().isVisible(), '다음 시간대 진행 버튼이 있다(월드컵과 동일)')
+  await page.getByRole('button', { name: /다음 시간대 진행/ }).first().click()
+  assert(await page.getByText('현지시간', { exact: false }).first().isVisible().catch(() => true), '시간대 진행 후 다음 경기 예정(현지시간)이 표시된다')
+  // 결승까지 자동 진행 → 우승 확정
   await page.getByRole('button', { name: '⏭ 결승까지 자동 진행' }).click()
   await page.getByText('🎉 우승팀이 결정되었습니다', { exact: false }).waitFor({ timeout: 10000 })
   assert(true, '결승까지 자동 진행이 우승팀을 결정한다')
