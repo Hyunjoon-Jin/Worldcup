@@ -67,8 +67,7 @@ try {
   await page.getByRole('tab', { name: '토너먼트', exact: true }).click()
   assert(await page.getByText('녹아웃').first().isVisible(), '토너먼트 하위탭에 녹아웃이 렌더된다')
 
-  // 확률 계산(헤더 버튼) → 확률 하위탭에서 표시
-  await page.getByRole('button', { name: '📊 우승 확률 계산' }).click()
+  // 확률 하위탭 진입 시 자동 계산(월드컵 확률 대시보드와 동일 — 별도 헤더 버튼 없음)
   await page.getByRole('tab', { name: '확률', exact: true }).click()
   // 월드컵 확률 대시보드와 동형: 조별통과~우승 막대 + 몬테카를로 회수 + 새로고침.
   await page.getByText('몬테카를로 시뮬레이션', { exact: false }).waitFor({ timeout: 15000 })

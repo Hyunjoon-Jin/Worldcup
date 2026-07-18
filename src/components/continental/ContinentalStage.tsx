@@ -3,7 +3,6 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
-import { cupRankByTeam } from '../../store/seasonActions'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
@@ -223,18 +222,15 @@ export type ContinentalView = 'draw' | 'progress' | 'groups' | 'knockout' | 'pro
 
 export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNavigateWC?: () => void; view?: ContinentalView }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
-  const seed = useContinentalStore((s) => s.seed)
   const hostIds = useContinentalStore((s) => s.hostIds)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const stage = useContinentalStore((s) => s.stage)
   const drawRevealCount = useContinentalStore((s) => s.drawRevealCount)
-  const runActiveCup = useContinentalStore((s) => s.runActiveCup)
   const advanceStage = useContinentalStore((s) => s.advanceStage)
   const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
-  const [seedInput, setSeedInput] = useState('')
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
 
@@ -338,19 +334,7 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
         <p className="mb-3 text-[11px] text-sky-300">
           🏟️ 개최{hostIds.length > 1 ? '(공동)' : ''}: {hostIds.length > 0 ? hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(' · ') : '미정'}
         </p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <input
-            type="text"
-            value={seedInput}
-            onChange={(e) => setSeedInput(e.target.value)}
-            placeholder="시드 (선택)"
-            aria-label="대회 시드"
-            className="w-32 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
-          />
-          <GlassButton onClick={() => runActiveCup({ seed: seedInput, rankByTeam: cupRankByTeam(activeCupId) })}>⚽ 대회 시뮬레이션</GlassButton>
-          {result && <GlassButton variant="ghost" onClick={() => computeProbabilities()}>📊 우승 확률 계산</GlassButton>}
-        </div>
-        {seed && <p className="mt-2 text-[11px] text-gray-500">시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
+        <p className="text-[11px] text-gray-500">캘린더의 <strong className="text-emerald-300">조추첨 진행하기</strong>로 진입해 조추첨부터 우승까지 단계별로 진행합니다.</p>
       </GlassCard>
 
       {/* 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화 (진행·일정 뷰) */}
@@ -370,7 +354,7 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
 
       {!result ? (
         <GlassCard className="p-8 text-center text-sm text-gray-400">
-          위 <strong className="text-gray-300">대회 시뮬레이션</strong>을 눌러 조추첨부터 우승까지 진행하세요.
+          <strong className="text-gray-300">캘린더</strong>에서 이 대회의 <strong className="text-emerald-300">조추첨 진행하기</strong>를 눌러 조추첨부터 우승까지 진행하세요.
         </GlassCard>
       ) : (
         <>
