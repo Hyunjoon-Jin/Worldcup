@@ -193,7 +193,7 @@ export function FifaRankingTab() {
         </p>
         <p className="text-xs text-gray-400">
           실제 FIFA 점수 산정 방식(P = P + I×(승점−기대승점))으로 경기 결과를 실시간 반영합니다. 중요도 I는
-          예선 25 · 본선 조별리그·16강 50 · 8강 이후 60.
+          친선 10 · 예선 25 · 대륙컵 조별 35·녹아웃 40 · 본선 조별리그·16강 50 · 8강 이후 60.
           {!result && <span className="text-amber-300"> 지역예선을 진행하면 경기 결과가 랭킹에 누적 반영됩니다.</span>}
           {hasFinals && <span className="text-amber-300"> 본선 진행 결과가 랭킹에 반영되고 있습니다.</span>}
           <span className="mt-1 block text-[11px] text-gray-500">
