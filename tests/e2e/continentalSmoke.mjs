@@ -66,6 +66,7 @@ try {
   // 월드컵과 동일하게 결과 피드·대회 통계·결과 공유가 표시된다.
   assert(await page.getByText('📊 대회 통계', { exact: false }).first().isVisible(), '일정 진행 뷰에 대회 통계가 표시된다(월드컵과 동일)')
   assert(await page.getByRole('button', { name: /결과 공유/ }).isVisible(), '우승 카드에 결과 공유 버튼이 있다(월드컵과 동일)')
+  assert(await page.getByText('💾 대회 저장 슬롯', { exact: false }).first().isVisible(), '일정 진행 뷰에 대회 저장 슬롯이 있다(월드컵과 동일)')
 
   // 토너먼트 하위탭 → 녹아웃 대진 표시
   await page.getByRole('tab', { name: '토너먼트', exact: true }).click()
@@ -85,6 +86,7 @@ try {
   // 월드컵 확률 대시보드와 동형: 조별통과~우승 막대 + 몬테카를로 회수 + 새로고침.
   await page.getByText('몬테카를로 시뮬레이션', { exact: false }).waitFor({ timeout: 15000 })
   assert(await page.getByRole('button', { name: '🔄 새로고침' }).isVisible(), '진출 체인 확률 대시보드가 계산·표시된다')
+  assert(await page.getByText('📈 우승 확률 추이', { exact: false }).first().isVisible(), '확률 대시보드에 우승 확률 추이 차트가 표시된다(월드컵과 동일)')
 
   // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (일정 진행 탭의 우승팀 클릭)
   await page.getByRole('tab', { name: '일정 진행', exact: true }).click()

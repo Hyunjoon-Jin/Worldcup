@@ -6,6 +6,7 @@ import { FlagIcon } from '../common/FlagIcon'
 import { UpsetBadge } from '../common/UpsetBadge'
 import { GroupTable } from '../groups/GroupTable'
 import { TournamentSummary } from '../schedule/TournamentSummary'
+import { CupSaveSlotsPanel } from './CupSaveSlotsPanel'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
@@ -283,6 +284,9 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
 
       {/* 대회 통계·명장면·업적 — 월드컵과 동일 컴포넌트 재사용 */}
       <TournamentSummary groupMatches={revealedGroupMatches} knockoutMatches={revealedKoMatches} champion={fullyRevealed ? result.champion : null} />
+
+      {/* 대회 저장 슬롯 — 월드컵과 동형(대륙컵 전용 저장소) */}
+      <CupSaveSlotsPanel champion={fullyRevealed ? result.champion : null} canSave={stage > 0} />
 
       {/* 우승 카드 — 월드컵과 동형(연도·개최국·플래그·공유) */}
       {fullyRevealed && (
