@@ -40,6 +40,7 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
   const cupResult = useContinentalStore((s) => s.result)
   const qualResult = useQualificationStore((s) => s.result)
   const qualRevealed = useQualificationStore((s) => s.revealed)
+  const friendlies = useQualificationStore((s) => s.friendlies)
   const wcYear = useCareerStore((s) => s.year)
 
   const group = useMemo<GroupLetter | null>(() => {
@@ -81,6 +82,27 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
           }
         }
         break // 내 팀 소속 대륙을 찾았으면 종료
+      }
+    }
+
+    // ── 친선전(평가전): 예선 경기일에 내 팀이 예선 경기가 없을 때 잡히는 평가전 ──
+    // "지역예선 탈락 등으로 경기가 없을 땐 그냥 놀지 않고" 평가전을 치른다 — 캘린더/일정/상단바에 노출한다.
+    if (qualResult && friendlies.length > 0) {
+      const globalRevealed = Math.max(0, ...Object.values(qualRevealed))
+      for (const f of friendlies) {
+        if (f.homeTeamId !== teamId && f.awayTeamId !== teamId) continue
+        const isHome = f.homeTeamId === teamId
+        const oppId = isHome ? f.awayTeamId : f.homeTeamId
+        const date = qualWindowDate(f.matchday - 1, wcYear)
+        const played = f.matchday <= globalRevealed
+        if (played) {
+          const gf = isHome ? f.homeGoals : f.awayGoals
+          const ga = isHome ? f.awayGoals : f.homeGoals
+          const ref: MatchDetailRef = { kind: 'group', external: true, match: { group: 'A', matchday: 1, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId, homeGoals: f.homeGoals, awayGoals: f.awayGoals } }
+          out.push({ key: `fr-${f.matchday}-${oppId}`, comp: 'wc', date, roundLabel: '친선경기', opponentId: oppId, score: `${gf}-${ga}`, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', onClick: () => selectMatch(ref) })
+        } else {
+          out.push({ key: `fr-up-${f.matchday}-${oppId}`, comp: 'wc', date, roundLabel: '친선경기', opponentId: oppId, onClick: () => selectMatch({ kind: 'upcoming', homeTeamId: teamId, awayTeamId: oppId, label: '친선경기', date }) })
+        }
       }
     }
 
@@ -147,5 +169,5 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
     }
 
     return out.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'))
-  }, [group, groupMatches, knockoutSlots, schedule, drawGroups, teamId, selectMatch, cupActiveId, cupResult, cupYear, onSelectCup, qualResult, qualRevealed, wcYear])
+  }, [group, groupMatches, knockoutSlots, schedule, drawGroups, teamId, selectMatch, cupActiveId, cupResult, cupYear, onSelectCup, qualResult, qualRevealed, friendlies, wcYear])
 }
