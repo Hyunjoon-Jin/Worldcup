@@ -24,13 +24,13 @@ export function ContinentalTab({ onNavigateWC, openDrawSignal }: { onNavigateWC?
         onChange={(id) => setSub(id as ContinentalView)}
         tabs={[
           { id: 'draw', label: '조추첨', disabled: !hasResult },
-          { id: 'progress', label: '진행·일정' },
+          { id: 'progress', label: '일정 진행' },
           { id: 'groups', label: '조별리그', disabled: !hasResult },
           { id: 'knockout', label: '토너먼트', disabled: !hasResult },
-          { id: 'probability', label: '확률', disabled: !hasResult },
+          { id: 'probability', label: '확률 대시보드', disabled: !hasResult },
         ]}
       />
-      <ContinentalStage onNavigateWC={onNavigateWC} view={hasResult ? sub : 'progress'} />
+      <ContinentalStage onNavigateWC={onNavigateWC} onGoToProgress={() => setSub('progress')} view={hasResult ? sub : 'progress'} />
     </div>
   )
 }

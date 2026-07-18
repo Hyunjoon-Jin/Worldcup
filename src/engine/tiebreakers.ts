@@ -181,8 +181,15 @@ export interface ThirdPlaceEntry {
  */
 export const THIRD_PLACE_QUALIFIERS = 8
 
-/** 12개 조 3위팀을 횡단 비교해 순위를 매기고 상위 THIRD_PLACE_QUALIFIERS팀을 진출 처리한다(조 전체 기록 기준). */
-export function rankThirdPlaceTeams(thirdPlaceByGroup: Partial<Record<GroupLetter, string>>, allMatches: GroupMatch[]): ThirdPlaceEntry[] {
+/**
+ * 조 3위팀을 횡단 비교해 순위를 매기고 상위 topN팀을 진출 처리한다(조 전체 기록 기준).
+ * topN 기본값은 월드컵(32강) 규모(THIRD_PLACE_QUALIFIERS=8). 대륙컵은 그 대회의 best-thirds 수를 넘긴다.
+ */
+export function rankThirdPlaceTeams(
+  thirdPlaceByGroup: Partial<Record<GroupLetter, string>>,
+  allMatches: GroupMatch[],
+  topN: number = THIRD_PLACE_QUALIFIERS,
+): ThirdPlaceEntry[] {
   const entries = Object.entries(thirdPlaceByGroup) as [GroupLetter, string][]
   const withStats = entries.map(([group, teamId]) => {
     const groupMatches = allMatches.filter((m) => m.group === group)
@@ -202,6 +209,6 @@ export function rankThirdPlaceTeams(thirdPlaceByGroup: Partial<Record<GroupLette
 
   return sortedIds.map((teamId, idx) => {
     const entry = withStats.find((e) => e.teamId === teamId)!
-    return { ...entry, qualified: idx < THIRD_PLACE_QUALIFIERS }
+    return { ...entry, qualified: idx < topN }
   })
 }

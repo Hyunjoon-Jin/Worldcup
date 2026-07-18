@@ -12,6 +12,12 @@ interface ThirdPlaceTableProps {
   groupTeams: Record<GroupLetter, string[]>
   matches: GroupMatch[]
   statusByTeam: Record<string, QualificationStatus>
+  /** 대상 조 목록(기본: 월드컵 12개 조). 대륙컵은 그 대회의 조 문자만 넘긴다. */
+  groups?: GroupLetter[]
+  /** 3위 진출 팀 수(기본: 월드컵 8). */
+  topN?: number
+  /** 진출 라운드 라벨(기본: '32강'). */
+  roundLabel?: string
 }
 
 function StatusCell({ status }: { status?: QualificationStatus }) {
@@ -20,10 +26,10 @@ function StatusCell({ status }: { status?: QualificationStatus }) {
   return <span className="text-xs text-amber-300/80">⏳ 진행중</span>
 }
 
-export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlaceTableProps) {
+export function ThirdPlaceTable({ groupTeams, matches, statusByTeam, groups = GROUP_LETTERS, topN = 8, roundLabel = '32강' }: ThirdPlaceTableProps) {
   const liveRank = useLiveRankLookup()
   const thirdByGroup: Partial<Record<GroupLetter, string>> = {}
-  for (const group of GROUP_LETTERS) {
+  for (const group of groups) {
     const teamIds = groupTeams[group]
     if (!teamIds || teamIds.length < 4) continue
     const groupMatches = matches.filter((m) => m.group === group)
@@ -31,7 +37,7 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlac
     thirdByGroup[group] = order[2]
   }
 
-  const entries = rankThirdPlaceTeams(thirdByGroup, matches)
+  const entries = rankThirdPlaceTeams(thirdByGroup, matches, topN)
 
   if (entries.length === 0) {
     return <GlassCard className="p-4 text-center text-sm text-gray-400">조추첨이 완료되면 3위팀 순위표가 표시됩니다.</GlassCard>
@@ -39,7 +45,7 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam }: ThirdPlac
 
   return (
     <GlassCard className="p-4">
-      <h3 className="font-display mb-3 text-base font-semibold tracking-wide text-amber-300">3위팀 순위표 — 상위 8팀 32강 진출</h3>
+      <h3 className="font-display mb-3 text-base font-semibold tracking-wide text-amber-300">3위팀 순위표 — 상위 {topN}팀 {roundLabel} 진출</h3>
       <p className="mb-3 text-[11px] text-gray-500">
         "순위"는 현재까지 결과 기준 잠정 순위이며, "진출 여부"는 남은 모든 조가 끝난 이후에도 결과가 절대
         바뀌지 않는 경우에만 확정으로 표시합니다.

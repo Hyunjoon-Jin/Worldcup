@@ -1,7 +1,7 @@
 import type { TeamRatings } from '../../types/team'
 import type { KnockoutRound } from '../../types/match'
 import type { CupFormat } from '../../data/continental/formats'
-import { runCup } from './runCup'
+import { runCup, runCupLocked, type CupResult } from './runCup'
 
 /**
  * 대륙컵 확률(월드컵과 동일 개념). 주어진 참가국 필드로 대회를 여러 번(무작위 조추첨+경기) 시뮬레이션해
@@ -56,6 +56,53 @@ export function computeCupProbabilities(
       for (const tid of [m.homeTeamId, m.awayTeamId]) {
         const r = reachCount[tid] ?? (reachCount[tid] = {})
         r[m.round] = (r[m.round] ?? 0) + 1
+      }
+    }
+  }
+
+  const pct = (n: number) => (n / iterations) * 100
+  const byTeam: Record<string, CupTeamProb> = {}
+  for (const id of field) {
+    const reach: Partial<Record<KnockoutRound, number>> = {}
+    for (const r of format.knockout) reach[r] = pct(reachCount[id]?.[r] ?? 0)
+    byTeam[id] = { qualify: pct(qualifyCount[id] ?? 0), reach, champion: pct(championCount[id] ?? 0) }
+  }
+  return { cupId: format.id, iterations, byTeam }
+}
+
+/**
+ * '조건부(라이브)' 확률 — 월드컵 확률 대시보드처럼, 현재까지 공개된 결과를 고정하고 남은 경기만
+ * 반복 시뮬레이션한다. 조추첨(대진)·공개된 조별/녹아웃 경기를 그대로 두므로 실황을 반영하며, 대회가
+ * 끝나면 100%/0%로 수렴한다. field = 확정된 참가국(result의 조 구성).
+ */
+export function computeCupProbabilitiesLive(
+  format: CupFormat,
+  result: CupResult,
+  revealedGroupMd: number,
+  revealedKoRounds: number,
+  ratings: Record<string, TeamRatings>,
+  hostIds: string[],
+  iterations: number,
+  seedBase: string,
+): CupProbabilities {
+  const field = result.groups.flatMap((g) => g.teams)
+  const qualifyCount: Record<string, number> = {}
+  const championCount: Record<string, number> = {}
+  const reachCount: Record<string, Partial<Record<KnockoutRound, number>>> = {}
+  for (const id of field) {
+    qualifyCount[id] = 0
+    championCount[id] = 0
+    reachCount[id] = {}
+  }
+
+  for (let i = 0; i < iterations; i++) {
+    const run = runCupLocked(format, result, revealedGroupMd, revealedKoRounds, ratings, hostIds, `${seedBase}-${i}`)
+    for (const id of run.qualified) qualifyCount[id] = (qualifyCount[id] ?? 0) + 1
+    championCount[run.champion] = (championCount[run.champion] ?? 0) + 1
+    for (const { round, teams } of run.reachRounds) {
+      for (const tid of teams) {
+        const r = reachCount[tid] ?? (reachCount[tid] = {})
+        r[round] = (r[round] ?? 0) + 1
       }
     }
   }
