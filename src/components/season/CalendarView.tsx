@@ -18,16 +18,6 @@ const EVENT_COLOR: Record<string, string> = {
   GOLD: 'bg-violet-400',
   OFC: 'bg-teal-400',
 }
-const EVENT_TEXT: Record<string, string> = {
-  WC: 'text-emerald-300',
-  EURO: 'text-sky-300',
-  COPA: 'text-amber-300',
-  AFCON: 'text-orange-300',
-  ASIAN: 'text-rose-300',
-  GOLD: 'text-violet-300',
-  OFC: 'text-teal-300',
-}
-
 const pad = (n: number) => String(n).padStart(2, '0')
 /** 'YYYY-MM' 키. */
 const ymKey = (iso: string) => iso.slice(0, 7)
@@ -43,28 +33,12 @@ const wdOf = (iso: string) => new Date(iso + 'T00:00:00Z').getUTCDay()
 export function CalendarView({
   wcYear,
   currentEvent,
-  onProgressTo,
-  onProgressNext,
-  nextLabel,
-  busy,
-  stepMode,
-  onStepModeChange,
   myTeamId,
   myFixtures,
   focusDate,
 }: {
   wcYear: number
   currentEvent?: SeasonEvent
-  /** 달력에서 일정을 클릭하면 그 대회 일정까지 진행한다(있을 때만 클릭 가능). */
-  onProgressTo?: (eventId: string, eventYear: number) => void
-  /** 캘린더 상단 '다음 일정 진행' — 현재 일정 하나를 진행한다. */
-  onProgressNext?: () => void
-  /** 다음(현재) 진행할 일정 라벨. */
-  nextLabel?: string
-  busy?: boolean
-  /** 진행 단위(시간대별/경기일). */
-  stepMode?: 'slot' | 'day'
-  onStepModeChange?: (m: 'slot' | 'day') => void
   /** 내 팀(설정 시) — 캘린더에 내 팀 경기를 별도 표시. */
   myTeamId?: string
   myFixtures?: MyFixture[]
@@ -111,12 +85,6 @@ export function CalendarView({
     return map
   }, [phases, month, totalDays, yy, mm])
 
-  // 이 달의 일정 목록(날짜순) — 시작일 기준.
-  const agenda = useMemo(
-    () => phases.filter((p) => ymKey(p.start) === month).sort((a, b) => a.start.localeCompare(b.start)),
-    [phases, month],
-  )
-
   // 내 팀 경기: 날짜(day)별 + 이 달의 목록. 날짜 있는 경기만.
   const myByDay = useMemo<Map<number, MyFixture[]>>(() => {
     const map = new Map<number, MyFixture[]>()
@@ -141,34 +109,6 @@ export function CalendarView({
 
   return (
     <GlassCard className="p-4">
-      {/* 상단: 진행 단위 선택(시간대별/경기일) + 다음 일정 진행 버튼 — 캘린더가 진행의 축. */}
-      {onProgressNext && (
-        <div className="mb-3">
-          {onStepModeChange && (
-            <div className="mb-2 flex items-center justify-center gap-1 text-[11px]">
-              <span className="mr-1 text-gray-500">진행 단위:</span>
-              <div className="flex rounded-lg bg-white/5 p-0.5">
-                {(['slot', 'day'] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => onStepModeChange(m)}
-                    className={`rounded-md px-2.5 py-1 font-bold transition-colors ${stepMode === m ? 'bg-emerald-500/30 text-emerald-100' : 'text-gray-400 hover:text-gray-200'}`}
-                  >
-                    {m === 'slot' ? '시간대별' : '경기일 단위'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <button
-            onClick={onProgressNext}
-            disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/15 px-3 py-2.5 text-sm font-bold text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
-          >
-            {busy ? '진행 중…' : <>▶ 다음 일정 진행{nextLabel && <span className="font-normal text-emerald-300/80"> · {nextLabel}</span>}</>}
-          </button>
-        </div>
-      )}
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-bold text-gray-200">📅 시즌 캘린더</h3>
         <div className="flex items-center gap-1">
@@ -286,39 +226,6 @@ export function CalendarView({
           )}
         </div>
       )}
-
-      {/* 이 달의 일정 목록(라운드별 날짜) */}
-      <div className="mt-3 border-t border-white/10 pt-2">
-        {agenda.length === 0 ? (
-          <p className="text-[11px] text-gray-500">이 달에는 시작하는 일정이 없습니다.</p>
-        ) : (
-          <div className="space-y-1">
-            {agenda.map((p) => {
-              const row = (
-                <>
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${EVENT_COLOR[p.eventId] ?? 'bg-gray-400'}`} />
-                  <span className="w-16 shrink-0 tabular-nums text-gray-400">{mm}월 {Number(p.start.slice(8, 10))}일 ({WD[wdOf(p.start)]})</span>
-                  <span className={`shrink-0 font-medium ${EVENT_TEXT[p.eventId] ?? 'text-gray-200'}`}>{p.eventKind === 'wc' ? '🏆' : '🌍'} {p.eventNameKo}</span>
-                  <span className="min-w-0 flex-1 truncate text-gray-400">{p.label}</span>
-                </>
-              )
-              return onProgressTo ? (
-                <button
-                  key={`${p.eventId}-${p.key}`}
-                  onClick={() => onProgressTo(p.eventId, p.eventYear)}
-                  title="이 일정까지 진행"
-                  className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left text-[11px] transition-colors hover:bg-white/10"
-                >
-                  {row}
-                  <span className="shrink-0 text-[10px] font-bold text-emerald-300">▶</span>
-                </button>
-              ) : (
-                <div key={`${p.eventId}-${p.key}`} className="flex items-center gap-2 px-1 text-[11px]">{row}</div>
-              )
-            })}
-          </div>
-        )}
-      </div>
 
       {/* 범례 */}
       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-white/10 pt-2 text-[10px] text-gray-400">

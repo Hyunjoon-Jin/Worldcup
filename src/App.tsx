@@ -11,23 +11,18 @@ import { OnboardingOverlay } from './components/common/OnboardingOverlay'
 const QualificationStage = lazy(() =>
   import('./components/qualification/QualificationStage').then((m) => ({ default: m.QualificationStage })),
 )
-const DrawStage = lazy(() => import('./components/draw/DrawStage').then((m) => ({ default: m.DrawStage })))
-const ScheduleStage = lazy(() => import('./components/schedule/ScheduleStage').then((m) => ({ default: m.ScheduleStage })))
-const GroupStageView = lazy(() => import('./components/groups/GroupStageView').then((m) => ({ default: m.GroupStageView })))
-const BracketView = lazy(() => import('./components/knockout/BracketView').then((m) => ({ default: m.BracketView })))
-const ProbabilityDashboard = lazy(() =>
-  import('./components/probability/ProbabilityDashboard').then((m) => ({ default: m.ProbabilityDashboard })),
-)
+const WorldCupTab = lazy(() => import('./components/worldcup/WorldCupTab').then((m) => ({ default: m.WorldCupTab })))
+const FriendliesTab = lazy(() => import('./components/friendlies/FriendliesTab').then((m) => ({ default: m.FriendliesTab })))
+const CupQualificationTab = lazy(() => import('./components/continental/CupQualificationTab').then((m) => ({ default: m.CupQualificationTab })))
 const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
 const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
-const ContinentalStage = lazy(() => import('./components/continental/ContinentalStage').then((m) => ({ default: m.ContinentalStage })))
+const ContinentalTab = lazy(() => import('./components/continental/ContinentalTab').then((m) => ({ default: m.ContinentalTab })))
 const SeasonHome = lazy(() => import('./components/season/SeasonHome').then((m) => ({ default: m.SeasonHome })))
 const MyTeamTab = lazy(() => import('./components/team/MyTeamTab').then((m) => ({ default: m.MyTeamTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
 import { useDrawStore } from './store/useDrawStore'
 import { useContinentalStore } from './store/useContinentalStore'
 import type { CupId } from './data/continental/formats'
-import { useQualificationStore } from './store/useQualificationStore'
 import { useProgressStore } from './store/useProgressStore'
 import { useSandboxStore } from './store/useSandboxStore'
 import { useSelectionStore } from './store/useSelectionStore'
@@ -36,57 +31,39 @@ import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
 
-type TabId = 'season' | 'qualifiers' | 'continental' | 'myteam' | 'ranking' | 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
-type EventContext = 'wc' | 'cup'
+// 대회 중심 IA: 각 대회(친선전·대륙컵 예선·월드컵 예선·대륙컵·월드컵)를 최상위 탭으로 두고,
+// 상세 화면(조추첨·일정·조별리그·토너먼트·확률)은 각 대회의 '하위 탭'에서 본다. 예전엔 월드컵 상세가
+// 최상위에 흩어져 월드컵 중심의 잘못된 구조였다.
+type TabId = 'season' | 'friendlies' | 'cupqual' | 'qualifiers' | 'continental' | 'worldcup' | 'myteam' | 'ranking'
 
 const TAB_LABEL: Record<TabId, string> = {
   season: '캘린더',
-  qualifiers: '지역예선',
+  friendlies: '친선전',
+  cupqual: '대륙컵 지역예선',
+  qualifiers: '월드컵 지역예선',
   continental: '대륙컵',
+  worldcup: '월드컵',
   myteam: '내 팀',
   ranking: 'FIFA 랭킹',
-  draw: '조추첨',
-  schedule: '일정 진행',
-  groups: '조별리그',
-  knockout: '토너먼트',
-  probability: '확률 대시보드',
 }
 
-// 일정 축 IA: 항상 보이는 전역 탭 + '현재 진행 중인 이벤트'의 하위 화면(월드컵 화면들 또는 대륙컵).
-// 월드컵도 캘린더 위의 한 이벤트일 뿐이라, 그 상세 탭들은 월드컵을 진행 중일 때만 노출된다.
-const HOME_TAB: TabId = 'season'
-const GLOBAL_TABS: TabId[] = ['myteam', 'ranking']
-const WC_EVENT_TABS: TabId[] = ['qualifiers', 'draw', 'schedule', 'groups', 'knockout', 'probability']
-const CUP_EVENT_TABS: TabId[] = ['continental']
-
-/** 진행 상태와 무관하게 언제나 접근 가능한 탭. */
-const ALWAYS_ENABLED: TabId[] = ['season', 'qualifiers', 'continental', 'myteam', 'ranking']
-
-/** 현재 이벤트 컨텍스트에 따라 보여줄 탭 순서: 시즌 → (현재 이벤트 화면들) → 내 팀 · FIFA 랭킹. */
-function visibleTabIds(context: EventContext): TabId[] {
-  return [HOME_TAB, ...(context === 'wc' ? WC_EVENT_TABS : CUP_EVENT_TABS), ...GLOBAL_TABS]
-}
+/** 최상위 탭 순서(항상 전부 노출). 상세는 각 대회 하위 탭에서 접근·게이팅한다. */
+const TOP_TABS: TabId[] = ['season', 'friendlies', 'cupqual', 'qualifiers', 'continental', 'worldcup', 'myteam', 'ranking']
 
 function App() {
   // 앱의 축은 '일정(시즌)'이다. 항상 시즌 홈으로 진입해 캘린더에서 대회를 시간 순서로 진행한다.
   // (월드컵도 캘린더 위의 한 이벤트일 뿐이다. 진행 중인 대회는 시즌 홈의 '지금 진행할 일정'에서 이어간다.)
   const [tab, setTab] = useState<TabId>('season')
-  // 현재 진행 중인 이벤트 컨텍스트(월드컵 화면들 vs 대륙컵). 캘린더에서 이벤트를 진입하면 전환된다.
-  const [context, setContext] = useState<EventContext>('wc')
-  const enterWC = () => { setContext('wc'); setTab('qualifiers') }
+  // 캘린더의 '실황 보기'에서 월드컵으로 진입: 조추첨 이후면 본선(월드컵), 아니면 월드컵 지역예선으로.
+  const enterWC = () => setTab(useDrawStore.getState().isComplete ? 'worldcup' : 'qualifiers')
   const enterCup = (id: CupId, year: number) => {
     useContinentalStore.getState().selectCup(id, year)
-    setContext('cup')
     setTab('continental')
   }
-  const visibleTabs = visibleTabIds(context)
+  const visibleTabs = TOP_TABS
   // 새로고침/재방문으로 저장된 대회를 이어가는 경우에만 안내 배너를 띄운다.
   const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
   const isDrawComplete = useDrawStore((s) => s.isComplete)
-  // 조추첨 진입 조건: 예선에서 본선 48개국 필드가 준비됐거나 이미 조추첨이 끝났을 때만.
-  const hasDrawField = useDrawStore((s) => s.fieldTeams !== null || s.isComplete)
-  // 확률 대시보드는 예선 진행 중에도(본선 진출 확률) 접근 가능하게 한다.
-  const hasQualResult = useQualificationStore((s) => s.result !== null)
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const reduceMotion = useA11yStore((s) => s.reduceMotion)
   const selectedTeamId = useSelectionStore((s) => s.selectedTeamId)
@@ -97,15 +74,10 @@ function App() {
     if (isDrawComplete) initSchedule()
   }, [isDrawComplete, initSchedule])
 
-  // 탭 접근 규칙: 예선·랭킹은 항상, 조추첨은 예선 필드가 준비돼야, 나머지는 조추첨 완료 후.
-  const tabDisabled = (id: TabId): boolean => {
-    if (ALWAYS_ENABLED.includes(id)) return false
-    if (id === 'draw') return !hasDrawField
-    if (id === 'probability') return !hasQualResult && !isDrawComplete
-    return !isDrawComplete
-  }
+  // 최상위 탭은 항상 접근 가능하다(상세 화면의 진행 게이팅은 각 대회의 하위 탭에서 처리).
+  const tabDisabled = (_id: TabId): boolean => false
 
-  // 키보드 단축키: 숫자 1~5로 탭 전환 (v2 #37). 입력 요소에 포커스가 있으면 무시한다.
+  // 키보드 단축키: 숫자 1~8로 최상위 탭 전환 (v2 #37). 입력 요소에 포커스가 있으면 무시한다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
@@ -114,17 +86,13 @@ function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < visibleTabs.length) {
-        const id = visibleTabs[idx]
-        if (!tabDisabled(id)) {
-          clearTeam()
-          setTab(id)
-        }
+        clearTeam()
+        setTab(visibleTabs[idx])
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDrawComplete, hasDrawField, hasQualResult, clearTeam, context])
+  }, [clearTeam, visibleTabs])
 
   const isComputing = useSimulationStore((s) => s.isComputing)
 
@@ -212,22 +180,20 @@ function App() {
         ) : (
           <>
             {tab === 'season' && <SeasonHome onNavigateWC={enterWC} onSelectCup={enterCup} />}
-            {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('draw')} />}
-            {tab === 'continental' && <ContinentalStage onNavigateWC={enterWC} />}
-            {tab === 'myteam' && <MyTeamTab />}
-            {tab === 'ranking' && <FifaRankingTab />}
-            {tab === 'draw' && <DrawStage onComplete={() => setTab('schedule')} />}
-            {tab === 'schedule' && (
-              <ScheduleStage
+            {tab === 'friendlies' && <FriendliesTab />}
+            {tab === 'cupqual' && <CupQualificationTab />}
+            {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('worldcup')} />}
+            {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} />}
+            {tab === 'worldcup' && (
+              <WorldCupTab
                 onNextEdition={() => {
                   advanceToNextEdition()
                   setTab('qualifiers')
                 }}
               />
             )}
-            {tab === 'groups' && <GroupStageView />}
-            {tab === 'knockout' && <BracketView />}
-            {tab === 'probability' && <ProbabilityDashboard />}
+            {tab === 'myteam' && <MyTeamTab />}
+            {tab === 'ranking' && <FifaRankingTab />}
           </>
         )}
       </Suspense>

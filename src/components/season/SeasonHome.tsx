@@ -228,12 +228,6 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
     setBusy(false)
   }
 
-  /** 캘린더(달력)에서 특정 대회 일정을 클릭 → 그 일정까지(포함) 순서대로 자동 진행(빠른 이동). */
-  const progressToEvent = (eventId: string, eventYear: number) => {
-    const idx = events.findIndex((e) => e.id === eventId && e.year === eventYear)
-    if (idx >= 0) progressToIndex(idx)
-  }
-
   const moveCursorNext = () => {
     if (clampedCursor >= events.length - 1) {
       advanceToNextEdition()
@@ -515,12 +509,11 @@ export function SeasonHome({ onSelectCup, onNavigateWC }: { onSelectCup: (id: Cu
         </GlassCard>
       )}
 
-      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 일정 클릭 시 그때까지 진행.
-          진행 버튼은 상단 고정 바로 옮겼으므로 여기서는 표시/일정 클릭만 담당한다. */}
+      {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 진행은 상단 고정 바로 하고,
+          여기서는 표시 전용(내 팀 경기가 있는 날은 상대·결과 표시 + 클릭 시 상세). */}
       <CalendarView
         wcYear={wcYear}
         currentEvent={current}
-        onProgressTo={busy ? undefined : progressToEvent}
         myTeamId={myTeamId ?? undefined}
         myFixtures={myFixtures}
         focusDate={focusDate}

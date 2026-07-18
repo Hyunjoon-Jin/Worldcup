@@ -127,7 +127,10 @@ function KnockoutMatchRow({ m }: { m: CupKnockoutMatch }) {
   )
 }
 
-export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }) {
+/** 대륙컵 본선 하위 화면(월드컵과 동일 수준): 조추첨(조편성)/진행·일정/조별리그/토너먼트/확률. */
+export type ContinentalView = 'draw' | 'progress' | 'groups' | 'knockout' | 'probability'
+
+export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNavigateWC?: () => void; view?: ContinentalView }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
   const seed = useContinentalStore((s) => s.seed)
   const hostIds = useContinentalStore((s) => s.hostIds)
@@ -237,8 +240,8 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
         {seed && <p className="mt-2 text-[11px] text-gray-500">시드: <span className="font-mono text-emerald-300">{seed}</span></p>}
       </GlassCard>
 
-      {/* 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화 */}
-      {cupPhases.length > 0 && (
+      {/* 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화 (진행·일정 뷰) */}
+      {view === 'progress' && cupPhases.length > 0 && (
         <GlassCard className="p-4">
           <h3 className="mb-2 text-sm font-bold text-gray-200">📅 대회 일정 <span className="text-[11px] font-normal text-gray-500">({cupYear ?? BASE_FINALS_YEAR} · {MONTH_LABEL[format.schedule.monthWindow]})</span></h3>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
@@ -258,71 +261,114 @@ export function ContinentalStage({ onNavigateWC }: { onNavigateWC?: () => void }
         </GlassCard>
       ) : (
         <>
-          {/* 단계별 진행 컨트롤 (월드컵 '일정 진행'과 동형) */}
-          <GlassCard strong className="p-5">
-            <p className="mb-2 text-center text-sm font-semibold text-white">{fullyRevealed ? '✅ 대회 종료' : `🗓 ${stageLabel}`}</p>
-            <div className="mx-auto mb-1 h-2 max-w-md overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width]" style={{ width: `${Math.round((stage / totalStages) * 100)}%` }} />
-            </div>
-            <p className="mb-3 text-center text-[10px] text-gray-500">{stage} / {totalStages} 단계</p>
-            {!fullyRevealed && (
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <GlassButton onClick={advanceStage}>▶ 다음 단계 진행</GlassButton>
-                <GlassButton variant="ghost" onClick={advanceToEnd}>⏭ 끝까지 진행</GlassButton>
-              </div>
-            )}
-          </GlassCard>
-
-          <QualSummaryCard />
-
-          {fullyRevealed && (
-            <GlassCard strong className="p-5 text-center">
-              <p className="text-[11px] text-gray-400">🏆 우승</p>
-              <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
-              <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
-            </GlassCard>
-          )}
-
-          {champProb.length > 0 && (
-            <GlassCard className="p-4">
-              <h3 className="mb-2 text-sm font-bold text-gray-200">📊 우승 확률 (상위 8)</h3>
-              <div className="space-y-1">
-                {champProb.map((t) => (
-                  <div key={t.teamId} className="flex items-center gap-2 text-xs">
-                    <span className="min-w-0 flex-1"><TeamLink teamId={t.teamId} /></span>
-                    <span className="w-16 text-right tabular-nums text-gray-400">진출 {t.qualify.toFixed(0)}%</span>
-                    <span className="w-16 text-right font-bold tabular-nums text-amber-300">우승 {t.champion.toFixed(1)}%</span>
+          {/* 진행·일정: 단계별 진행 컨트롤 (월드컵 '일정 진행'과 동형) + 예선 요약 */}
+          {view === 'progress' && (
+            <>
+              <GlassCard strong className="p-5">
+                <p className="mb-2 text-center text-sm font-semibold text-white">{fullyRevealed ? '✅ 대회 종료' : `🗓 ${stageLabel}`}</p>
+                <div className="mx-auto mb-1 h-2 max-w-md overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width]" style={{ width: `${Math.round((stage / totalStages) * 100)}%` }} />
+                </div>
+                <p className="mb-3 text-center text-[10px] text-gray-500">{stage} / {totalStages} 단계</p>
+                {!fullyRevealed && (
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <GlassButton onClick={advanceStage}>▶ 다음 단계 진행</GlassButton>
+                    <GlassButton variant="ghost" onClick={advanceToEnd}>⏭ 끝까지 진행</GlassButton>
                   </div>
-                ))}
-              </div>
-            </GlassCard>
+                )}
+              </GlassCard>
+              <QualSummaryCard />
+              {fullyRevealed && (
+                <GlassCard strong className="p-5 text-center">
+                  <p className="text-[11px] text-gray-400">🏆 우승</p>
+                  <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
+                  <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
+                </GlassCard>
+              )}
+            </>
           )}
 
-          <GlassCard className="p-4">
-            <h3 className="mb-3 text-sm font-bold text-gray-200">조별리그 <span className="text-[11px] font-normal text-gray-500">({revealedGroupMd}/3차전)</span></h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {result.groups.map((g) => (
-                <GroupTable key={g.groupIndex} group={g} format={format} revealedMd={revealedGroupMd} />
-              ))}
-            </div>
-          </GlassCard>
-
-          {koByRound.length > 0 && (
+          {/* 조추첨(조편성): 본선 조 구성 */}
+          {view === 'draw' && (
             <GlassCard className="p-4">
-              <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃</h3>
-              <div className="space-y-3">
-                {koByRound.map(({ round, matches }) => (
-                  <div key={round}>
-                    <p className="mb-1.5 font-display text-xs font-bold text-violet-200">{ROUND_LABEL[round]}</p>
+              <h3 className="mb-3 text-sm font-bold text-gray-200">🎲 본선 조편성 <span className="text-[11px] font-normal text-gray-500">(조추첨 결과)</span></h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {result.groups.map((g) => (
+                  <GlassCard key={g.groupIndex} className="p-3">
+                    <p className="mb-2 text-xs font-bold text-emerald-200">{String.fromCharCode(65 + g.groupIndex)}조</p>
                     <div className="space-y-1">
-                      {matches.map((m) => (
-                        <KnockoutMatchRow key={m.slotId} m={m} />
+                      {g.teams.map((tid) => (
+                        <div key={tid} className="text-[11px]"><TeamLink teamId={tid} wrap className="min-w-0" /></div>
                       ))}
                     </div>
-                  </div>
+                  </GlassCard>
                 ))}
               </div>
             </GlassCard>
+          )}
+
+          {/* 조별리그 */}
+          {view === 'groups' && (
+            <GlassCard className="p-4">
+              <h3 className="mb-3 text-sm font-bold text-gray-200">조별리그 <span className="text-[11px] font-normal text-gray-500">({revealedGroupMd}/3차전)</span></h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {result.groups.map((g) => (
+                  <GroupTable key={g.groupIndex} group={g} format={format} revealedMd={revealedGroupMd} />
+                ))}
+              </div>
+            </GlassCard>
+          )}
+
+          {/* 토너먼트(녹아웃) + 우승 */}
+          {view === 'knockout' && (
+            <>
+              {fullyRevealed && (
+                <GlassCard strong className="p-5 text-center">
+                  <p className="text-[11px] text-gray-400">🏆 우승</p>
+                  <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
+                  <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
+                </GlassCard>
+              )}
+              {koByRound.length > 0 ? (
+                <GlassCard className="p-4">
+                  <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃</h3>
+                  <div className="space-y-3">
+                    {koByRound.map(({ round, matches }) => (
+                      <div key={round}>
+                        <p className="mb-1.5 font-display text-xs font-bold text-violet-200">{ROUND_LABEL[round]}</p>
+                        <div className="space-y-1">
+                          {matches.map((m) => (
+                            <KnockoutMatchRow key={m.slotId} m={m} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </GlassCard>
+              ) : (
+                <GlassCard className="p-8 text-center text-[11px] text-gray-500">아직 녹아웃 라운드가 시작되지 않았습니다. ‘진행·일정’에서 조별리그를 마치면 대진이 표시됩니다.</GlassCard>
+              )}
+            </>
+          )}
+
+          {/* 확률 */}
+          {view === 'probability' && (
+            champProb.length > 0 ? (
+              <GlassCard className="p-4">
+                <h3 className="mb-2 text-sm font-bold text-gray-200">📊 우승 확률 (상위 8)</h3>
+                <div className="space-y-1">
+                  {champProb.map((t) => (
+                    <div key={t.teamId} className="flex items-center gap-2 text-xs">
+                      <span className="min-w-0 flex-1"><TeamLink teamId={t.teamId} /></span>
+                      <span className="w-16 text-right tabular-nums text-gray-400">진출 {t.qualify.toFixed(0)}%</span>
+                      <span className="w-16 text-right font-bold tabular-nums text-amber-300">우승 {t.champion.toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            ) : (
+              <GlassCard className="p-8 text-center text-[11px] text-gray-500">위 <strong className="text-gray-300">📊 우승 확률 계산</strong>을 눌러 확률을 계산하세요.</GlassCard>
+            )
           )}
         </>
       )}
