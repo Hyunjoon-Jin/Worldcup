@@ -34,10 +34,18 @@ interface ContinentalStore {
   probabilities: CupProbabilities | null
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
   stage: number
+  /** 조추첨 공개 팀 수(0=아직 안 뽑음). 월드컵 조추첨처럼 팀을 하나씩 뽑는 연출용. field 크기에 도달하면 완료. */
+  drawRevealCount: number
   /** 대회 선택(결과 초기화). year를 주면 그 개최 연도로 표시하고, 개최국을 자동 선정한다. */
   selectCup: (id: CupId | null, year?: number | null) => void
   /** 활성 대회를 참가국 선정 → 전과정 시뮬레이션한다(결과는 precompute, 단계별로 공개). */
   runActiveCup: (opts?: { seed?: string; rankByTeam?: Record<string, number> }) => void
+  /** 조추첨 — 다음 팀 한 명 공개(월드컵 '다음 국가 뽑기'와 동형). */
+  revealDrawTeam: () => void
+  /** 조추첨 — 직전 뽑기 되돌리기. */
+  undoDrawTeam: () => void
+  /** 조추첨 — 전체 즉시 공개. */
+  revealAllDraw: () => void
   /** 한 단계 진행(다음 경기일/라운드 공개). */
   advanceStage: () => void
   /** 끝까지 진행(전 결과 공개). */
@@ -58,6 +66,7 @@ export const useContinentalStore = create<ContinentalStore>()(
       result: null,
       probabilities: null,
       stage: 0,
+      drawRevealCount: 0,
       selectCup: (id, year = null) =>
         set({
           activeCupId: id,
@@ -69,6 +78,7 @@ export const useContinentalStore = create<ContinentalStore>()(
           probabilities: null,
           seed: null,
           stage: 0,
+          drawRevealCount: 0,
         }),
       runActiveCup: (opts) => {
         const { activeCupId, hostIds } = get()
@@ -82,7 +92,8 @@ export const useContinentalStore = create<ContinentalStore>()(
         const ratings = baseRatingsMap(field)
         const result = runCup(format, field, ratings, hostIds, usedSeed)
         // 결과는 즉시 계산하되 조추첨(stage 0)부터 단계별로 공개한다(월드컵 '일정 진행'과 동형).
-        set({ seed: usedSeed, qualResult, result, probabilities: null, stage: 0 })
+        // drawRevealCount=0 → 조추첨은 팀을 하나씩 뽑는 연출로 시작(월드컵 조추첨과 동형).
+        set({ seed: usedSeed, qualResult, result, probabilities: null, stage: 0, drawRevealCount: 0 })
         // 완주한 대회를 역대 기록에 축적(대회·시드 dedup). 팀 페이지 통산 성적에 반영.
         useContinentalHistoryStore.getState().record({
           cupId: activeCupId,
@@ -93,6 +104,18 @@ export const useContinentalStore = create<ContinentalStore>()(
           third: result.third,
           qualified: result.qualified,
         })
+      },
+      revealDrawTeam: () => {
+        const { result, drawRevealCount } = get()
+        if (!result) return
+        const total = result.groups.reduce((n, g) => n + g.teams.length, 0)
+        set({ drawRevealCount: Math.min(drawRevealCount + 1, total) })
+      },
+      undoDrawTeam: () => set({ drawRevealCount: Math.max(0, get().drawRevealCount - 1) }),
+      revealAllDraw: () => {
+        const { result } = get()
+        if (!result) return
+        set({ drawRevealCount: result.groups.reduce((n, g) => n + g.teams.length, 0) })
       },
       advanceStage: () => {
         const { activeCupId, result, stage } = get()
@@ -114,7 +137,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const probabilities = computeCupProbabilities(format, field, ratings, hostIds, iterations, `${seedBase}-PROB`)
         set({ probabilities })
       },
-      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, stage: 0 }),
+      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, stage: 0, drawRevealCount: 0 }),
     }),
     { name: 'wc2026-continental-store', version: 2 },
   ),

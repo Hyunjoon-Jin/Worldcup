@@ -11,6 +11,7 @@ import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { BASE_FINALS_YEAR, formatKoreanDate } from '../../data/calendar'
 import { CupBracketView } from './CupBracketView'
+import { CupDrawCeremony } from './CupDrawCeremony'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { CupGroupResult } from '../../engine/continental/runCup'
 import type { KnockoutRound } from '../../types/match'
@@ -166,6 +167,7 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const stage = useContinentalStore((s) => s.stage)
+  const drawRevealCount = useContinentalStore((s) => s.drawRevealCount)
   const runActiveCup = useContinentalStore((s) => s.runActiveCup)
   const advanceStage = useContinentalStore((s) => s.advanceStage)
   const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
@@ -339,8 +341,11 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
             </>
           )}
 
-          {/* 조추첨: 포트(시드) 구성 + 본선 조편성 (월드컵 조추첨과 동형) */}
-          {view === 'draw' && (
+          {/* 조추첨: 팀을 하나씩 뽑는 연출(월드컵 DrawStage와 동형) → 완료되거나 조별리그 시작 후엔 포트·조편성 요약 */}
+          {view === 'draw' && drawInfo && format && stage === 0 && drawRevealCount < result.groups.reduce((n, g) => n + g.teams.length, 0) && (
+            <CupDrawCeremony result={result} format={format} drawInfo={drawInfo} hostIds={hostIds} />
+          )}
+          {view === 'draw' && drawInfo && (stage > 0 || drawRevealCount >= result.groups.reduce((n, g) => n + g.teams.length, 0)) && (
             <>
               <GlassCard className="p-4">
                 <h3 className="mb-1 text-sm font-bold text-gray-200">🎡 시드 포트 <span className="text-[11px] font-normal text-gray-500">(능력치 등급별 · 각 포트에서 조마다 1팀)</span></h3>

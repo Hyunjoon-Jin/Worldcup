@@ -49,9 +49,13 @@ try {
     await modal.first().waitFor({ state: 'hidden', timeout: 5000 })
   }
   // 다음 일정이 대륙컵으로 다가왔다 — 상단 버튼이 '조추첨 진행하기'로 바뀌고, 클릭 시 대륙컵 조추첨 탭으로 이동한다.
+  // 조추첨 탭은 월드컵처럼 팀을 하나씩 뽑는 연출로 진입한다(전체 공개로 조편성 확정).
   await page.getByRole('button', { name: /조추첨 진행하기/ }).first().click()
+  await page.getByRole('button', { name: /다음 국가 뽑기|전체 공개/ }).first().waitFor({ timeout: 10000 })
+  assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 연출(하위탭)에 진입한다")
+  await page.getByRole('button', { name: '⏭ 전체 공개' }).click()
   await page.getByText('본선 조편성', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 하위탭에 진입한다")
+  assert(true, '전체 공개 시 본선 조편성이 확정 표시된다')
 
   // 진행·일정 하위탭 → 끝까지 진행 → 우승 확정
   await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
