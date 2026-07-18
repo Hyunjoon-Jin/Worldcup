@@ -275,15 +275,43 @@ function CombinedQualView({ cupId, view }: { cupId: CupId; view: QualView }) {
       {view === 'probability' ? (
         <CupQualProbView format={format} hostIds={DEFAULT_HOST_IDS} />
       ) : view === 'progress' ? (
-        <GlassCard className="border border-emerald-400/20 bg-emerald-500/[0.06] p-4 text-[12px] leading-relaxed text-emerald-100/90">
-          🔗 <strong className="text-emerald-200">{format.nameKo} 예선은 월드컵 지역예선과 통합</strong>됩니다. {CONFED_KO[confed] ?? confed} 월드컵 예선을
-          그대로 치르고, 그 최종 순위 <strong className="text-emerald-200">상위 {format.teams}개국</strong>이 {format.nameKo} 본선에 진출합니다.
-          <div className="mt-2 text-[11px] text-gray-400">
-            {done
-              ? `예선이 종료되어 진출국이 확정됐습니다. '조별 순위' 탭에서 최종 순위와 진출 컷을 확인하세요.`
-              : `현재 ${CONFED_KO[confed] ?? confed} 월드컵 예선 경기일 ${revealed}/${total} 진행 중입니다. '조별 순위' 탭에서 지금까지의 순위를, '확률' 탭에서 진출 확률을 볼 수 있어요. 캘린더에서 월드컵 지역예선을 계속 진행하세요.`}
+        confed === 'AFC' ? (
+          <div className="flex flex-col gap-3">
+            <GlassCard className="border border-emerald-400/20 bg-emerald-500/[0.06] p-4">
+              <p className="mb-2 text-sm font-bold text-emerald-200">📋 AFC 아시안컵 예선 규칙</p>
+              <p className="mb-3 text-[12px] leading-relaxed text-emerald-100/90">
+                AFC는 <strong className="text-emerald-200">월드컵 예선과 아시안컵 예선을 하나의 캠페인</strong>으로 치릅니다. 같은 예선 경기가
+                두 대회의 진출을 동시에 가립니다.
+              </p>
+              <ol className="space-y-1.5 text-[11px] leading-relaxed text-gray-300">
+                <li><span className="mr-1 font-bold text-sky-300">1차 예선</span> 하위 팀들이 단판 녹아웃으로 2차 진출팀을 가립니다.</li>
+                <li><span className="mr-1 font-bold text-sky-300">2차 예선</span> 9개 조 × 4팀. <strong className="text-emerald-200">각 조 1·2위(18개국)</strong>가 월드컵 3차 예선에 오르며 <strong className="text-emerald-200">아시안컵 본선에 직행</strong>합니다.</li>
+                <li><span className="mr-1 font-bold text-sky-300">3~4차 예선</span> 월드컵 본선 티켓을 계속 다툽니다(아시안컵 진출은 이미 확정).</li>
+                <li><span className="mr-1 font-bold text-sky-300">아시안컵 3차 예선</span> 2차에서 탈락한 팀들이 남은 아시안컵 자리를 채웁니다.</li>
+                <li><span className="mr-1 font-bold text-sky-300">개최국</span> 자동 진출. 이렇게 총 <strong className="text-emerald-200">{format.teams}개국</strong>이 본선에 오릅니다.</li>
+              </ol>
+              <p className="mt-3 rounded-lg bg-white/[0.04] p-2 text-[10px] leading-relaxed text-gray-400">
+                🎮 본 시뮬레이터는 이 통합 예선을 <strong className="text-gray-300">‘AFC 월드컵 예선 캠페인 최종 순위 상위 {format.teams}개국’ + 개최국</strong>으로
+                반영합니다. 즉 월드컵 예선을 잘한 순서가 곧 아시안컵 진출 순서입니다.
+              </p>
+            </GlassCard>
+            <GlassCard className="p-3 text-[11px] text-gray-400">
+              {done
+                ? `✅ 예선이 종료되어 진출국이 확정됐습니다. '조별 순위' 탭에서 최종 순위와 진출 컷(상위 ${format.teams})을 확인하세요.`
+                : `현재 AFC 월드컵 예선 경기일 ${revealed}/${total} 진행 중입니다. '조별 순위' 탭에서 지금까지의 순위를, '확률' 탭에서 본선 진출 확률을 볼 수 있어요. 캘린더에서 월드컵 지역예선을 계속 진행하면 여기도 함께 갱신됩니다.`}
+            </GlassCard>
           </div>
-        </GlassCard>
+        ) : (
+          <GlassCard className="border border-emerald-400/20 bg-emerald-500/[0.06] p-4 text-[12px] leading-relaxed text-emerald-100/90">
+            🔗 <strong className="text-emerald-200">{format.nameKo} 예선은 월드컵 지역예선과 통합</strong>됩니다. {CONFED_KO[confed] ?? confed} 월드컵 예선을
+            그대로 치르고, 그 최종 순위 <strong className="text-emerald-200">상위 {format.teams}개국</strong>이 {format.nameKo} 본선에 진출합니다.
+            <div className="mt-2 text-[11px] text-gray-400">
+              {done
+                ? `예선이 종료되어 진출국이 확정됐습니다. '조별 순위' 탭에서 최종 순위와 진출 컷을 확인하세요.`
+                : `현재 ${CONFED_KO[confed] ?? confed} 월드컵 예선 경기일 ${revealed}/${total} 진행 중입니다. '조별 순위' 탭에서 지금까지의 순위를, '확률' 탭에서 진출 확률을 볼 수 있어요.`}
+            </div>
+          </GlassCard>
+        )
       ) : done ? (
         // 예선 완료: 최종 순위 + 진출 컷.
         <CombinedCampaignView confed={confed} slots={format.teams} qualifiedSet={new Set()} hostSet={new Set()} cutLabel={format.nameKo} />
