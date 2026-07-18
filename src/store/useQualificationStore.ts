@@ -111,6 +111,26 @@ export function buildProbInputs(): {
 }
 
 /**
+ * 대륙컵 통합 예선(아시안컵) 확률용 조건부 입력 — 공개된(revealed) 경기를 예선 완료 여부와 무관하게 항상
+ * 고정한다. 월드컵 예선이 완료됐어도 그 대륙의 '실제 결과'를 그대로 반영해야 하므로(예: 대만이 2차 통과 =
+ * 아시안컵 직행 확정 → 100%), isPartialProgress에 의존하지 않고 collectPlayedByConfed로 공개분을 전부 lock한다.
+ * 완전 공개면 전 경기가 고정돼 시뮬이 실제 결과를 결정론적으로 재현한다(확정 팀 100%·탈락 0%).
+ */
+export function buildConfedLockedProbInputs(confed: string): { ratings: Record<string, TeamRatings>; locked?: LockedLookup } {
+  const result = useQualificationStore.getState().result
+  const revealed = useQualificationStore.getState().revealed
+  if (!result) return { ratings: buildQualRatings() }
+  const lockedAll = collectPlayedByConfed(result, revealed)
+  const played = flattenPlayed(lockedAll)
+  if (played.length === 0) return { ratings: buildQualRatings() }
+  const fieldIds = [
+    ...new Set(Object.values(result.byConfederation).flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]))),
+  ]
+  const points = updateRankingPoints(initRankingPoints(fieldIds), played)
+  return { ratings: updatedRatingsFromPoints(points), locked: buildLockedLookups(lockedAll)[confed] }
+}
+
+/**
  * 성적→능력치 보정을 갱신한다. 실제 계산은 모든 대회(예선·본선·대륙컵)를 종합하는 중앙
  * recomputePerformanceDeltas가 담당한다(성적 반영 흐름의 단일 소유자). 예선이 없으면 초기화.
  */
