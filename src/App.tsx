@@ -16,7 +16,7 @@ const FriendliesTab = lazy(() => import('./components/friendlies/FriendliesTab')
 const CupQualificationTab = lazy(() => import('./components/continental/CupQualificationTab').then((m) => ({ default: m.CupQualificationTab })))
 const SandboxPanel = lazy(() => import('./components/sandbox/SandboxPanel').then((m) => ({ default: m.SandboxPanel })))
 const FifaRankingTab = lazy(() => import('./components/ranking/FifaRankingTab').then((m) => ({ default: m.FifaRankingTab })))
-const ContinentalStage = lazy(() => import('./components/continental/ContinentalStage').then((m) => ({ default: m.ContinentalStage })))
+const ContinentalTab = lazy(() => import('./components/continental/ContinentalTab').then((m) => ({ default: m.ContinentalTab })))
 const SeasonHome = lazy(() => import('./components/season/SeasonHome').then((m) => ({ default: m.SeasonHome })))
 const MyTeamTab = lazy(() => import('./components/team/MyTeamTab').then((m) => ({ default: m.MyTeamTab })))
 const TeamDetailPage = lazy(() => import('./components/team/TeamDetailPage').then((m) => ({ default: m.TeamDetailPage })))
@@ -183,7 +183,7 @@ function App() {
             {tab === 'friendlies' && <FriendliesTab />}
             {tab === 'cupqual' && <CupQualificationTab />}
             {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('worldcup')} />}
-            {tab === 'continental' && <ContinentalStage onNavigateWC={enterWC} />}
+            {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} />}
             {tab === 'worldcup' && (
               <WorldCupTab
                 onNextEdition={() => {

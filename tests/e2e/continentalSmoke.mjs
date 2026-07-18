@@ -64,18 +64,24 @@ try {
   assert(true, '시뮬레이션 후 조추첨부터 단계별로 공개된다')
   assert((await page.getByText('CUP-SMOKE').count()) > 0, '사용한 시드가 표시된다')
 
-  // 끝까지 진행 → 우승·녹아웃 공개
+  // 끝까지 진행(진행·일정 하위탭) → 우승 확정
   await page.getByRole('button', { name: '⏭ 끝까지 진행' }).click()
   await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
   assert(true, '끝까지 진행이 우승팀을 결정한다')
-  assert(await page.getByText('녹아웃').first().isVisible(), '녹아웃이 렌더된다')
 
-  // 확률 계산
+  // 토너먼트 하위탭 → 녹아웃 대진 표시
+  await page.getByRole('tab', { name: '토너먼트', exact: true }).click()
+  assert(await page.getByText('녹아웃').first().isVisible(), '토너먼트 하위탭에 녹아웃이 렌더된다')
+
+  // 확률 계산(헤더 버튼) → 확률 하위탭에서 표시
   await page.getByRole('button', { name: '📊 우승 확률 계산' }).click()
+  await page.getByRole('tab', { name: '확률', exact: true }).click()
   await page.getByText('우승 확률 (상위 8)', { exact: false }).waitFor({ timeout: 15000 })
   assert(true, '우승 확률이 계산·표시된다')
 
-  // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (우승팀 클릭)
+  // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (진행·일정 탭의 우승팀 클릭)
+  await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
+  await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
   await page.locator('text=🏆 우승').locator('..').getByRole('button').first().click()
   // 기본(개요) 탭에 트로피 캐비닛이 표시된다.
   await page.getByText('트로피 캐비닛', { exact: false }).first().waitFor({ timeout: 10000 })
