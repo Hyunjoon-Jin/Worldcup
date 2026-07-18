@@ -201,6 +201,21 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
     [format],
   )
 
+  // 조추첨 포트(시드 등급) 복원 — 본선 조 시딩은 기본 능력치순 포트(teamsPerGroup개)로 이뤄진다.
+  // 각 포트 = 능력치 상위부터 groups명씩. 팀별 소속 포트·배정 조를 함께 계산해 조추첨을 시각화한다.
+  const drawInfo = useMemo(() => {
+    if (!result || !format) return null
+    const field = result.groups.flatMap((g) => g.teams)
+    const sorted = [...field].sort((a, b) => (ALL_NATIONS_BY_ID[b]?.baseRatings.overall ?? 0) - (ALL_NATIONS_BY_ID[a]?.baseRatings.overall ?? 0) || a.localeCompare(b))
+    const pots: string[][] = []
+    for (let p = 0; p < format.teamsPerGroup; p++) pots.push(sorted.slice(p * format.groups, (p + 1) * format.groups))
+    const potOf = new Map<string, number>()
+    pots.forEach((pot, pi) => pot.forEach((t) => potOf.set(t, pi)))
+    const groupOf = new Map<string, number>()
+    result.groups.forEach((g) => g.teams.forEach((t) => groupOf.set(t, g.groupIndex)))
+    return { pots, potOf, groupOf }
+  }, [result, format])
+
   const champProb = useMemo(() => {
     if (!probabilities) return []
     return Object.entries(probabilities.byTeam)
@@ -311,23 +326,47 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
             </>
           )}
 
-          {/* 조추첨(조편성): 본선 조 구성 */}
+          {/* 조추첨: 포트(시드) 구성 + 본선 조편성 (월드컵 조추첨과 동형) */}
           {view === 'draw' && (
-            <GlassCard className="p-4">
-              <h3 className="mb-3 text-sm font-bold text-gray-200">🎲 본선 조편성 <span className="text-[11px] font-normal text-gray-500">(조추첨 결과)</span></h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {result.groups.map((g) => (
-                  <GlassCard key={g.groupIndex} className="p-3">
-                    <p className="mb-2 text-xs font-bold text-emerald-200">{String.fromCharCode(65 + g.groupIndex)}조</p>
-                    <div className="space-y-1">
-                      {g.teams.map((tid) => (
-                        <div key={tid} className="text-[11px]"><TeamLink teamId={tid} wrap className="min-w-0" /></div>
-                      ))}
-                    </div>
-                  </GlassCard>
-                ))}
-              </div>
-            </GlassCard>
+            <>
+              <GlassCard className="p-4">
+                <h3 className="mb-1 text-sm font-bold text-gray-200">🎡 시드 포트 <span className="text-[11px] font-normal text-gray-500">(능력치 등급별 · 각 포트에서 조마다 1팀)</span></h3>
+                <p className="mb-3 text-[11px] text-gray-500">능력치 상위부터 {format.groups}팀씩 같은 포트로 묶어, 각 조에 포트마다 한 팀씩 배정합니다. 괄호는 배정된 조입니다.</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {drawInfo?.pots.map((pot, pi) => (
+                    <GlassCard key={pi} className="p-3">
+                      <p className="mb-2 text-xs font-bold text-sky-200">포트 {pi + 1}</p>
+                      <div className="space-y-1">
+                        {pot.map((tid) => (
+                          <div key={tid} className="flex items-center justify-between gap-1 text-[11px]">
+                            <TeamLink teamId={tid} wrap className="min-w-0" />
+                            <span className="shrink-0 text-[9px] font-bold text-emerald-300/80">{String.fromCharCode(65 + (drawInfo.groupOf.get(tid) ?? 0))}조</span>
+                          </div>
+                        ))}
+                      </div>
+                    </GlassCard>
+                  ))}
+                </div>
+              </GlassCard>
+              <GlassCard className="p-4">
+                <h3 className="mb-3 text-sm font-bold text-gray-200">🎲 본선 조편성 <span className="text-[11px] font-normal text-gray-500">(조추첨 결과 · 숫자=포트)</span></h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {result.groups.map((g) => (
+                    <GlassCard key={g.groupIndex} className="p-3">
+                      <p className="mb-2 text-xs font-bold text-emerald-200">{String.fromCharCode(65 + g.groupIndex)}조</p>
+                      <div className="space-y-1">
+                        {g.teams.map((tid) => (
+                          <div key={tid} className="flex items-center gap-1.5 text-[11px]">
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-sky-500/20 text-[8px] font-bold text-sky-300">{(drawInfo?.potOf.get(tid) ?? 0) + 1}</span>
+                            <TeamLink teamId={tid} wrap className="min-w-0" />
+                          </div>
+                        ))}
+                      </div>
+                    </GlassCard>
+                  ))}
+                </div>
+              </GlassCard>
+            </>
           )}
 
           {/* 조별리그 */}
