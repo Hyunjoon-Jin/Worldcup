@@ -466,6 +466,54 @@ export function overallDeltasFromPlay(
   return out
 }
 
+/** 최근 폼 보정 스케일(연승 시 최대 +N, 연패 시 −N). 승/무/패 자체가 소폭 능력치를 움직이게 한다. */
+export const FORM_NUDGE_SCALE = 4
+/** 오래된 경기일수록 가중치가 줄어드는 감쇠 계수(최근 경기가 가장 크게 반영). */
+const FORM_DECAY = 0.72
+
+/**
+ * '치른 경기'의 승/무/패 자체로 최근 폼 보정을 만든다(상대 강약과 무관). Elo(overallDeltasFromPlay)는
+ * 강팀이 약팀을 이겨도 기대 승점이 커서 점수 변동이 0에 수렴 → 능력치가 거의 안 움직이는데, 사용자가
+ * 원한 '매 경기마다 조금씩 오르내리는' 감각을 위해 결과 기반 폼을 소폭 더한다. 최근 경기에 가중치를
+ * 크게 둔 지수가중평균(EWMA)이라 연승이면 +, 연패면 −, 승패가 섞이면 그 사이에서 매 경기 진동한다.
+ * groups는 대략 시간 순서(예선→친선→대륙컵→본선)로 넘긴다. 승부차기는 절반 강도(±0.5)로 본다.
+ */
+export function formNudgeDeltasFromPlay(
+  groups: Array<{ matches: EloPlayMatch[] }>,
+  scale = FORM_NUDGE_SCALE,
+): Record<string, number> {
+  const seq: Record<string, number[]> = {}
+  const push = (id: string, v: number) => { (seq[id] ??= []).push(v) }
+  for (const g of groups) {
+    for (const m of g.matches) {
+      if (m.wentToPenalties && m.winnerTeamId) {
+        push(m.homeTeamId, m.winnerTeamId === m.homeTeamId ? 0.5 : -0.5)
+        push(m.awayTeamId, m.winnerTeamId === m.awayTeamId ? 0.5 : -0.5)
+      } else {
+        const oh = m.homeGoals > m.awayGoals ? 1 : m.homeGoals < m.awayGoals ? -1 : 0
+        push(m.homeTeamId, oh)
+        push(m.awayTeamId, -oh)
+      }
+    }
+  }
+  const out: Record<string, number> = {}
+  for (const id of Object.keys(seq)) {
+    const s = seq[id]
+    let num = 0
+    let den = 0
+    let w = 1
+    for (let i = s.length - 1; i >= 0; i--) {
+      num += w * s[i]
+      den += w
+      w *= FORM_DECAY
+    }
+    const f = den > 0 ? num / den : 0 // 최근 폼 [-1, 1]
+    const d = Math.round(f * scale)
+    if (d !== 0) out[id] = d
+  }
+  return out
+}
+
 export interface TrendPoint {
   date: string
   label: string
