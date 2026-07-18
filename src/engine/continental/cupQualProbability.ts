@@ -3,6 +3,7 @@ import type { Confederation, TeamRatings } from '../../types/team'
 import { runCupQualification } from './cupQualification'
 import { combinedCupDirectQualified } from './combinedQual'
 import { simulateConfederation } from '../qualification/index'
+import type { LockedLookup } from '../qualification/generic'
 import { createSeededRandom } from '../rng'
 
 /**
@@ -19,7 +20,7 @@ export function computeCupQualProbabilities(
   hostIds: string[],
   iterations: number,
   seedBase: string,
-  opts?: { rankByTeam?: Record<string, number> },
+  opts?: { rankByTeam?: Record<string, number>; locked?: LockedLookup; cupHostIds?: string[] },
 ): Record<string, number> {
   const counts: Record<string, number> = {}
   const bump = (ids: string[]) => {
@@ -28,12 +29,15 @@ export function computeCupQualProbabilities(
 
   if (format.qual.style === 'combinedWcq') {
     const confed = format.confeds[0] as Confederation
+    // 대륙컵 개최국(자동 진출) — 월드컵 개최국(hostIds)과 다른 개념이므로 별도로 받는다.
+    const cupHosts = opts?.cupHostIds ?? []
     for (let i = 0; i < iterations; i++) {
-      const r = simulateConfederation(confed, ratings, createSeededRandom(`${seedBase}-${i}`), undefined, hostIds)
-      // 실제 규칙 반영: 개최국(자동) + 대륙컵 직행 자격 확보 팀(월드컵 2차 예선 통과 = 3차 예선 도달) 우선,
+      // locked(치른 경기 고정) + 캠페인 반영 전력으로 조건부 시뮬레이션 → 이미 확정된 팀은 100%, 탈락은 0%로 수렴.
+      const r = simulateConfederation(confed, ratings, createSeededRandom(`${seedBase}-${i}`), opts?.locked, hostIds)
+      // 실제 규칙 반영: 대륙컵 개최국(자동) + 대륙컵 직행 자격 확보 팀(월드컵 2차 예선 통과 = 3차 예선 도달) 우선,
       // 남은 자리는 캠페인 순위(standings) 순으로 채워 format.teams까지.
       const direct = combinedCupDirectQualified(r)
-      const hostSet = new Set(hostIds.filter((h) => r.standings.includes(h)))
+      const hostSet = new Set(cupHosts.filter((h) => r.standings.includes(h)))
       const field: string[] = [...hostSet]
       const picked = new Set(field)
       for (const id of r.standings) {
