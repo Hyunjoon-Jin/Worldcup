@@ -75,6 +75,7 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
   const cupYear = useContinentalStore((s) => s.cupYear)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
+  const championTrend = useContinentalStore((s) => s.championTrend)
   const stage = useContinentalStore((s) => s.stage)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
 
@@ -92,10 +93,29 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
   const revealedKoRounds = Math.max(0, stage - 3)
   const fullyRevealed = result != null && stage >= totalStages
 
-  // 확률 탭을 열면 버튼 없이 자동으로 진출 체인 확률을 계산한다(아직 계산 전이면).
+  // 확률 탭을 열면(또는 단계가 바뀌면) 자동으로 실황 반영 확률을 다시 계산한다(월드컵과 동일한 실시간성).
   useEffect(() => {
-    if (view === 'probability' && result && !probabilities) computeProbabilities()
-  }, [view, result, probabilities, computeProbabilities])
+    if (view === 'probability' && result) computeProbabilities()
+  }, [view, stage, result, computeProbabilities])
+
+  // 최근 공개 경기 성적(골득실) 기반 폼 — 확률 대시보드 상승세/하락세 태그용(월드컵 momentum과 동형).
+  const momentumByTeam = useMemo<Record<string, number>>(() => {
+    if (!result || !format) return {}
+    const m: Record<string, number> = {}
+    const gm = result.groups.flatMap((g) => g.matches.filter((x) => x.matchday <= revealedGroupMd)).sort((a, b) => a.matchday - b.matchday)
+    for (const x of gm) {
+      m[x.homeTeamId] = x.homeGoals - x.awayGoals
+      m[x.awayTeamId] = x.awayGoals - x.homeGoals
+    }
+    const ko = result.knockout
+      .filter((x) => { const i = format.knockout.indexOf(x.round); return i >= 0 && i < revealedKoRounds })
+      .sort((a, b) => format.knockout.indexOf(a.round) - format.knockout.indexOf(b.round))
+    for (const x of ko) {
+      m[x.homeTeamId] = x.result.homeGoals - x.result.awayGoals
+      m[x.awayTeamId] = x.result.awayGoals - x.result.homeGoals
+    }
+    return m
+  }, [result, format, revealedGroupMd, revealedKoRounds])
 
   // 조추첨 포트(시드 등급) 복원 — 실제 조추첨(drawCupGroups)과 동일하게 개최국을 포트1로 보호한다.
   // 포트1 = 개최국 + 상위 비개최국으로 groups개, 포트2.. = 잔여 비개최국을 능력치 순으로 groups명씩.
@@ -225,6 +245,8 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
                 probabilities={probabilities}
                 chainRounds={format.knockout}
                 onRefresh={(n) => computeProbabilities(n)}
+                momentumByTeam={momentumByTeam}
+                trend={championTrend ?? []}
               />
             ) : (
               <GlassCard className="p-8 text-center text-[11px] text-gray-500">

@@ -275,6 +275,74 @@ function simulateKnockout(format: CupFormat, groups: CupGroupResult[], ratings: 
   return { matches: ko, champion, runnerUp, third }
 }
 
+export interface CupLockedRun {
+  qualified: string[]
+  champion: string
+  /** 각 (3·4위전 제외) 녹아웃 매치에 편성된 팀들(라운드 도달 집계용). */
+  reachRounds: Array<{ round: KnockoutRound; teams: string[] }>
+}
+
+/**
+ * '조건부(라이브)' 단일 시뮬레이션 — 이미 공개된 결과(조추첨·조별 revealedGroupMd차전까지·녹아웃
+ * revealedKoRounds라운드까지)를 **고정**하고 남은 경기만 새로 시뮬레이션한다. 월드컵 buildSnapshot과
+ * 동일 개념으로, 이걸 반복하면 현재 실황을 반영한 진출·우승 확률이 나온다(완주 시 100%/0%로 수렴).
+ */
+export function runCupLocked(
+  format: CupFormat,
+  result: CupResult,
+  revealedGroupMd: number,
+  revealedKoRounds: number,
+  ratings: Record<string, TeamRatings>,
+  hostIds: string[],
+  seed: string,
+): CupLockedRun {
+  const hostSet = new Set(hostIds)
+  // 1) 조별리그: 조추첨(팀 구성)은 고정. 공개된 경기일은 실제 결과, 나머지는 새로 시뮬레이션.
+  const groups: CupGroupResult[] = result.groups.map((g) => {
+    const rand = createSeededRandom(`${seed}-G${g.groupIndex}`)
+    const actualByKey = new Map(g.matches.map((m) => [`${m.homeTeamId}|${m.awayTeamId}|${m.matchday}`, m]))
+    const matches: CupMatch[] = roundRobin(g.teams).map(({ home, away, matchday }) => {
+      const actual = matchday <= revealedGroupMd ? actualByKey.get(`${home}|${away}|${matchday}`) : undefined
+      const s = actual ?? simulateScoreRaw(ratings[home], ratings[away], hostAdv(home, hostSet), hostAdv(away, hostSet), rand)
+      return { homeTeamId: home, awayTeamId: away, homeGoals: s.homeGoals, awayGoals: s.awayGoals, group: g.groupIndex, matchday }
+    })
+    const standings = computeStandings(g.teams, matches)
+    const ranking = rankGroupTeams(g.teams, matches, format.groupTiebreak)
+    return { groupIndex: g.groupIndex, teams: g.teams, matches, ranking, standings }
+  })
+
+  const qualified: string[] = []
+  for (const g of groups) for (let i = 0; i < format.advancePerGroup; i++) qualified.push(g.ranking[i])
+  if (format.bestThirds > 0) {
+    const thirds = rankThirds(groups.map((g) => ({ teamId: g.ranking[2], s: g.standings[g.ranking[2]] })))
+    qualified.push(...thirds.slice(0, format.bestThirds))
+  }
+
+  // 2) 녹아웃: 그룹이 모두 공개돼 대진이 고정된 경우, 공개된 라운드는 실제 승자, 나머지는 새로 시뮬레이션.
+  const koRand = createSeededRandom(`${seed}-KO`)
+  const actualBySlot = new Map(result.knockout.map((m) => [m.slotId, m]))
+  const revealedRoundSet = new Set(format.knockout.slice(0, revealedKoRounds))
+  const reachRounds: Array<{ round: KnockoutRound; teams: string[] }> = []
+  const play = (round: KnockoutRound, slotId: string, home: string, away: string): string => {
+    reachRounds.push({ round, teams: [home, away] })
+    if (revealedRoundSet.has(round)) {
+      const a = actualBySlot.get(slotId)
+      if (a && (a.homeTeamId === home || a.homeTeamId === away)) return a.result.winnerTeamId
+    }
+    return simulateKnockoutRaw(home, ratings[home], away, ratings[away], hostAdv(home, hostSet), hostAdv(away, hostSet), koRand).winnerTeamId
+  }
+  const pairs = firstRoundPairings(format, groups)
+  const firstRound = format.knockout[0]
+  let winners = pairs.map((p, i) => play(firstRound, `${firstRound}${i + 1}`, p.home, p.away))
+  for (let ri = 1; ri < format.knockout.length; ri++) {
+    const round = format.knockout[ri]
+    const next: string[] = []
+    for (let i = 0; i < winners.length; i += 2) next.push(play(round, `${round}${i / 2 + 1}`, winners[i], winners[i + 1]))
+    winners = next
+  }
+  return { qualified, champion: winners[0], reachRounds }
+}
+
 /** 대회 전체를 결정론적으로 시뮬레이션한다. teamIds 길이는 format.teams와 같아야 한다. */
 export function runCup(
   format: CupFormat,

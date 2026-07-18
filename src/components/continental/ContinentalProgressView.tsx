@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
@@ -11,6 +11,7 @@ import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { classifyMatchUpset, isUpset } from '../../engine/matchEngine'
+import { marginOfError95 } from '../../engine/confidence'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import type { CupFormat } from '../../data/continental/formats'
@@ -54,8 +55,24 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
   const hostIds = useContinentalStore((s) => s.hostIds)
   const advanceStage = useContinentalStore((s) => s.advanceStage)
   const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
+  const probabilities = useContinentalStore((s) => s.probabilities)
+  const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const [shared, setShared] = useState(false)
+
+  // 실황 반영 확률을 진행 단계마다 다시 계산(월드컵처럼 실시간 우승 확률 TOP3 + 추이 스냅샷 축적).
+  useEffect(() => {
+    computeProbabilities()
+  }, [stage, computeProbabilities])
+
+  const top3 = useMemo(() => {
+    if (!probabilities) return []
+    return Object.entries(probabilities.byTeam)
+      .map(([teamId, p]) => ({ teamId, championPct: p.champion }))
+      .sort((a, b) => b.championPct - a.championPct)
+      .slice(0, 3)
+  }, [probabilities])
+  const MEDALS = ['🥇', '🥈', '🥉']
 
   const totalStages = cupTotalStages(activeCupId)
   const revealedGroupMd = Math.min(stage, 3)
@@ -180,6 +197,25 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
           <p className="mt-2 text-center text-lg font-bold text-amber-300">🎉 우승팀이 결정되었습니다!</p>
         )}
       </GlassCard>
+
+      {/* 실시간 우승 확률 TOP 3(월드컵 ScheduleStage와 동형) */}
+      {!fullyRevealed && top3.length > 0 && (
+        <GlassCard className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+          <h3 className="shrink-0 text-xs font-bold whitespace-nowrap text-amber-300">🏆 실시간 우승 확률 TOP 3</h3>
+          <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-1.5">
+            {top3.map((row, idx) => (
+              <div key={row.teamId} className="flex items-center gap-1.5">
+                <span className="text-sm">{MEDALS[idx]}</span>
+                <TeamLink teamId={row.teamId} className="text-xs font-medium text-gray-100" />
+                <span className="text-xs font-bold tabular-nums text-amber-300">
+                  {row.championPct.toFixed(1)}%
+                  <span className="ml-0.5 text-[10px] font-normal text-gray-500">±{marginOfError95(row.championPct, probabilities?.iterations ?? 1).toFixed(1)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       {/* 결과 피드 — 방금 공개된 단계의 경기 + 순위 변동(월드컵 DayResultFeed와 동형) */}
       {feed && (feed.groupMatches.length > 0 || feed.koMatches.length > 0) && (

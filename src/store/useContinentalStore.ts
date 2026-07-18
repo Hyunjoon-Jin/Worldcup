@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import { CUP_FORMATS, type CupId } from '../data/continental/formats'
 import { runCup, type CupResult } from '../engine/continental/runCup'
 import { runCupQualification, type CupQualResult } from '../engine/continental/cupQualification'
-import { computeCupProbabilities, type CupProbabilities } from '../engine/continental/cupProbability'
+import { computeCupProbabilitiesLive, type CupProbabilities } from '../engine/continental/cupProbability'
 import { selectCupHosts } from '../engine/continental/hostSelection'
 import { baseRatingsMap, nationsByConfederation } from '../data/nations'
 import { generateSeed } from '../engine/rng'
@@ -32,6 +32,8 @@ interface ContinentalStore {
   qualResult: CupQualResult | null
   result: CupResult | null
   probabilities: CupProbabilities | null
+  /** 우승 확률 추이(단계별 스냅샷) — 월드컵 ProbabilityTrendChart와 동형. stage→팀별 우승% */
+  championTrend: Array<{ stage: number; byTeam: Record<string, number> }>
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
   stage: number
   /** 조추첨 공개 팀 수(0=아직 안 뽑음). 월드컵 조추첨처럼 팀을 하나씩 뽑는 연출용. field 크기에 도달하면 완료. */
@@ -65,6 +67,7 @@ export const useContinentalStore = create<ContinentalStore>()(
       qualResult: null,
       result: null,
       probabilities: null,
+      championTrend: [],
       stage: 0,
       drawRevealCount: 0,
       selectCup: (id, year = null) =>
@@ -76,6 +79,7 @@ export const useContinentalStore = create<ContinentalStore>()(
           qualResult: null,
           result: null,
           probabilities: null,
+          championTrend: [],
           seed: null,
           stage: 0,
           drawRevealCount: 0,
@@ -93,7 +97,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const result = runCup(format, field, ratings, hostIds, usedSeed)
         // 결과는 즉시 계산하되 조추첨(stage 0)부터 단계별로 공개한다(월드컵 '일정 진행'과 동형).
         // drawRevealCount=0 → 조추첨은 팀을 하나씩 뽑는 연출로 시작(월드컵 조추첨과 동형).
-        set({ seed: usedSeed, qualResult, result, probabilities: null, stage: 0, drawRevealCount: 0 })
+        set({ seed: usedSeed, qualResult, result, probabilities: null, championTrend: [], stage: 0, drawRevealCount: 0 })
         // 완주한 대회를 역대 기록에 축적(대회·시드 dedup). 팀 페이지 통산 성적에 반영.
         useContinentalHistoryStore.getState().record({
           cupId: activeCupId,
@@ -128,16 +132,24 @@ export const useContinentalStore = create<ContinentalStore>()(
         set({ stage: cupTotalStages(activeCupId) })
       },
       computeProbabilities: (iterations = CUP_PROB_ITERATIONS) => {
-        const { activeCupId, hostIds, result } = get()
+        const { activeCupId, hostIds, result, stage, championTrend } = get()
         if (!activeCupId || !result) return
         const format = CUP_FORMATS[activeCupId]
         const field = result.groups.flatMap((g) => g.teams)
         const ratings = baseRatingsMap(field)
         const seedBase = get().seed ?? 'CUP'
-        const probabilities = computeCupProbabilities(format, field, ratings, hostIds, iterations, `${seedBase}-PROB`)
-        set({ probabilities })
+        // 월드컵과 동일: 현재 공개된 결과(조별 revealedGroupMd차전·녹아웃 revealedKoRounds라운드)를 고정하고
+        // 남은 경기만 반복 시뮬레이션한 '실황 반영' 확률. 완주 시 100%/0%로 수렴한다.
+        const revealedGroupMd = Math.min(stage, 3)
+        const revealedKoRounds = Math.max(0, stage - 3)
+        const probabilities = computeCupProbabilitiesLive(format, result, revealedGroupMd, revealedKoRounds, ratings, hostIds, iterations, `${seedBase}-PROB-${stage}`)
+        // 우승 확률 추이 스냅샷(단계별, dedup) — 진행에 따라 축적돼 추이 차트에 쓰인다.
+        const championByTeam: Record<string, number> = {}
+        for (const id of field) championByTeam[id] = probabilities.byTeam[id]?.champion ?? 0
+        const trend = [...(championTrend ?? []).filter((t) => t.stage !== stage), { stage, byTeam: championByTeam }].sort((a, b) => a.stage - b.stage)
+        set({ probabilities, championTrend: trend })
       },
-      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, stage: 0, drawRevealCount: 0 }),
+      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, championTrend: [], stage: 0, drawRevealCount: 0 }),
     }),
     { name: 'wc2026-continental-store', version: 2 },
   ),

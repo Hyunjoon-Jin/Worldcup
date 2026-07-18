@@ -3,11 +3,33 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { ProbBar } from '../probability/ProbBar'
+import { CupProbabilityTrendChart } from './CupProbabilityTrendChart'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import type { CupProbabilities } from '../../engine/continental/cupProbability'
 import type { KnockoutRound } from '../../types/match'
+
+/** 최근 공개 경기 성적 기반 폼(월드컵 MomentumTag와 동형). */
+function MomentumTag({ value }: { value?: number }) {
+  if (value == null || Math.abs(value) < 2) return null
+  const rising = value > 0
+  return (
+    <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${rising ? 'bg-orange-500/20 text-orange-300' : 'bg-sky-500/20 text-sky-300'}`} title={`최근 성적 기반 폼 ${rising ? '+' : ''}${value}`}>
+      {rising ? '🔥 상승세' : '🥶 하락세'}
+    </span>
+  )
+}
+
+/** 조별 통과 확률 50% 미만이면 위기(월드컵 CrisisTag와 동형). */
+function CrisisTag({ pct }: { pct?: number }) {
+  if (pct == null || pct >= 50) return null
+  return (
+    <span className="shrink-0 rounded bg-red-500/20 px-1 py-0.5 text-[9px] font-bold text-red-300" title={`조별 통과 확률 ${pct.toFixed(1)}% (50% 미만)`}>
+      🚨 위기
+    </span>
+  )
+}
 
 const ROUND_LABEL: Record<string, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위', FINAL: '결승' }
 // 월드컵 확률 대시보드(probabilityStages)와 동일한 색 팔레트 — 라운드가 진행될수록 짙은 파랑, 우승은 최심.
@@ -29,10 +51,14 @@ export function CupProbabilityView({
   probabilities,
   chainRounds,
   onRefresh,
+  momentumByTeam,
+  trend = [],
 }: {
   probabilities: CupProbabilities
   chainRounds: KnockoutRound[]
   onRefresh: (iterations?: number) => void
+  momentumByTeam?: Record<string, number>
+  trend?: Array<{ stage: number; byTeam: Record<string, number> }>
 }) {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const liveRank = useLiveRankLookup()
@@ -40,6 +66,8 @@ export function CupProbabilityView({
 
   // 체인 컬럼: 각 녹아웃 라운드 도달(3·4위전 제외, 첫 라운드=조별 통과) + 우승. (월드컵 CHAIN과 동형)
   const rounds = chainRounds.filter((r) => r !== 'THIRD')
+  const firstRound = rounds[0]
+  const groupPassOf = (id: string) => (firstRound ? probabilities.byTeam[id]?.reach[firstRound] ?? 0 : 0)
   const columns: { key: SortKey; label: string; color: string }[] = [
     ...rounds.map((r, i) => ({ key: r as SortKey, label: ROUND_LABEL[r] ?? r, color: ROUND_GRADIENT[Math.min(i, ROUND_GRADIENT.length - 1)] })),
     { key: 'champion' as SortKey, label: '우승', color: CHAMPION_COLOR },
@@ -87,6 +115,8 @@ export function CupProbabilityView({
         </div>
       </GlassCard>
 
+      <CupProbabilityTrendChart trend={trend} />
+
       {/* 데스크톱: 정렬 가능한 전체 표 */}
       <GlassCard className="hidden p-4 sm:block">
         <div className="overflow-x-auto">
@@ -115,6 +145,8 @@ export function CupProbabilityView({
                     <div className="flex items-center gap-1.5">
                       {myTeamId === id && <span title="내 팀">⭐</span>}
                       <TeamLink teamId={id} className="font-medium whitespace-nowrap text-gray-100" />
+                      <MomentumTag value={momentumByTeam?.[id]} />
+                      <CrisisTag pct={groupPassOf(id)} />
                     </div>
                   </td>
                   <td className="py-1.5 text-right text-gray-500">{liveRank(id, ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999)}위</td>
@@ -151,6 +183,8 @@ export function CupProbabilityView({
               {myTeamId === id && <span title="내 팀">⭐</span>}
               <TeamLink teamId={id} className="min-w-0 font-medium text-gray-100" />
               <span className="shrink-0 text-[10px] text-gray-500">FIFA {liveRank(id, ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999)}위</span>
+              <MomentumTag value={momentumByTeam?.[id]} />
+              <CrisisTag pct={groupPassOf(id)} />
             </div>
             <div className="space-y-1">
               {columns.map((c) => (
