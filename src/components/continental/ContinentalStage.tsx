@@ -11,6 +11,7 @@ import { CupBracketView } from './CupBracketView'
 import { CupDrawCeremony } from './CupDrawCeremony'
 import { CupProbabilityView } from './CupProbabilityView'
 import { ContinentalGroupsView } from './ContinentalGroupsView'
+import { ContinentalProgressView } from './ContinentalProgressView'
 import type { KnockoutRound } from '../../types/match'
 
 const ROUND_LABEL: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
@@ -76,8 +77,6 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
   const probabilities = useContinentalStore((s) => s.probabilities)
   const stage = useContinentalStore((s) => s.stage)
   const drawRevealCount = useContinentalStore((s) => s.drawRevealCount)
-  const advanceStage = useContinentalStore((s) => s.advanceStage)
-  const advanceToEnd = useContinentalStore((s) => s.advanceToEnd)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
@@ -93,15 +92,6 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
   const revealedGroupMd = Math.min(stage, 3)
   const revealedKoRounds = Math.max(0, stage - 3)
   const fullyRevealed = result != null && stage >= totalStages
-  const stageLabel = ((): string => {
-    if (!result || !format) return ''
-    if (stage === 0) return '조추첨 완료 — 조편성 공개'
-    if (stage <= 3) return `조별리그 ${stage}차전`
-    const koIdx = stage - 4
-    const r = format.knockout[koIdx]
-    return r ? `녹아웃 — ${ROUND_LABEL[r]}` : '대회 종료'
-  })()
-
 
   // 확률 탭을 열면 버튼 없이 자동으로 진출 체인 확률을 계산한다(아직 계산 전이면).
   useEffect(() => {
@@ -194,30 +184,11 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
         </GlassCard>
       ) : (
         <>
-          {/* 진행·일정: 단계별 진행 컨트롤 (월드컵 '일정 진행'과 동형) + 예선 요약 */}
+          {/* 일정 진행: 월드컵 ScheduleStage와 동형(상태·타임라인·다음경기·결과피드·통계·우승) + 예선 요약 */}
           {view === 'progress' && (
             <>
-              <GlassCard strong className="p-5">
-                <p className="mb-2 text-center text-sm font-semibold text-white">{fullyRevealed ? '✅ 대회 종료' : `🗓 ${stageLabel}`}</p>
-                <div className="mx-auto mb-1 h-2 max-w-md overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-[width]" style={{ width: `${Math.round((stage / totalStages) * 100)}%` }} />
-                </div>
-                <p className="mb-3 text-center text-[10px] text-gray-500">{stage} / {totalStages} 단계</p>
-                {!fullyRevealed && (
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <GlassButton onClick={advanceStage}>▶ 다음 단계 진행</GlassButton>
-                    <GlassButton variant="ghost" onClick={advanceToEnd}>⏭ 끝까지 진행</GlassButton>
-                  </div>
-                )}
-              </GlassCard>
+              <ContinentalProgressView result={result} format={format} />
               <QualSummaryCard />
-              {fullyRevealed && (
-                <GlassCard strong className="p-5 text-center">
-                  <p className="text-[11px] text-gray-400">🏆 우승</p>
-                  <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
-                  <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
-                </GlassCard>
-              )}
             </>
           )}
 

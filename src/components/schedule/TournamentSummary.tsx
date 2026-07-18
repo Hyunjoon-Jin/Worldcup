@@ -19,17 +19,30 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
   )
 }
 
-/** 대회 통계(D6)와 명장면 피드(D5)를 요약해 보여준다. 진행된 경기가 있을 때만 표시된다. */
-export function TournamentSummary() {
-  const groupMatches = useProgressStore((s) => s.groupMatches)
-  const knockoutSlots = useProgressStore((s) => s.knockoutSlots)
-  const champion = useProgressStore((s) => s.champion)
+interface TournamentSummaryProps {
+  /** 외부(대륙컵 등) 데이터로 렌더할 때 넘긴다. 미지정 시 월드컵 진행 스토어에서 읽는다. */
+  groupMatches?: import('../../types/match').GroupMatch[]
+  knockoutMatches?: KnockoutMatch[]
+  champion?: string | null
+}
+
+/** 대회 통계(D6)와 명장면 피드(D5)를 요약해 보여준다. 진행된 경기가 있을 때만 표시된다.
+ *  월드컵은 진행 스토어에서, 대륙컵은 공개된 결과를 props로 넘겨 동일 UI로 렌더한다. */
+export function TournamentSummary(props: TournamentSummaryProps = {}) {
+  const storeGroupMatches = useProgressStore((s) => s.groupMatches)
+  const storeKnockoutSlots = useProgressStore((s) => s.knockoutSlots)
+  const storeChampion = useProgressStore((s) => s.champion)
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
+  const external = props.groupMatches != null || props.knockoutMatches != null
+  const groupMatches = props.groupMatches ?? storeGroupMatches
+  const champion = external ? props.champion ?? null : storeChampion
 
   const { stats, highlights, achievements } = useMemo(() => {
-    const koMatches = Object.values(knockoutSlots)
-      .map((s) => s.result)
-      .filter((r): r is KnockoutMatch => r != null)
+    const koMatches = props.knockoutMatches
+      ? props.knockoutMatches
+      : Object.values(storeKnockoutSlots)
+          .map((s) => s.result)
+          .filter((r): r is KnockoutMatch => r != null)
     const statMatches = toStatMatches(groupMatches, koMatches)
     const stats = computeTournamentStats(statMatches)
     const highlights = computeHighlights(statMatches)
@@ -43,7 +56,7 @@ export function TournamentSummary() {
       championResults,
     })
     return { stats, highlights, achievements }
-  }, [groupMatches, knockoutSlots, champion, myTeamId])
+  }, [groupMatches, props.knockoutMatches, storeKnockoutSlots, champion, myTeamId])
 
   if (stats.totalMatches === 0) return null
 
