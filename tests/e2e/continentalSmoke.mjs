@@ -49,9 +49,13 @@ try {
     await modal.first().waitFor({ state: 'hidden', timeout: 5000 })
   }
   // 다음 일정이 대륙컵으로 다가왔다 — 상단 버튼이 '조추첨 진행하기'로 바뀌고, 클릭 시 대륙컵 조추첨 탭으로 이동한다.
+  // 조추첨 탭은 월드컵처럼 팀을 하나씩 뽑는 연출로 진입한다(전체 공개로 조편성 확정).
   await page.getByRole('button', { name: /조추첨 진행하기/ }).first().click()
+  await page.getByRole('button', { name: /다음 국가 뽑기|전체 공개/ }).first().waitFor({ timeout: 10000 })
+  assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 연출(하위탭)에 진입한다")
+  await page.getByRole('button', { name: '⏭ 전체 공개' }).click()
   await page.getByText('본선 조편성', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 하위탭에 진입한다")
+  assert(true, '전체 공개 시 본선 조편성이 확정 표시된다')
 
   // 진행·일정 하위탭 → 끝까지 진행 → 우승 확정
   await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
@@ -66,8 +70,9 @@ try {
   // 확률 계산(헤더 버튼) → 확률 하위탭에서 표시
   await page.getByRole('button', { name: '📊 우승 확률 계산' }).click()
   await page.getByRole('tab', { name: '확률', exact: true }).click()
-  await page.getByText('진출 체인 확률', { exact: false }).waitFor({ timeout: 15000 })
-  assert(true, '진출 체인 확률이 계산·표시된다')
+  // 월드컵 확률 대시보드와 동형: 조별통과~우승 막대 + 몬테카를로 회수 + 새로고침.
+  await page.getByText('몬테카를로 시뮬레이션', { exact: false }).waitFor({ timeout: 15000 })
+  assert(await page.getByRole('button', { name: '🔄 새로고침' }).isVisible(), '진출 체인 확률 대시보드가 계산·표시된다')
 
   // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (진행·일정 탭의 우승팀 클릭)
   await page.getByRole('tab', { name: '진행·일정', exact: true }).click()

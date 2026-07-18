@@ -37,6 +37,7 @@ export function simulateConfederation(
   rand: RandomFn,
   locked?: LockedLookup,
   hostIds: string[] = DEFAULT_HOST_IDS,
+  seedRank?: Record<string, number>,
 ): QualificationResult {
   const hostSet = new Set(hostIds)
   const allConfedTeams = nationsByConfederation(confed).map((t) => t.id)
@@ -46,11 +47,12 @@ export function simulateConfederation(
   const direct = Math.max(0, slots.direct - hostsInConfed)
 
   // 다단계·플레이오프 구조 대륙은 전용 엔진으로 실제 라운드 구성을 재현한다 (A3·A4·B14).
-  if (confed === 'AFC') return simulateAfc(teams, ratings, rand, locked, direct)
-  if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand, locked, direct)
-  if (confed === 'UEFA') return simulateUefa(teams, ratings, rand, locked, direct)
-  if (confed === 'CAF') return simulateCaf(teams, ratings, rand, locked, direct)
-  if (confed === 'OFC') return simulateOfc(teams, ratings, rand, locked, direct)
+  // seedRank(이월 FIFA 순위)로 예선 진입 시딩을 정한다 — 랭킹이 오르면 예비 라운드를 건너뛴다.
+  if (confed === 'AFC') return simulateAfc(teams, ratings, rand, locked, direct, seedRank)
+  if (confed === 'CONCACAF') return simulateConcacaf(teams, ratings, rand, locked, direct, seedRank)
+  if (confed === 'UEFA') return simulateUefa(teams, ratings, rand, locked, direct, seedRank)
+  if (confed === 'CAF') return simulateCaf(teams, ratings, rand, locked, direct, seedRank)
+  if (confed === 'OFC') return simulateOfc(teams, ratings, rand, locked, direct, seedRank)
   // 단일 조별 스테이지 대륙: 포맷(조 수·홈&어웨이)은 QUAL_FORMAT, 슬롯은 SLOT_ALLOCATION에서 (C4).
   const fmt = QUAL_FORMAT[confed]
   if (fmt.kind !== 'groups') throw new Error(`조별 포맷이 아닌 대륙: ${confed}`)
@@ -74,6 +76,7 @@ export function simulateAllQualification(
   ratings: Record<string, TeamRatings> = baseRatingsMap(ALL_NATIONS.map((t) => t.id)),
   lockedByConfed?: Record<string, LockedLookup>,
   hostIds: string[] = DEFAULT_HOST_IDS,
+  seedRank?: Record<string, number>,
 ): AllQualificationResult {
   // 개최국은 소속 대륙 직행 슬롯을 대신 차지하므로, 반드시 어느 대륙에든 실존하는 팀이어야 48 정합성이
   // 유지된다. 대륙에 없는 ID(오타 등)를 걸러내, 슬롯 감소 없이 필드가 49로 늘어나는 것을 방지한다.
@@ -85,7 +88,7 @@ export function simulateAllQualification(
 
   for (const confed of CONFEDERATIONS) {
     const rand = createSeededRandom(`${seed}-${confed}`)
-    const r = simulateConfederation(confed, ratings, rand, lockedByConfed?.[confed], validHostIds)
+    const r = simulateConfederation(confed, ratings, rand, lockedByConfed?.[confed], validHostIds, seedRank)
     byConfederation[confed] = r
     directQualified.push(...r.qualified)
     playoffTeams.push(...r.playoff)

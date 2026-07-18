@@ -1,16 +1,10 @@
-import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { QUALIFIER_HOME_ADVANTAGE } from '../config'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
-import { playSingleGroup, snakeSeed, type LockedLookup } from './generic'
+import { playSingleGroup, snakeSeed, seedComparator, type LockedLookup } from './generic'
 import { QUAL_FORMAT, GROUP_LETTERS, type AfcFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
-
-const byRank = (a: string, b: string) => {
-  const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
-  return rd !== 0 ? rd : a.localeCompare(b) // 랭킹 동률 시 팀ID로 결정성 확보
-}
 
 /**
  * AFC 다단계 예선 (A3 · 1·2차 예비예선 포함). 실제 2026 아시아 예선 5라운드 구조를 재현한다.
@@ -27,8 +21,11 @@ export function simulateAfc(
   rand: RandomFn,
   locked?: LockedLookup,
   directSlots: number = SLOT_ALLOCATION.AFC.direct,
+  seedRank?: Record<string, number>,
 ): QualificationResult {
   const fmt = QUAL_FORMAT.AFC as AfcFormat
+  // 시드는 이월 FIFA 순위(seedRank) 순 — 커리어에서 랭킹이 오르면 예선 진입 라운드(1차 예비예선)를 건너뛴다.
+  const byRank = seedComparator(seedRank)
   const sorted = [...teams].sort(byRank)
 
   const allMatches: QualMatch[] = []

@@ -25,6 +25,7 @@ export function createQualProbAccumulator(
   ratings?: Record<string, TeamRatings>,
   lockedByConfed?: Record<string, LockedLookup>,
   hostIds?: string[],
+  seedRank?: Record<string, number>,
 ) {
   const counts: Record<string, number> = {}
   // 차수 도달 집계: teamId -> 차수이름 -> 횟수
@@ -74,7 +75,7 @@ export function createQualProbAccumulator(
     },
     runBatch(n: number): void {
       for (let i = 0; i < n; i++) {
-        const res = simulateAllQualification(`${seedBase}-${done + i}`, ratings, lockedByConfed, hostIds)
+        const res = simulateAllQualification(`${seedBase}-${done + i}`, ratings, lockedByConfed, hostIds, seedRank)
         if (done + i === 0) seedUniverse(res)
         for (const id of res.qualified48) counts[id] = (counts[id] ?? 0) + 1
         tallyStages(res)

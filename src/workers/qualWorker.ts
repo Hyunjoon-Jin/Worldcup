@@ -11,6 +11,8 @@ interface RunMessage {
   locked?: Record<string, LockedMatchData[]>
   /** 현재 대회 개최국(커리어 모드 — 대회마다 개최국이 바뀜). 없으면 기본(2026) 개최국. */
   hostIds?: string[]
+  /** 예선 시딩용 이월 FIFA 순위(사이클 시작 시점). 실제 예선과 동일하게 넘겨 구조 정합성을 유지. */
+  seedRank?: Record<string, number>
 }
 
 export type QualWorkerOut =
@@ -20,9 +22,9 @@ export type QualWorkerOut =
 const BATCH = 20
 
 self.onmessage = (e: MessageEvent<RunMessage>) => {
-  const { seedBase, ratings, iterations, locked, hostIds } = e.data
+  const { seedBase, ratings, iterations, locked, hostIds, seedRank } = e.data
   const lockedByConfed = locked ? buildLockedLookups(locked) : undefined
-  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed, hostIds)
+  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed, hostIds, seedRank)
   while (acc.done < iterations) {
     acc.runBatch(Math.min(BATCH, iterations - acc.done))
     ;(self as unknown as Worker).postMessage({ type: 'progress', progress: acc.done / iterations })
