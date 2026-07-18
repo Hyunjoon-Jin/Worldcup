@@ -3,6 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
+import { cupRankByTeam } from '../../store/seasonActions'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
 import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
@@ -234,7 +235,7 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
             aria-label="대회 시드"
             className="w-32 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-gray-500 focus:border-emerald-400/50 focus:outline-none"
           />
-          <GlassButton onClick={() => runActiveCup({ seed: seedInput })}>⚽ 대회 시뮬레이션</GlassButton>
+          <GlassButton onClick={() => runActiveCup({ seed: seedInput, rankByTeam: cupRankByTeam(activeCupId) })}>⚽ 대회 시뮬레이션</GlassButton>
           {result && <GlassButton variant="ghost" onClick={() => computeProbabilities()}>📊 우승 확률 계산</GlassButton>}
         </div>
         {seed && <p className="mt-2 text-[11px] text-gray-500">시드: <span className="font-mono text-emerald-300">{seed}</span></p>}

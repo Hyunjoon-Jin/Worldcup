@@ -123,8 +123,14 @@ export function buildCupPhases(cupId: CupId, editionYear: number): EventPhase[] 
     const d = addDays(start, off - 1)
     phases.push({ key: round, label: ROUND_LABEL_KO[round], start: d, end: d })
   }
+  // 조추첨: 개막 3주 전. 캘린더에 조추첨 일정을 명시한다(가장 이른 단계이므로 맨 앞).
+  const drawDate = addDays(start, -DRAW_DAYS_BEFORE)
+  phases.unshift({ key: 'DRAW', label: '조추첨', start: drawDate, end: drawDate })
   return phases
 }
+
+/** 조추첨은 대회 개막 며칠 전에 열리는가(대륙컵). 캘린더 표시·진행 게이팅 공용. */
+export const DRAW_DAYS_BEFORE = 21
 
 /** 월드컵 한 에디션을 지역예선(전년~) + 조별리그 + 녹아웃 라운드창으로 전개한다. 캘린더가 예선부터 시작한다. */
 export function buildWcPhases(wcYear: number): EventPhase[] {
@@ -134,7 +140,10 @@ export function buildWcPhases(wcYear: number): EventPhase[] {
     const d = qualWindowDate(w, wcYear)
     phases.push({ key: `Q${w + 1}`, label: `지역예선 ${w + 1}차`, start: d, end: d })
   }
-  phases.push({ key: 'GROUP', label: '조별리그', start: shiftFinalsYear(GROUP_STAGE_START, wcYear), end: shiftFinalsYear(GROUP_STAGE_END, wcYear) })
+  // 본선 조추첨: 개막 6주 전(예선 종료 후). 캘린더에 조추첨 일정을 명시한다.
+  const groupStart = shiftFinalsYear(GROUP_STAGE_START, wcYear)
+  phases.push({ key: 'DRAW', label: '본선 조추첨', start: addDays(groupStart, -42), end: addDays(groupStart, -42) })
+  phases.push({ key: 'GROUP', label: '조별리그', start: groupStart, end: shiftFinalsYear(GROUP_STAGE_END, wcYear) })
   for (const r of ['R32', 'R16', 'QF', 'SF', 'THIRD', 'FINAL'] as KnockoutRound[]) {
     const w = ROUND_DATE_WINDOWS[r]
     phases.push({ key: r, label: w.label, start: shiftFinalsYear(w.start, wcYear), end: shiftFinalsYear(w.end, wcYear) })

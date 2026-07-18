@@ -8,8 +8,8 @@ import { DebugPanel } from './components/common/DebugPanel'
 import { OnboardingOverlay } from './components/common/OnboardingOverlay'
 
 // 탭별 화면은 지연 로딩해 초기 번들 크기를 줄인다 (B5).
-const QualificationStage = lazy(() =>
-  import('./components/qualification/QualificationStage').then((m) => ({ default: m.QualificationStage })),
+const QualificationTab = lazy(() =>
+  import('./components/qualification/QualificationTab').then((m) => ({ default: m.QualificationTab })),
 )
 const WorldCupTab = lazy(() => import('./components/worldcup/WorldCupTab').then((m) => ({ default: m.WorldCupTab })))
 const FriendliesTab = lazy(() => import('./components/friendlies/FriendliesTab').then((m) => ({ default: m.FriendliesTab })))
@@ -57,9 +57,17 @@ function App() {
   // 캘린더의 '실황 보기'에서 월드컵으로 진입: 조추첨 이후면 본선(월드컵), 아니면 월드컵 지역예선으로.
   const enterWC = () => setTab(useDrawStore.getState().isComplete ? 'worldcup' : 'qualifiers')
   const enterCup = (id: CupId, year: number) => {
-    useContinentalStore.getState().selectCup(id, year)
+    // 이미 진행 중인 그 대회면 다시 selectCup하지 않는다(selectCup은 결과를 초기화하므로, '실황 보기'로
+    // 들어올 때 캘린더가 돌려놓은 결과·통합예선 반영이 날아가지 않게 한다).
+    const cs = useContinentalStore.getState()
+    if (cs.activeCupId !== id || cs.cupYear !== year) cs.selectCup(id, year)
     setTab('continental')
   }
+  // 캘린더의 '조추첨 진행하기' → 해당 대회 탭의 조추첨 하위탭으로 이동(신호를 올려 하위탭이 조추첨으로 전환).
+  const [wcDrawSignal, setWcDrawSignal] = useState(0)
+  const [cupDrawSignal, setCupDrawSignal] = useState(0)
+  const enterWCDraw = () => { setTab('worldcup'); setWcDrawSignal((s) => s + 1) }
+  const enterCupDraw = (id: CupId, year: number) => { enterCup(id, year); setCupDrawSignal((s) => s + 1) }
   const visibleTabs = TOP_TABS
   // 새로고침/재방문으로 저장된 대회를 이어가는 경우에만 안내 배너를 띄운다.
   const [showResume, setShowResume] = useState(() => useDrawStore.getState().isComplete)
@@ -179,17 +187,18 @@ function App() {
           <TeamDetailPage />
         ) : (
           <>
-            {tab === 'season' && <SeasonHome onNavigateWC={enterWC} onSelectCup={enterCup} />}
+            {tab === 'season' && <SeasonHome onNavigateWC={enterWC} onSelectCup={enterCup} onNavigateWCDraw={enterWCDraw} onNavigateCupDraw={enterCupDraw} />}
             {tab === 'friendlies' && <FriendliesTab />}
             {tab === 'cupqual' && <CupQualificationTab />}
-            {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('worldcup')} />}
-            {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} />}
+            {tab === 'qualifiers' && <QualificationTab onStartFinals={() => setTab('worldcup')} />}
+            {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} openDrawSignal={cupDrawSignal} />}
             {tab === 'worldcup' && (
               <WorldCupTab
                 onNextEdition={() => {
                   advanceToNextEdition()
                   setTab('qualifiers')
                 }}
+                openDrawSignal={wcDrawSignal}
               />
             )}
             {tab === 'myteam' && <MyTeamTab />}

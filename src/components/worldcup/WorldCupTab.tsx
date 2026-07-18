@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SubTabNav } from '../layout/SubTabNav'
 import { DrawStage } from '../draw/DrawStage'
 import { ScheduleStage } from '../schedule/ScheduleStage'
@@ -15,11 +15,13 @@ type WcSub = 'draw' | 'schedule' | 'groups' | 'knockout' | 'probability'
  * '월드컵'(본선) 최상위 탭. 조추첨→일정 진행→조별리그→토너먼트→확률 대시보드를 하위 탭으로 묶는다.
  * 예전엔 이 상세 화면들이 최상위 탭에 흩어져 월드컵 중심의 잘못된 IA였는데, 여기로 모아 계층을 바로잡는다.
  */
-export function WorldCupTab({ onNextEdition }: { onNextEdition: () => void }) {
+export function WorldCupTab({ onNextEdition, openDrawSignal }: { onNextEdition: () => void; openDrawSignal?: number }) {
   const hasDrawField = useDrawStore((s) => s.fieldTeams !== null || s.isComplete)
   const isDrawComplete = useDrawStore((s) => s.isComplete)
   const hasQualResult = useQualificationStore((s) => s.result !== null)
   const [sub, setSub] = useState<WcSub>('draw')
+  // 캘린더 '조추첨 진행하기'로 진입하면 조추첨 하위탭으로 전환한다.
+  useEffect(() => { if (openDrawSignal) setSub('draw') }, [openDrawSignal])
 
   const disabled: Record<WcSub, boolean> = {
     draw: !hasDrawField,
