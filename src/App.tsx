@@ -4,6 +4,7 @@ import { AppShell } from './components/layout/AppShell'
 import { Header } from './components/layout/Header'
 import { TabNav } from './components/layout/TabNav'
 import { MatchDetailModal } from './components/common/MatchDetailModal'
+import { useMatchDetailStore } from './store/useMatchDetailStore'
 import { DebugPanel } from './components/common/DebugPanel'
 import { OnboardingOverlay } from './components/common/OnboardingOverlay'
 
@@ -103,6 +104,7 @@ function App() {
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < visibleTabs.length) {
         clearTeam()
+        useMatchDetailStore.getState().clearMatch() // 탭 이동 시 열려 있던 경기 상세 모달을 닫는다
         setTab(visibleTabs[idx])
       }
     }
@@ -204,6 +206,7 @@ function App() {
           active={tab}
           onChange={(id) => {
             clearTeam()
+            useMatchDetailStore.getState().clearMatch() // 탭 이동 시 열려 있던 경기 상세 모달을 닫는다
             setTab(id as TabId)
           }}
         />

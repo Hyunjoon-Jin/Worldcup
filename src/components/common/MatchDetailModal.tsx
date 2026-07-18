@@ -188,6 +188,16 @@ export function MatchDetailModal() {
   const allGroupMatches = useProgressStore((s) => s.groupMatches)
   const { pointsByTeam, rankByTeam } = useLiveFifaRanking()
 
+  // Esc로 모달을 닫는다(접근성). 백드롭 클릭·✕ 버튼과 동일 동작.
+  useEffect(() => {
+    if (!selected) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearMatch()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected, clearMatch])
+
   const homeTeamId = selected ? (selected.kind === 'upcoming' ? selected.homeTeamId : selected.match.homeTeamId) : null
   const awayTeamId = selected ? (selected.kind === 'upcoming' ? selected.awayTeamId : selected.match.awayTeamId) : null
 

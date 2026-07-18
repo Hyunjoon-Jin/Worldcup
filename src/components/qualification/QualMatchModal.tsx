@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { FlagIcon } from '../common/FlagIcon'
 import { getRatings } from '../../engine/matchEngine'
@@ -20,6 +21,12 @@ export function QualMatchModal({ match, onClose }: { match: MatchResult; onClose
   const home = ALL_NATIONS_BY_ID[match.homeTeamId]
   const away = ALL_NATIONS_BY_ID[match.awayTeamId]
   const liveRank = useLiveRankLookup()
+  // Esc로 닫기(접근성). 백드롭 클릭·✕ 버튼과 동일.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   if (!home || !away) return null
   const hr = getRatings(match.homeTeamId)
   const ar = getRatings(match.awayTeamId)
