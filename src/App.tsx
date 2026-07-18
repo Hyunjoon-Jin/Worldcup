@@ -57,7 +57,10 @@ function App() {
   // 캘린더의 '실황 보기'에서 월드컵으로 진입: 조추첨 이후면 본선(월드컵), 아니면 월드컵 지역예선으로.
   const enterWC = () => setTab(useDrawStore.getState().isComplete ? 'worldcup' : 'qualifiers')
   const enterCup = (id: CupId, year: number) => {
-    useContinentalStore.getState().selectCup(id, year)
+    // 이미 진행 중인 그 대회면 다시 selectCup하지 않는다(selectCup은 결과를 초기화하므로, '실황 보기'로
+    // 들어올 때 캘린더가 돌려놓은 결과·통합예선 반영이 날아가지 않게 한다).
+    const cs = useContinentalStore.getState()
+    if (cs.activeCupId !== id || cs.cupYear !== year) cs.selectCup(id, year)
     setTab('continental')
   }
   const visibleTabs = TOP_TABS
