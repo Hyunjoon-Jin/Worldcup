@@ -8,7 +8,10 @@ import { startFinalsFromQualification, advanceToNextEdition } from './tournament
 import { formOffsetsFromResults } from '../engine/qualification/ranking'
 import { buildSeasonTimeline, type SeasonEvent } from '../engine/season/seasonTimeline'
 import { combinedCupDirectQualified } from '../engine/continental/combinedQual'
-import { type CupId } from '../data/continental/formats'
+import { selectCupParticipants } from '../engine/continental/participants'
+import { selectCupHosts } from '../engine/continental/hostSelection'
+import { CUP_FORMATS, type CupId } from '../data/continental/formats'
+import { ALL_NATIONS_BY_ID } from '../data/nations'
 
 /**
  * 일정(캘린더) 축 진행 액션. 앱은 '월드컵'이 아니라 '일정'을 축으로 전진한다 — 이 모듈은 캘린더 위의
@@ -98,6 +101,20 @@ export function autoSimulateCup(cupId: CupId, year: number, seed?: string): void
 export function autoSimulateSeasonEvent(e: SeasonEvent): void {
   if (e.kind === 'wc') autoSimulateWorldCupFinals(`WC-${e.year}`)
   else autoSimulateCup(e.id as CupId, e.year, `${e.id}-${e.year}`)
+}
+
+/**
+ * 내 팀이 그 대륙컵 본선에 참가하는지 판정한다(내 팀 중심 진행에서 '건너뛸 대회'를 가리는 용도).
+ * 자동 시뮬과 동일한 입력(개최국 시드·캠페인 랭킹)으로 참가국 필드를 산출해 실제 참가 여부와 일치시킨다.
+ * 내 소속 연맹이 그 대회 참가 연맹이 아니면 즉시 false.
+ */
+export function myTeamInCup(myTeamId: string, cupId: CupId, year: number): boolean {
+  const fmt = CUP_FORMATS[cupId]
+  const confed = ALL_NATIONS_BY_ID[myTeamId]?.confederation
+  if (!confed || !fmt.confeds.includes(confed)) return false
+  const hosts = selectCupHosts(fmt, `${cupId}-${year}`)
+  const field = selectCupParticipants(fmt, cupRankByTeam(cupId) ?? {}, hosts)
+  return field.includes(myTeamId)
 }
 
 /**

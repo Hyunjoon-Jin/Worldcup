@@ -18,10 +18,13 @@ interface MyTeamStore {
   myTeamId: string | null
   /** 내 팀에 적용할 능력치 버프(0=없음). 시뮬레이션 전반(예선·본선·확률)에 반영된다. */
   buff: MyTeamBuff
+  /** 내 팀 중심 진행 — 내 팀이 참가하지 않는 대회(대륙컵 등)는 자동 시뮬레이션으로 넘긴다(기본 켜짐). */
+  autoSkipOthers: boolean
   setMyTeam: (teamId: string) => void
   toggleMyTeam: (teamId: string) => void
   clearMyTeam: () => void
   setBuff: (buff: MyTeamBuff) => void
+  setAutoSkipOthers: (on: boolean) => void
 }
 
 /**
@@ -34,10 +37,12 @@ export const useMyTeamStore = create<MyTeamStore>()(
     (set, get) => ({
       myTeamId: null,
       buff: 0,
+      autoSkipOthers: true,
       setMyTeam: (teamId) => set({ myTeamId: teamId }),
       toggleMyTeam: (teamId) => set({ myTeamId: get().myTeamId === teamId ? null : teamId }),
       clearMyTeam: () => set({ myTeamId: null }),
       setBuff: (buff) => set({ buff }),
+      setAutoSkipOthers: (on) => set({ autoSkipOthers: on }),
     }),
     { name: 'wc2026-myteam-store', version: 2 },
   ),
