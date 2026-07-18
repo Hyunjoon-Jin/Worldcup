@@ -250,7 +250,7 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
               />
             ) : (
               <GlassCard className="p-8 text-center text-[11px] text-gray-500">
-                📊 진출·우승 확률을 계산하고 있어요… <span className="mt-2 block"><GlassButton onClick={() => computeProbabilities()}>📊 우승 확률 계산</GlassButton></span>
+                📊 진출·우승 확률을 계산하고 있어요…
               </GlassCard>
             )
           )}
