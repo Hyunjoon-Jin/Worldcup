@@ -324,6 +324,16 @@ describe('성적 반영 능력치 보정 (overallDeltasFromResults)', () => {
     expect(vals.some((v) => v > 0)).toBe(true)
     expect(vals.some((v) => v < 0)).toBe(true)
   })
+
+  it('성적이 대부분의 팀 능력치에 반영된다(예전처럼 2/3가 0으로 뭉개지지 않음)', () => {
+    const all = simulateAllQualification('PERF-COVERAGE')
+    const played = Object.values(all.byConfederation).flatMap((r) => r.matches)
+    const deltas = overallDeltasFromResults(all, played)
+    const vals = Object.values(deltas)
+    const nonzero = vals.filter((v) => v !== 0).length
+    // 점수 변동을 직접 환산하므로 참가국의 과반이 성적에 따른 보정을 받는다.
+    expect(nonzero / vals.length).toBeGreaterThan(0.6)
+  })
 })
 
 describe('실시간 FIFA 랭킹 + 변동 추이', () => {

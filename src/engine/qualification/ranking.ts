@@ -408,21 +408,29 @@ export function computeLiveRanking(
  * 종합 능력치 차이로 환산해, 잘 나가면 살짝 오르고 부진하면 살짝 내려가게 한다.
  * played를 진행된 경기까지만 넘기면 실황(일별 진행)까지 반영된다.
  */
+/** Elo 점수 변동 1점당 능력치 보정(성적 반영 민감도). 순위 파생·이중 반올림으로 대부분의 팀이 0이 되던
+ * 문제를 없애, 성적에 따라 능력치가 눈에 띄게 오르내리도록 점수 변동을 직접 환산한다. */
+const OVERALL_PER_ELO_POINT = 0.1
+
+/**
+ * 진행된 예선 성적(FIFA Elo 점수 변동)을 능력치 보정으로 환산한다. 잘하면(점수 상승) 능력치가 오르고
+ * 부진하면(점수 하락) 내려간다. 평균 기대만큼 한 팀(점수 변동 ≈ 0)은 0으로 유지된다.
+ * 예전엔 순위 파생 overall의 차이를 이중 반올림해 약 2/3의 팀이 0으로 뭉개졌는데, 점수 변동을 직접
+ * 환산해 대부분의 팀이 성적에 비례한 보정을 받는다.
+ */
 export function overallDeltasFromResults(
   all: AllQualificationResult,
   played: QualMatch[],
-  maxDelta = 5,
+  maxDelta = 6,
 ): Record<string, number> {
   const ids = qualParticipantIds(all)
   const base = initRankingPoints(ids)
   const now = updateRankingPoints(base, played)
   const out: Record<string, number> = {}
   for (const id of ids) {
-    const nation = ALL_NATIONS_BY_ID[id]
-    if (!nation) continue
-    const newOverall = ratingsFromRank(effectiveRankFromPoints(now[id])).overall
-    const delta = Math.round(newOverall - nation.baseRatings.overall)
-    out[id] = Math.max(-maxDelta, Math.min(maxDelta, delta))
+    if (!ALL_NATIONS_BY_ID[id]) continue
+    const dPoints = (now[id] ?? 0) - (base[id] ?? 0)
+    out[id] = Math.max(-maxDelta, Math.min(maxDelta, Math.round(dPoints * OVERALL_PER_ELO_POINT)))
   }
   return out
 }
