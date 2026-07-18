@@ -2,22 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
-import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
+import { useContinentalStore } from '../../store/useContinentalStore'
 import { CUP_FORMATS } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
-import { buildCupPhases } from '../../engine/season/seasonTimeline'
-import { BASE_FINALS_YEAR, formatKoreanDate } from '../../data/calendar'
 import { CupBracketView } from './CupBracketView'
 import { CupDrawCeremony } from './CupDrawCeremony'
 import { CupProbabilityView } from './CupProbabilityView'
 import { ContinentalGroupsView } from './ContinentalGroupsView'
 import { ContinentalProgressView } from './ContinentalProgressView'
-import type { KnockoutRound } from '../../types/match'
 
-const ROUND_LABEL: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
-const MONTH_LABEL = { summer: '여름(6–7월)', january: '1월', winterAfcon: '겨울(12–1월)' } as const
-
-function QualSummaryCard() {
+function QualSummaryCard({ qualStyle }: { qualStyle?: string }) {
   const qualResult = useContinentalStore((s) => s.qualResult)
   const [open, setOpen] = useState(false)
   if (!qualResult) return null
@@ -25,6 +19,12 @@ function QualSummaryCard() {
   return (
     <GlassCard className="p-4">
       <h3 className="mb-2 text-sm font-bold text-gray-200">🎫 예선 결과 <span className="text-[11px] font-normal text-gray-500">(자동 {autoQualified.length} · 통과 {earned.length})</span></h3>
+      {qualStyle === 'combinedWcq' && (
+        <p className="mb-2 text-[11px] text-amber-300/90">🔗 예선은 월드컵 지역예선과 통합 진행됩니다 — 월드컵 예선 성적으로 본선 진출국이 결정됩니다.</p>
+      )}
+      {qualStyle === 'nationsLeague' && (
+        <p className="mb-2 text-[11px] text-amber-300/90">🔗 예선은 CONCACAF 네이션스리그로 치릅니다 — 상위 리그는 직행, 나머지는 프렐림 플레이오프로 결정됩니다.</p>
+      )}
       <div className="mb-2 flex flex-wrap gap-1.5">
         {autoQualified.map((id) => (
           <span key={id} className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[11px] text-sky-200"><TeamLink teamId={id} /> <span className="text-[9px] text-sky-300/70">자동</span></span>
@@ -72,7 +72,6 @@ export type ContinentalView = 'draw' | 'progress' | 'groups' | 'knockout' | 'pro
 export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progress' }: { onNavigateWC?: () => void; onGoToProgress?: () => void; view?: ContinentalView }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)
   const hostIds = useContinentalStore((s) => s.hostIds)
-  const cupYear = useContinentalStore((s) => s.cupYear)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
   const championTrend = useContinentalStore((s) => s.championTrend)
@@ -81,17 +80,9 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
 
   const format = activeCupId ? CUP_FORMATS[activeCupId] : null
 
-  // 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화.
-  const cupPhases = useMemo(
-    () => (activeCupId ? buildCupPhases(activeCupId, cupYear ?? BASE_FINALS_YEAR) : []),
-    [activeCupId, cupYear],
-  )
-
   // 단계별 공개(월드컵 '일정 진행'과 동형): 0=조추첨, 1~3=조별 MD, 4~=녹아웃 라운드.
-  const totalStages = activeCupId ? cupTotalStages(activeCupId) : 0
   const revealedGroupMd = Math.min(stage, 3)
   const revealedKoRounds = Math.max(0, stage - 3)
-  const fullyRevealed = result != null && stage >= totalStages
 
   // 확률 탭을 열면(또는 단계가 바뀌면) 자동으로 실황 반영 확률을 다시 계산한다(월드컵과 동일한 실시간성).
   useEffect(() => {
@@ -161,42 +152,6 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
 
   return (
     <div className="flex flex-col gap-5">
-      <GlassCard strong className="p-5 text-center">
-        <div className="mb-2 flex items-center justify-center gap-2">
-          <p className="text-sm font-bold text-white">🏆 {format.nameKo}{cupYear ? ` ${cupYear}` : ''}</p>
-        </div>
-        <p className="mb-3 text-[11px] text-gray-400">
-          {format.teams}팀 · {format.groups}개 조 · {format.knockout.map((r) => ROUND_LABEL[r]).join('→')}
-          {format.thirdPlace ? ' (+3·4위전)' : ''} · {MONTH_LABEL[format.schedule.monthWindow]}
-        </p>
-        {format.qual.style === 'combinedWcq' && (
-          <p className="mb-3 text-[11px] text-amber-300/90">🔗 예선은 월드컵 지역예선과 통합 진행됩니다 — 월드컵 예선 성적으로 본선 진출국이 결정됩니다.</p>
-        )}
-        {format.qual.style === 'nationsLeague' && (
-          <p className="mb-3 text-[11px] text-amber-300/90">🔗 예선은 CONCACAF 네이션스리그로 치릅니다 — 상위 리그는 직행, 나머지는 프렐림 플레이오프로 결정됩니다.</p>
-        )}
-        {/* 개최국은 에디션별로 경제·지역을 고려해 자동 선정된다(공동개최 가능). */}
-        <p className="mb-3 text-[11px] text-sky-300">
-          🏟️ 개최{hostIds.length > 1 ? '(공동)' : ''}: {hostIds.length > 0 ? hostIds.map((id) => ALL_NATIONS_BY_ID[id]?.nameKo ?? id).join(' · ') : '미정'}
-        </p>
-        <p className="text-[11px] text-gray-500">캘린더의 <strong className="text-emerald-300">조추첨 진행하기</strong>로 진입해 조추첨부터 우승까지 단계별로 진행합니다.</p>
-      </GlassCard>
-
-      {/* 대회 일정(라운드별 날짜) — 대륙대회 일정 상세화 (진행·일정 뷰) */}
-      {view === 'progress' && cupPhases.length > 0 && (
-        <GlassCard className="p-4">
-          <h3 className="mb-2 text-sm font-bold text-gray-200">📅 대회 일정 <span className="text-[11px] font-normal text-gray-500">({cupYear ?? BASE_FINALS_YEAR} · {MONTH_LABEL[format.schedule.monthWindow]})</span></h3>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {cupPhases.map((p) => (
-              <div key={p.key} className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px]">
-                <span className="text-gray-300">{p.label}</span>
-                <span className="tabular-nums text-gray-400">{formatKoreanDate(p.start)}</span>
-              </div>
-            ))}
-          </div>
-        </GlassCard>
-      )}
-
       {!result ? (
         <GlassCard className="p-8 text-center text-sm text-gray-400">
           <strong className="text-gray-300">캘린더</strong>에서 이 대회의 <strong className="text-emerald-300">조추첨 진행하기</strong>를 눌러 조추첨부터 우승까지 진행하세요.
@@ -206,8 +161,8 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
           {/* 일정 진행: 월드컵 ScheduleStage와 동형(상태·타임라인·다음경기·결과피드·통계·우승) + 예선 요약 */}
           {view === 'progress' && (
             <>
-              <ContinentalProgressView result={result} format={format} />
-              <QualSummaryCard />
+              <ContinentalProgressView result={result} format={format} onNavigate={onNavigateWC} />
+              <QualSummaryCard qualStyle={format.qual.style} />
             </>
           )}
 
@@ -221,21 +176,9 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
             <ContinentalGroupsView result={result} format={format} revealedMd={revealedGroupMd} />
           )}
 
-          {/* 토너먼트(녹아웃) + 우승 */}
+          {/* 토너먼트(녹아웃) — 월드컵 BracketView처럼 카드/제목 래퍼 없이 대진표만 렌더 */}
           {view === 'knockout' && (
-            <>
-              {fullyRevealed && (
-                <GlassCard strong className="p-5 text-center">
-                  <p className="text-[11px] text-gray-400">🏆 우승</p>
-                  <div className="my-1 flex items-center justify-center text-lg font-bold text-amber-300"><TeamLink teamId={result.champion} /></div>
-                  <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
-                </GlassCard>
-              )}
-              <GlassCard className="p-4">
-                <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃 대진표 <span className="text-[11px] font-normal text-gray-500">(경기를 누르면 상세)</span></h3>
-                <CupBracketView knockout={result.knockout} format={format} revealedRounds={revealedKoRounds} />
-              </GlassCard>
-            </>
+            <CupBracketView knockout={result.knockout} format={format} revealedRounds={revealedKoRounds} />
           )}
 
           {/* 확률 — 진출 체인(조별 통과 → 각 라운드 도달 → 우승), 월드컵 확률 대시보드와 동형(전 팀·정렬·내 팀 강조) */}

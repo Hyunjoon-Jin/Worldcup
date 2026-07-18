@@ -49,16 +49,12 @@ try {
     await modal.first().waitFor({ state: 'hidden', timeout: 5000 })
   }
   // 다음 일정이 대륙컵으로 다가왔다 — 상단 버튼이 '조추첨 진행하기'로 바뀌고, 클릭 시 대륙컵 조추첨 탭으로 이동한다.
-  // 조추첨 탭은 월드컵처럼 팀을 하나씩 뽑는 연출로 진입한다(전체 공개로 조편성 확정).
+  // 조추첨 탭은 월드컵 DrawStage처럼 팀을 하나씩 뽑는 연출로 진입한다.
   await page.getByRole('button', { name: /조추첨 진행하기/ }).first().click()
-  await page.getByRole('button', { name: /다음 국가 뽑기|전체 공개/ }).first().waitFor({ timeout: 10000 })
+  await page.getByRole('button', { name: /다음 국가 뽑기/ }).first().waitFor({ timeout: 10000 })
   assert(true, "'조추첨 진행하기'로 대륙컵 조추첨 연출(하위탭)에 진입한다")
-  await page.getByRole('button', { name: '⏭ 전체 공개' }).click()
-  // 월드컵 DrawStage와 동형: 전체 공개 시 조추첨 완료 안내 + '일정 진행으로 이동' 버튼이 표시된다.
-  await page.getByText('조추첨이 완료되었습니다', { exact: false }).first().waitFor({ timeout: 10000 })
-  assert(await page.getByRole('button', { name: /일정 진행으로 이동/ }).isVisible(), '전체 공개 시 조편성 확정 + 일정 진행으로 이동 버튼(월드컵과 동일)')
 
-  // 일정 진행 하위탭 → 결승까지 자동 진행 → 우승 확정(월드컵 ScheduleStage와 동형)
+  // 일정 진행 하위탭 → 결승까지 자동 진행 → 조추첨 자동 확정 + 우승 확정(월드컵 ScheduleStage와 동형)
   await page.getByRole('tab', { name: '일정 진행', exact: true }).click()
   await page.getByRole('button', { name: '⏭ 결승까지 자동 진행' }).click()
   await page.getByText('🎉 우승팀이 결정되었습니다', { exact: false }).waitFor({ timeout: 10000 })
@@ -68,9 +64,9 @@ try {
   assert(await page.getByRole('button', { name: /결과 공유/ }).isVisible(), '우승 카드에 결과 공유 버튼이 있다(월드컵과 동일)')
   assert(await page.getByText('💾 대회 저장 슬롯', { exact: false }).first().isVisible(), '일정 진행 뷰에 대회 저장 슬롯이 있다(월드컵과 동일)')
 
-  // 토너먼트 하위탭 → 녹아웃 대진 표시
+  // 토너먼트 하위탭 → 녹아웃 대진(월드컵 BracketView처럼 카드/제목 래퍼 없이 라운드 열만) 표시
   await page.getByRole('tab', { name: '토너먼트', exact: true }).click()
-  assert(await page.getByText('녹아웃').first().isVisible(), '토너먼트 하위탭에 녹아웃이 렌더된다')
+  assert(await page.getByText(/결승/).first().isVisible(), '토너먼트 하위탭에 녹아웃 대진(결승 열)이 렌더된다')
 
   // 조별리그 하위탭 → 월드컵 조별리그 뷰와 동일(규정 도움말·GROUP 카드·조 상세)
   await page.getByRole('tab', { name: '조별리그', exact: true }).click()
@@ -88,10 +84,10 @@ try {
   assert(await page.getByRole('button', { name: '🔄 새로고침' }).isVisible(), '진출 체인 확률 대시보드가 계산·표시된다')
   assert(await page.getByText('📈 우승 확률 추이', { exact: false }).first().isVisible(), '확률 대시보드에 우승 확률 추이 차트가 표시된다(월드컵과 동일)')
 
-  // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (일정 진행 탭의 우승팀 클릭)
+  // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (결과 피드의 팀 링크로 진입)
   await page.getByRole('tab', { name: '일정 진행', exact: true }).click()
   await page.getByRole('button', { name: /결과 공유/ }).waitFor({ timeout: 10000 })
-  await page.locator('button.text-3xl').first().click()
+  await page.getByRole('heading', { name: /대회 종료/ }).first().locator('..').getByRole('button').first().click()
   // 기본(개요) 탭에 트로피 캐비닛이 표시된다.
   await page.getByText('트로피 캐비닛', { exact: false }).first().waitFor({ timeout: 10000 })
   assert(true, '팀 페이지 개요 탭에 트로피 마일스톤이 표시된다')

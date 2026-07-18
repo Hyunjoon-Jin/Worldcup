@@ -54,7 +54,6 @@ function CupMatchNode({ m }: { m: CupKnockoutMatch }) {
   const homeWon = r.winnerTeamId === m.homeTeamId
   const loserId = homeWon ? m.awayTeamId : m.homeTeamId
   const upset = isUpset(r.winnerTeamId, loserId)
-  const pk = r.wentToPenalties ? ` (PK ${r.homePenalties}-${r.awayPenalties})` : ''
   return (
     <div
       onClick={() => selectMatch({ kind: 'knockout', match: toKnockoutMatch(m), external: true })}
@@ -71,7 +70,7 @@ function CupMatchNode({ m }: { m: CupKnockoutMatch }) {
       </div>
       {(r.wentToPenalties || upset) && (
         <div className="flex items-center justify-center gap-1 pb-0.5 text-center text-[9px] text-gray-500">
-          {r.wentToPenalties && <span>승부차기{pk}</span>}
+          {r.wentToPenalties && <span>승부차기</span>}
           {upset && <UpsetBadge upset className="text-[9px]" />}
         </div>
       )}

@@ -6,6 +6,7 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { FlagIcon } from '../common/FlagIcon'
 import { GroupSlotCard } from '../draw/GroupSlotCard'
+import { useLiveRankLookup } from '../ranking/useLiveFifaRanking'
 import { useContinentalStore } from '../../store/useContinentalStore'
 import type { CupResult } from '../../engine/continental/runCup'
 import type { CupFormat } from '../../data/continental/formats'
@@ -40,7 +41,7 @@ export function CupDrawCeremony({
   const storeRevealCount = useContinentalStore((s) => s.drawRevealCount)
   const revealDrawTeam = useContinentalStore((s) => s.revealDrawTeam)
   const undoDrawTeam = useContinentalStore((s) => s.undoDrawTeam)
-  const revealAllDraw = useContinentalStore((s) => s.revealAllDraw)
+  const liveRank = useLiveRankLookup()
 
   // 뽑기 순서: 포트1→N, 각 포트에서 A조부터. (drawInfo.potOf/groupOf가 실제 조추첨 배정을 반영)
   const sequence = useMemo(() => {
@@ -61,6 +62,12 @@ export function CupDrawCeremony({
   const next = revealCount < total ? sequence[revealCount] : null
   const lastTeam = last ? TEAMS_BY_ID[last.teamId] : null
   const groupLetter = (g: number) => String.fromCharCode(65 + g)
+  // 개최국 사전 배치 설명(월드컵 DrawStage와 동형) — 각 개최국이 배정된 조를 A1·B1… 형식으로.
+  const hostSeedText = hostIds
+    .filter((id) => drawInfo.groupOf.has(id))
+    .slice(0, format.groups)
+    .map((id) => `${TEAMS_BY_ID[id]?.nameKo ?? id}=${groupLetter(drawInfo.groupOf.get(id) ?? 0)}1`)
+    .join(', ')
 
   // 조별 슬롯: 각 조에 포트 순서대로 자리를 만들고, 공개된 팀만 채운다(미공개는 null).
   const revealedIndex = (teamId: string) => sequence.findIndex((s) => s.teamId === teamId)
@@ -74,7 +81,7 @@ export function CupDrawCeremony({
   })
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <GlassCard strong className="p-5 text-center">
         <p className="mb-3 text-sm text-gray-300">
           {done
@@ -112,7 +119,6 @@ export function CupDrawCeremony({
             <GlassButton onClick={onComplete}>일정 진행으로 이동 →</GlassButton>
           )}
           <GlassButton variant="ghost" onClick={undoDrawTeam} disabled={revealCount === 0}>↩ 되돌리기</GlassButton>
-          {!done && <GlassButton variant="ghost" onClick={revealAllDraw}>⏭ 전체 공개</GlassButton>}
         </div>
       </GlassCard>
 
@@ -163,7 +169,7 @@ export function CupDrawCeremony({
                       <FlagIcon iso2={team.iso2} className="h-2.5 w-3.5" />
                       <span className="truncate">{team.nameKo}</span>
                       <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                        <span className="text-[9px] text-gray-500">{team.fifaRankApprox ?? '-'}위</span>
+                        <span className="text-[9px] text-gray-500">{liveRank(tid, team.fifaRankApprox)}위</span>
                         {host && <span className="text-[9px] text-amber-300">개최국</span>}
                       </span>
                     </li>
@@ -177,7 +183,7 @@ export function CupDrawCeremony({
 
       {/* 조추첨 규정 안내(월드컵 DrawStage와 동형) */}
       <GlassCard className="p-4 text-xs leading-relaxed text-gray-400">
-        <strong className="text-gray-300">조추첨 규정:</strong> 개최국은 포트1(각 조 1번 시드)로 사전 고정됩니다.
+        <strong className="text-gray-300">조추첨 규정:</strong> 개최국({hostSeedText})은 각 조 1번 시드로 사전 고정됩니다.
         이후 능력치 등급별로 {format.teamsPerGroup}개 포트를 만들어, 포트1→{format.teamsPerGroup} 순서로 각 조에 한 팀씩 배정합니다.
       </GlassCard>
     </div>

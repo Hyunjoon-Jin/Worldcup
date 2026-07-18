@@ -7,6 +7,9 @@ import { UpsetBadge } from '../common/UpsetBadge'
 import { GroupTable } from '../groups/GroupTable'
 import { TournamentSummary } from '../schedule/TournamentSummary'
 import { CupSaveSlotsPanel } from './CupSaveSlotsPanel'
+import { computeCupStatuses } from '../../engine/continental/cupGroupHelpers'
+import { rankGroupTeams } from '../../engine/tiebreakers'
+import type { CrisisInfo } from '../../store/useCrisisTeams'
 import { ALL_NATIONS_BY_ID as TEAMS_BY_ID } from '../../data/nations'
 import { GROUP_LETTERS } from '../../data/hostSlots'
 import { formatKoreanDate } from '../../data/calendar'
@@ -49,7 +52,7 @@ const koRef = (m: CupKnockoutMatch): MatchDetailRef => ({ kind: 'knockout', exte
  * 대륙컵 '일정 진행' 뷰 — 월드컵 ScheduleStage와 동형 구성: 진행 상태·타임라인 → 진행 버튼 → 다음 경기
  * 예정 → 결과 피드(순위 변동) → 대회 통계/명장면/업적(월드컵 TournamentSummary 재사용) → 우승 카드.
  */
-export function ContinentalProgressView({ result, format }: { result: CupResult; format: CupFormat }) {
+export function ContinentalProgressView({ result, format, onNavigate }: { result: CupResult; format: CupFormat; onNavigate?: () => void }) {
   const activeCupId = useContinentalStore((s) => s.activeCupId)!
   const stage = useContinentalStore((s) => s.stage)
   const cupYear = useContinentalStore((s) => s.cupYear)
@@ -98,7 +101,7 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
     if (fullyRevealed) return null
     if (stage < 3) {
       const md = stage + 1
-      const fixtures = result.groups.flatMap((g) => g.matches.filter((m) => m.matchday === md).map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, label: `${letterOf(g.groupIndex)}조` })))
+      const fixtures = result.groups.flatMap((g) => g.matches.filter((m) => m.matchday === md).map((m) => ({ homeId: m.homeTeamId, awayId: m.awayTeamId, label: `조 ${letterOf(g.groupIndex)}` })))
       return { date: dateByKey[`G${md}`], label: `조별리그 ${md}차전`, fixtures }
     }
     const round = mainRounds[stage - 3]
@@ -134,6 +137,32 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
     return result.knockout.filter((m) => shownRounds.has(m.round)).map(toKnockoutMatch)
   }, [result, mainRounds, revealedKoRounds, fullyRevealed, format])
 
+  // 순위 변동 표의 진출확정/탈락확정·위기 배지·순위 변동 화살표(월드컵 DayResultFeed와 동형).
+  const statusByTeam = useMemo(() => computeCupStatuses(result, format, revealedGroupMd), [result, format, revealedGroupMd])
+  const crisisByTeam = useMemo<Record<string, CrisisInfo>>(() => {
+    const out: Record<string, CrisisInfo> = {}
+    if (!probabilities) return out
+    const firstRound = mainRounds[0]
+    if (!firstRound) return out
+    for (const [id, p] of Object.entries(probabilities.byTeam)) {
+      const gp = p.reach[firstRound] ?? 0
+      if (gp > 0 && gp < 50) out[id] = { pct: gp }
+    }
+    return out
+  }, [probabilities, mainRounds])
+  const deltaByGroup = useMemo<Record<string, Record<string, number>>>(() => {
+    const out: Record<string, Record<string, number>> = {}
+    if (!feed || feed.kind !== 'group' || revealedGroupMd < 1) return out
+    for (const g of feed.touched) {
+      const curr = rankGroupTeams(g.teams, g.matches.filter((m) => m.matchday <= revealedGroupMd), format.groupTiebreak)
+      const prev = rankGroupTeams(g.teams, g.matches.filter((m) => m.matchday <= revealedGroupMd - 1), format.groupTiebreak)
+      const d: Record<string, number> = {}
+      for (const id of g.teams) d[id] = prev.indexOf(id) - curr.indexOf(id)
+      out[letterOf(g.groupIndex)] = d
+    }
+    return out
+  }, [feed, revealedGroupMd, format])
+
   const shareResult = () => {
     const name = (id?: string | null) => (id ? TEAMS_BY_ID[id]?.nameKo ?? id : '-')
     const lines = [
@@ -148,19 +177,19 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
     })
   }
 
-  const timeline: { key: string; label: string; done: boolean; now: boolean }[] = [
-    ...[1, 2, 3].map((md) => ({ key: `G${md}`, label: `${md}차전`, done: stage > md, now: stage === md })),
-    ...mainRounds.map((r, i) => ({ key: r, label: ROUND_LABEL[r], done: stage > 4 + i, now: stage === 4 + i })),
+  const timeline: { key: string; label: string; done: boolean; now: boolean; ko: boolean }[] = [
+    ...[1, 2, 3].map((md) => ({ key: `G${md}`, label: `${md}차전`, done: stage > md, now: stage === md, ko: false })),
+    ...mainRounds.map((r, i) => ({ key: r, label: ROUND_LABEL[r], done: stage > 4 + i, now: stage === 4 + i, ko: true })),
   ]
 
   return (
     <div className="flex flex-col gap-5">
-      <GlassCard strong className="p-5">
-        <p className="mb-3 text-center text-sm font-semibold text-white">{statusText}</p>
-        {/* 타임라인 — 조별 3차전 + 녹아웃 라운드(월드컵 CalendarTimeline과 동형) */}
+      <GlassCard strong className="p-5 text-center">
+        <p className="mb-3 text-sm font-semibold text-white">{statusText}</p>
+        {/* 타임라인 — 조별 3차전 + 녹아웃 라운드(월드컵 CalendarTimeline과 동형: 녹아웃 현재는 앰버) */}
         <div className="scrollbar-thin mb-1 flex gap-1.5 overflow-x-auto pb-2">
           {timeline.map((t, i) => (
-            <div key={t.key} className={`flex shrink-0 flex-col items-center rounded-lg px-2 py-1.5 text-[10px] ${t.now ? 'glass-strong ring-1 ring-emerald-300/70' : t.done ? 'bg-white/10 text-gray-400' : 'bg-white/[0.03] text-gray-600'} ${i === 3 ? 'ml-2 border-l border-white/15 pl-3' : ''}`}>
+            <div key={t.key} className={`flex shrink-0 flex-col items-center rounded-lg px-2 py-1.5 text-[10px] ${t.now ? `glass-strong ring-1 ${t.ko ? 'ring-amber-300/70' : 'ring-emerald-300/70'}` : t.done ? 'bg-white/10 text-gray-400' : 'bg-white/[0.03] text-gray-600'} ${i === 3 ? 'ml-2 border-l border-white/15 pl-3' : ''}`}>
               <span className="font-bold">{t.label}</span>
               {dateByKey[t.key] && <span>{formatKoreanDate(dateByKey[t.key])}</span>}
             </div>
@@ -228,7 +257,7 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
               return (
                 <div key={`g-${i}`} onClick={() => selectMatch(groupRef(m))} className={`flex cursor-pointer flex-col gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-white/10 sm:flex-row sm:items-center sm:justify-between ${upset ? 'bg-red-500/10 ring-1 ring-red-400/30' : 'bg-white/5'}`}>
                   <div className="flex items-center justify-between sm:w-10 sm:shrink-0">
-                    <span className="text-xs text-gray-500">{letterOf(m.group)}조</span>
+                    <span className="text-xs text-gray-500">조{letterOf(m.group)}</span>
                     <span className="sm:hidden"><UpsetBadge upset={upset} surpriseDraw={surpriseDraw} /></span>
                   </div>
                   <span className="flex flex-1 items-center justify-center gap-2">
@@ -271,7 +300,9 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
                     <GroupTable
                       teamIds={g.teams}
                       matches={revealedGroupMatches.filter((m) => m.group === letterOf(g.groupIndex))}
-                      qualifyLine={format.advancePerGroup}
+                      delta={deltaByGroup[letterOf(g.groupIndex)]}
+                      statusByTeam={statusByTeam}
+                      crisisByTeam={crisisByTeam}
                       compact
                     />
                   </div>
@@ -279,6 +310,13 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
               </div>
             </>
           )}
+        </GlassCard>
+      )}
+
+      {/* 결과 피드 빈 상태(월드컵 DayResultFeed와 동형) — 아직 아무 경기도 공개되지 않았을 때 */}
+      {revealedGroupMatches.length === 0 && revealedKoMatches.length === 0 && (
+        <GlassCard className="p-4 text-center text-sm text-gray-400">
+          아직 진행된 경기가 없습니다. <strong className="text-gray-300">다음 단계 진행</strong>을 눌러 시작하세요.
         </GlassCard>
       )}
 
@@ -298,14 +336,19 @@ export function ContinentalProgressView({ result, format }: { result: CupResult;
             )}
           </p>
           <p className="font-display mt-1 flex items-center justify-center gap-3 text-3xl font-semibold tracking-wide text-amber-300">
-            🏆 <TeamLink teamId={result.champion} flagClassName="h-6 w-9" className="text-3xl font-semibold text-amber-300" />
-          </p>
-          <p className="mt-1 text-[11px] text-gray-500">
-            준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}
+            🏆 {TEAMS_BY_ID[result.champion] && <FlagIcon iso2={TEAMS_BY_ID[result.champion].iso2} className="h-6 w-9" />} {TEAMS_BY_ID[result.champion]?.nameKo ?? result.champion}
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <GlassButton variant="ghost" onClick={shareResult}>{shared ? '✓ 결과 복사됨' : '📋 결과 공유'}</GlassButton>
+            {onNavigate && (
+              <GlassButton onClick={onNavigate} title="캘린더로 돌아가 다음 시즌을 이어갑니다">📅 캘린더로 →</GlassButton>
+            )}
           </div>
+          {onNavigate && (
+            <p className="mt-3 text-[11px] text-gray-400">
+              다음 대회 개최국이 새로 선정되고, 이번 대회 성적이 각 팀의 전력에 반영됩니다. 캘린더에서 새 시즌을 이어가세요.
+            </p>
+          )}
         </GlassCard>
       )}
     </div>
