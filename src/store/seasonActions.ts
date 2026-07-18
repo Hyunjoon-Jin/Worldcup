@@ -7,8 +7,7 @@ import { useSeasonStore } from './useSeasonStore'
 import { startFinalsFromQualification, advanceToNextEdition } from './tournamentActions'
 import { formOffsetsFromResults } from '../engine/qualification/ranking'
 import { buildSeasonTimeline, type SeasonEvent } from '../engine/season/seasonTimeline'
-import { CUP_FORMATS, type CupId } from '../data/continental/formats'
-import { ALL_NATIONS_BY_ID } from '../data/nations'
+import { type CupId } from '../data/continental/formats'
 
 /**
  * 일정(캘린더) 축 진행 액션. 앱은 '월드컵'이 아니라 '일정'을 축으로 전진한다 — 이 모듈은 캘린더 위의
@@ -46,21 +45,34 @@ export function autoSimulateWorldCupFinals(seed?: string): void {
 }
 
 /**
- * 통합 예선(combinedWcq: AFC 아시안컵)용 랭킹 — 월드컵 지역예선과 같은 캠페인이므로, 이번 월드컵 예선에서
- * 본선에 오른 팀을 강하게 우대해 대륙컵 진출을 결정한다. 예선 결과가 없으면 빈 맵(엔진이 FIFA 근사 랭킹 폴백).
+ * 월드컵 지역예선 캠페인 순위를 팀→랭킹으로 환산한다(낮을수록 상위). 대륙컵 예선이 '같은 캠페인'을
+ * 반영하도록 하는 단일 출처다. 각 대륙 예선의 최종 순위(standings)를 그대로 랭킹으로 쓰므로, 월드컵
+ * 예선에서 잘한 순서가 곧 대륙컵 진출 순서가 된다(통합 예선의 실제 원리). 월드컵 본선 직행국은 더
+ * 끌어올려(−1000) 최우선한다. 예선 결과가 없으면 빈 맵(엔진이 FIFA 근사 랭킹으로 폴백).
  */
 function combinedQualRanking(): Record<string, number> {
   const qr = useQualificationStore.getState().result
   if (!qr) return {}
   const map: Record<string, number> = {}
-  // 월드컵 본선 진출국은 기본 랭킹에서 크게 끌어올려(−1000) 대륙컵 진출 우선순위를 준다.
-  for (const id of qr.qualified48) map[id] = (ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999) - 1000
+  // 각 대륙 예선의 실제 최종 순위(1위=1)를 랭킹으로 삼는다 — 월드컵 예선 성적을 그대로 대륙컵에 반영.
+  for (const r of Object.values(qr.byConfederation)) {
+    r.standings.forEach((id, i) => {
+      map[id] = i + 1
+    })
+  }
+  // 월드컵 본선 직행국은 확정적으로 최상위(−1000)로 끌어올려 통합 예선에서 반드시 우대한다.
+  for (const id of qr.qualified48) map[id] = (map[id] ?? 999) - 1000
   return map
 }
 
-/** 대륙컵 예선 랭킹(통합 예선 대회만) — 캘린더 단계 진행에서 대회 시작 시 사용. */
-export function cupRankByTeam(cupId: CupId): Record<string, number> | undefined {
-  return CUP_FORMATS[cupId].qual.style === 'combinedWcq' ? combinedQualRanking() : undefined
+/**
+ * 대륙컵 예선에 넘길 '월드컵 캠페인 반영' 랭킹. 통합 예선(combinedWcq: 아시안컵)은 물론, 월드컵 예선
+ * 성적이 진출에 반영되는 방식(nationsLeague: 골드컵 등)도 같은 원리로 캠페인 순위를 넘겨준다. 조별 예선을
+ * 새로 치르는 대회(EURO·AFCON 등)는 시드 정렬 tiebreak로만 반영되도록 동일하게 넘긴다.
+ */
+export function cupRankByTeam(_cupId: CupId): Record<string, number> | undefined {
+  const rank = combinedQualRanking()
+  return Object.keys(rank).length > 0 ? rank : undefined
 }
 
 /**
@@ -72,7 +84,7 @@ export function autoSimulateCup(cupId: CupId, year: number, seed?: string): void
   if (isCupSimulated(cupId, year)) return
   const store = useContinentalStore.getState()
   store.selectCup(cupId, year)
-  const rankByTeam = CUP_FORMATS[cupId].qual.style === 'combinedWcq' ? combinedQualRanking() : undefined
+  const rankByTeam = cupRankByTeam(cupId)
   store.runActiveCup({ seed: seed ?? `${cupId}-${year}`, rankByTeam })
   useContinentalStore.getState().advanceToEnd()
 }

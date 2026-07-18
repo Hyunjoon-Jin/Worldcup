@@ -3,6 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { SubTabNav } from '../layout/SubTabNav'
 import { useContinentalStore } from '../../store/useContinentalStore'
+import { useQualificationStore } from '../../store/useQualificationStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
 import { CUP_FORMATS } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
@@ -10,6 +11,7 @@ import type { GroupStanding } from '../../types/group'
 import type { CupMatch } from '../../engine/continental/runCup'
 
 const GROUP_LETTER = (i: number) => String.fromCharCode(65 + i)
+const CONFED_KO: Record<string, string> = { AFC: 'AFC(아시아)', CAF: 'CAF(아프리카)', UEFA: 'UEFA(유럽)', CONMEBOL: 'CONMEBOL(남미)', CONCACAF: 'CONCACAF(북중미)', OFC: 'OFC(오세아니아)' }
 const QUAL_STYLE_KO: Record<string, string> = {
   combinedWcq: '월드컵 지역예선과 통합 — 같은 캠페인 성적순으로 본선 진출국을 가립니다(별도 예선 없음).',
   nationsLeague: '네이션스리그 방식 — 상위는 성적순 직행, 나머지는 예비 플레이오프로 남은 자리를 다툽니다.',
@@ -47,6 +49,69 @@ function StandingsTable({ standings, ranking, qualified, hostSet }: { standings:
           })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/**
+ * 통합 예선(combinedWcq: 아시안컵) 뷰 — 월드컵 지역예선과 '같은 캠페인'임을 그대로 보여준다.
+ * 별도 예선 경기가 아니라, 해당 대륙(AFC 등)의 월드컵 예선 최종 순위를 그대로 나열하고 상위 N개국을
+ * 대륙컵 본선 진출로 표시한다. 월드컵 예선 진행이 곧 대륙컵 예선 진행이 되도록(동시 반영) 한다.
+ */
+function CombinedCampaignView({ confed, slots, qualifiedSet, hostSet, cutLabel }: { confed: string; slots: number; qualifiedSet: Set<string>; hostSet: Set<string>; cutLabel: string }) {
+  const qr = useQualificationStore((s) => s.result)
+  const confResult = qr?.byConfederation[confed]
+  if (!confResult) {
+    return (
+      <GlassCard className="p-6 text-center text-[12px] text-gray-400">
+        아직 월드컵 지역예선이 진행되지 않았습니다. <strong className="text-gray-300">캘린더</strong>에서 예선을 진행하면
+        같은 캠페인 성적이 여기에 반영됩니다.
+      </GlassCard>
+    )
+  }
+  const wcQualified = new Set(confResult.qualified)
+  const playoff = new Set(confResult.playoff)
+  return (
+    <div className="flex flex-col gap-3">
+      <GlassCard className="border border-emerald-400/20 bg-emerald-500/[0.06] p-3 text-[11px] leading-relaxed text-emerald-100/90">
+        🔗 <strong className="text-emerald-200">월드컵 지역예선과 통합된 예선</strong>입니다. 아래는 {CONFED_KO[confed] ?? confed}
+        {' '}월드컵 예선(같은 캠페인) 최종 순위이며, <strong className="text-emerald-200">상위 {slots}개국</strong>이 {cutLabel} 본선에 진출합니다.
+      </GlassCard>
+      <GlassCard className="p-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-gray-500">
+                <th className="px-1 py-0.5 text-left font-medium">#</th>
+                <th className="px-1 py-0.5 text-left font-medium">팀</th>
+                <th className="px-1 py-0.5 text-left font-medium">비고</th>
+              </tr>
+            </thead>
+            <tbody>
+              {confResult.standings.map((tid, i) => {
+                const isIn = qualifiedSet.has(tid) || i < slots
+                return (
+                  <tr key={tid} className={`border-t border-white/5 ${i === slots ? 'border-t-2 border-emerald-400/40' : ''} ${isIn ? 'bg-emerald-500/[0.08]' : 'opacity-60'}`}>
+                    <td className="px-1 py-0.5 tabular-nums text-gray-400">{i + 1}</td>
+                    <td className="px-1 py-0.5">
+                      <span className="flex items-center gap-1">
+                        <TeamLink teamId={tid} wrap className="min-w-0" />
+                        {hostSet.has(tid) && <span className="shrink-0 text-[9px] text-sky-300">🏟</span>}
+                      </span>
+                    </td>
+                    <td className="px-1 py-0.5 text-[9px]">
+                      {wcQualified.has(tid) ? <span className="font-bold text-amber-300">🏆 월드컵 직행</span>
+                        : playoff.has(tid) ? <span className="text-violet-300">대륙간 PO</span>
+                        : isIn ? <span className="font-bold text-emerald-300">✅ {cutLabel} 진출</span>
+                        : <span className="text-gray-600">탈락</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </GlassCard>
     </div>
   )
 }
@@ -133,6 +198,9 @@ export function CupQualificationTab() {
             ))}
           </div>
         </>
+      ) : format.qual.style === 'combinedWcq' ? (
+        // 통합 예선(아시안컵): 월드컵 지역예선과 같은 캠페인 — 그 대륙의 월드컵 예선 순위를 그대로 보여준다.
+        <CombinedCampaignView confed={format.confeds[0]} slots={format.teams} qualifiedSet={qualifiedSet} hostSet={hostSet} cutLabel={format.nameKo} />
       ) : (
         <GlassCard className="p-4">
           <p className="mb-2 text-xs font-bold text-emerald-200">본선 진출 {qualResult.qualified.length}개국</p>
