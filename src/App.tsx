@@ -8,8 +8,8 @@ import { DebugPanel } from './components/common/DebugPanel'
 import { OnboardingOverlay } from './components/common/OnboardingOverlay'
 
 // 탭별 화면은 지연 로딩해 초기 번들 크기를 줄인다 (B5).
-const QualificationStage = lazy(() =>
-  import('./components/qualification/QualificationStage').then((m) => ({ default: m.QualificationStage })),
+const QualificationTab = lazy(() =>
+  import('./components/qualification/QualificationTab').then((m) => ({ default: m.QualificationTab })),
 )
 const WorldCupTab = lazy(() => import('./components/worldcup/WorldCupTab').then((m) => ({ default: m.WorldCupTab })))
 const FriendliesTab = lazy(() => import('./components/friendlies/FriendliesTab').then((m) => ({ default: m.FriendliesTab })))
@@ -190,7 +190,7 @@ function App() {
             {tab === 'season' && <SeasonHome onNavigateWC={enterWC} onSelectCup={enterCup} onNavigateWCDraw={enterWCDraw} onNavigateCupDraw={enterCupDraw} />}
             {tab === 'friendlies' && <FriendliesTab />}
             {tab === 'cupqual' && <CupQualificationTab />}
-            {tab === 'qualifiers' && <QualificationStage onStartFinals={() => setTab('worldcup')} />}
+            {tab === 'qualifiers' && <QualificationTab onStartFinals={() => setTab('worldcup')} />}
             {tab === 'continental' && <ContinentalTab onNavigateWC={enterWC} openDrawSignal={cupDrawSignal} />}
             {tab === 'worldcup' && (
               <WorldCupTab

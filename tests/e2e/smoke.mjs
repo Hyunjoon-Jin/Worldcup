@@ -42,6 +42,8 @@ try {
   const drawDone = page.getByRole('button', { name: /조추첨 완료/ })
   if (await drawDone.isVisible().catch(() => false)) await drawDone.click()
   await page.getByRole('button', { name: '⏭ 예선 끝까지 자동 진행' }).click()
+  // 본선 진출국·조추첨 진행 버튼은 '조별 순위' 하위탭에 있다.
+  await page.getByRole('tab', { name: '조별 순위', exact: true }).click()
   await page.getByText('본선 진출 48개국', { exact: false }).first().waitFor({ timeout: 15000 })
   assert(true, '지역예선이 끝까지 진행되어 본선 진출국이 확정된다')
 

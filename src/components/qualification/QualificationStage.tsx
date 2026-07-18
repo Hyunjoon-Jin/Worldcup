@@ -1585,7 +1585,10 @@ function ConfederationStandings({
 }
 
 /** 지역예선 화면 (Q3/Q4). 6개 대륙 예선 + 대륙간 PO + 본선 48 확정 + 본선 조추첨 연결. */
-export function QualificationStage({ onStartFinals }: { onStartFinals?: () => void }) {
+/** 월드컵 지역예선 하위 화면(월드컵 본선처럼): 진행·일정 / 조별 순위 / 확률. */
+export type QualView = 'progress' | 'standings' | 'probability'
+
+export function QualificationStage({ onStartFinals, view = 'progress' }: { onStartFinals?: () => void; view?: QualView }) {
   const seed = useQualificationStore((s) => s.seed)
   const result = useQualificationStore((s) => s.result)
   const probabilities = useQualificationStore((s) => s.probabilities)
@@ -1718,10 +1721,13 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
         </GlassCard>
       ) : (
         <>
-          {/* 진행 컨트롤을 최상단에 배치(본선 '일정 진행' 탭과 통일된 UX) */}
-          <QualDailyProgress result={result} onSelectMatch={setSelMatch} confed={confed} />
+          {/* [진행·일정] 진행 컨트롤 */}
+          {view === 'progress' && <QualDailyProgress result={result} onSelectMatch={setSelMatch} confed={confed} />}
 
+          {/* [조별 순위] 대륙 선택 + [확률] 확률 계산 버튼 */}
+          {(view === 'standings' || view === 'probability') && (
           <div className="flex flex-wrap items-center justify-between gap-2">
+            {view === 'standings' ? (
             <div
               role="tablist"
               aria-label="대륙 선택 (좌우 화살표로 이동)"
@@ -1759,6 +1765,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
                 )
               })}
             </div>
+            ) : (
+              <span />
+            )}
             <GlassButton
               variant="ghost"
               onClick={computeProbabilities}
@@ -1768,8 +1777,9 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               {probLoading ? '진출 확률 계산 중…' : probabilities ? '🔄 진출 확률 재계산' : '📊 진출 확률 (단계별 포함)'}
             </GlassButton>
           </div>
+          )}
 
-          {myTeamId && (
+          {(view === 'standings' || view === 'probability') && myTeamId && (
             <MyTeamQualBanner
               teamId={myTeamId}
               qualified48={result.qualified48}
@@ -1779,7 +1789,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             />
           )}
 
-          {probabilities && (
+          {view === 'probability' && probabilities && (
             <p className="-mt-2 text-[10px] text-gray-500">
               {isPartialProgress(result, revealed) ? (
                 <span className="text-amber-300">※ 진행 중 — 현재까지 치른 경기 결과를 고정하고 남은 경기만 시뮬레이션한 <strong>조건부 확률</strong>입니다(갱신된 전력 반영). </span>
@@ -1790,20 +1800,20 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </p>
           )}
 
-          <QualLiveRanking result={result} myTeamId={myTeamId} />
+          {view === 'standings' && <QualLiveRanking result={result} myTeamId={myTeamId} />}
 
-          {fullyRevealed && <QualOverviewCard result={result} onSelect={setConfed} />}
+          {view === 'standings' && fullyRevealed && <QualOverviewCard result={result} onSelect={setConfed} />}
 
-          <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />
+          {view === 'standings' && <ConfederationStandings confed={confed} onSelectMatch={setSelMatch} myTeamId={myTeamId} />}
 
-          {!fullyRevealed && (
+          {view === 'standings' && !fullyRevealed && (
             <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
-              🗓️ 예선 진행 중 — 위 <strong>📅 일별 진행</strong>에서 <strong>다음 경기일 ▶</strong>로 날짜를 넘기며 관전하세요.
+              🗓️ 예선 진행 중 — <strong>진행·일정</strong> 탭에서 <strong>다음 경기일 ▶</strong>로 날짜를 넘기며 관전하세요.
               최종 순위·대륙간 PO·본선 진출국·통계는 예선을 모두 마치면(⏭ 끝) 표시됩니다.
             </p>
           )}
 
-          {fullyRevealed && (
+          {view === 'standings' && fullyRevealed && (
           <>
           <GlassCard className="p-4">
             <h3 className="mb-3 text-sm font-bold text-amber-300">🎯 대륙간 플레이오프 (6팀 → 2장)</h3>
@@ -1925,21 +1935,21 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
           </>
           )}
 
-          {fullyRevealed && <QualStatsCard result={result} />}
+          {view === 'probability' && fullyRevealed && <QualStatsCard result={result} />}
 
-          {fullyRevealed && <QualHighlightsCard result={result} onSelectMatch={setSelMatch} />}
+          {view === 'probability' && fullyRevealed && <QualHighlightsCard result={result} onSelectMatch={setSelMatch} />}
 
-          {fullyRevealed && <QualUpsetArticleCard result={result} />}
+          {view === 'probability' && fullyRevealed && <QualUpsetArticleCard result={result} />}
 
-          {fullyRevealed && probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
+          {view === 'probability' && fullyRevealed && probabilities && <QualLuckCard result={result} probabilities={probabilities} />}
 
-          {myTeamId && ALL_NATIONS_BY_ID[myTeamId] && !result.hosts.includes(myTeamId) && (
+          {view === 'probability' && myTeamId && ALL_NATIONS_BY_ID[myTeamId] && !result.hosts.includes(myTeamId) && (
             <QualWhatIfCard teamId={myTeamId} seedBase={seed ?? 'WHATIF'} />
           )}
 
-          <QualDifficultyCard />
+          {view === 'probability' && <QualDifficultyCard />}
 
-          {fullyRevealed && drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
+          {view === 'probability' && fullyRevealed && drama && (drama.surpriseQualifiers.length > 0 || drama.shockEliminations.length > 0) && (
             <GlassCard className="p-4">
               <h3 className="mb-3 text-sm font-bold text-amber-300">🎭 예선 이변</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1969,6 +1979,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
             </GlassCard>
           )}
 
+          {view === 'progress' && (
           <GlassCard className="p-4">
             <details className="group">
               <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-gray-200">
@@ -1997,6 +2008,7 @@ export function QualificationStage({ onStartFinals }: { onStartFinals?: () => vo
               </div>
             </details>
           </GlassCard>
+          )}
         </>
       )}
 
