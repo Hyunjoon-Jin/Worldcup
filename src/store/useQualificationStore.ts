@@ -8,7 +8,6 @@ import { deriveQualStages, isKnockoutGroup } from '../engine/qualification/rules
 import {
   collectPlayedByConfed,
   buildLockedLookups,
-  isPartialProgress,
   flattenPlayed,
   type LockedMatchData,
 } from '../engine/qualification/conditional'
@@ -86,8 +85,12 @@ function recordRankMonths(result: AllQualificationResult, windows: number[], cal
 
 /**
  * 예선 진행 상황(실황)을 반영한 확률 계산 입력을 만든다.
- * 부분 진행이면: 이미 치른 경기를 고정(locked)하고, 그 결과로 갱신된 Elo 전력으로 남은 경기를
- * 시뮬레이션한다(조건부 확률). 전체 완료/미진행이면 무조건 확률(D1 능력치)로 계산한다.
+ * 공개된(revealed) 경기는 진행 정도와 무관하게 '항상' 고정(locked)하고, 갱신된 Elo 전력으로 남은
+ * 경기만 시뮬레이션한다:
+ * - 미진행(공개 경기 0): 무조건 확률(D1 능력치).
+ * - 부분 진행: 치른 경기 고정 + 남은 경기 시뮬(조건부 확률).
+ * - 완전 공개(완료): 전 경기 고정 → 결정론적으로 실제 결과 재현(확정국 100%·탈락국 0%).
+ * 예전엔 '완료'일 때 무조건 확률로 되돌아가, 본선 진출이 확정된 팀이 92%처럼 표시되는 모순이 있었다.
  */
 export function buildProbInputs(): {
   ratings: Record<string, TeamRatings>
@@ -96,18 +99,17 @@ export function buildProbInputs(): {
 } {
   const result = useQualificationStore.getState().result
   const revealed = useQualificationStore.getState().revealed
-  if (result && isPartialProgress(result, revealed)) {
-    const locked = collectPlayedByConfed(result, revealed)
-    const played = flattenPlayed(locked)
-    const fieldIds = [
-      ...new Set(
-        Object.values(result.byConfederation).flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])),
-      ),
-    ]
-    const points = updateRankingPoints(initRankingPoints(fieldIds), played)
-    return { ratings: updatedRatingsFromPoints(points), locked, lockedByConfed: buildLockedLookups(locked) }
-  }
-  return { ratings: buildQualRatings() }
+  if (!result) return { ratings: buildQualRatings() }
+  const locked = collectPlayedByConfed(result, revealed)
+  const played = flattenPlayed(locked)
+  if (played.length === 0) return { ratings: buildQualRatings() } // 아직 한 경기도 공개 전
+  const fieldIds = [
+    ...new Set(
+      Object.values(result.byConfederation).flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])),
+    ),
+  ]
+  const points = updateRankingPoints(initRankingPoints(fieldIds), played)
+  return { ratings: updatedRatingsFromPoints(points), locked, lockedByConfed: buildLockedLookups(locked) }
 }
 
 /**

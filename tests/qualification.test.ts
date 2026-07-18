@@ -901,3 +901,32 @@ describe('공개 라운드 기본값 — 미지정 대륙은 아직 미시작 (#
     expect(played.CAF).toEqual([])
   })
 })
+
+describe('예선 완료(전 경기 공개) 시 진출 확률은 결정론적 — 확정국 100% / 탈락국 0%', () => {
+  it('전 경기를 고정하면 직접 진출국은 100%, 예선 탈락국은 0%로 재현된다', () => {
+    const all = simulateAllQualification('LOCK-DETERMINISM')
+    // 모든 대륙을 마지막 경기일까지 공개 → 전 경기 고정(완료 상태).
+    const revealedFull: Record<string, number> = {}
+    for (const c of Object.keys(all.byConfederation)) revealedFull[c] = all.byConfederation[c].matchdays
+    const locked = collectPlayedByConfed(all, revealedFull)
+    const lockedByConfed = buildLockedLookups(locked)
+    const acc = createQualProbAccumulator('LOCK-DETERMINISM', undefined, lockedByConfed, all.hosts)
+    acc.runBatch(20)
+    const probs = acc.result()
+
+    // 대륙간 PO는 byConfederation에 없어 재시뮬되므로(변동) 그 승자·참가국은 판정에서 제외한다.
+    const poWinners = new Set(all.interConfed.winners)
+    const poParticipants = new Set(all.interConfed.participants)
+
+    // 직접 진출국(대륙간 PO 승자 제외)은 전부 100%.
+    for (const id of all.qualified48) {
+      if (poWinners.has(id)) continue
+      expect(probs[id]).toBe(100)
+    }
+    // 예선에 참가했지만 진출도 PO행도 아닌 팀은 0%.
+    const qualified = new Set(all.qualified48)
+    const eliminated = Object.keys(probs).find((id) => !qualified.has(id) && !poParticipants.has(id))
+    expect(eliminated).toBeTruthy()
+    expect(probs[eliminated as string]).toBe(0)
+  })
+})
