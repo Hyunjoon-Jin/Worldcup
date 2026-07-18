@@ -30,6 +30,7 @@ import { useSimulationStore } from './store/useSimulationStore'
 import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
 import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
+import { initPerformanceTracking } from './store/performanceActions'
 
 // 대회 중심 IA: 각 대회(친선전·대륙컵 예선·월드컵 예선·대륙컵·월드컵)를 최상위 탭으로 두고,
 // 상세 화면(조추첨·일정·조별리그·토너먼트·확률)은 각 대회의 '하위 탭'에서 본다. 예전엔 월드컵 상세가
@@ -81,6 +82,11 @@ function App() {
   useEffect(() => {
     if (isDrawComplete) initSchedule()
   }, [isDrawComplete, initSchedule])
+
+  // 성적 반영(본선·대륙컵 진행 → 능력치 보정) 추적을 앱 시작 시 한 번 연결한다.
+  useEffect(() => {
+    initPerformanceTracking()
+  }, [])
 
   // 최상위 탭은 항상 접근 가능하다(상세 화면의 진행 게이팅은 각 대회의 하위 탭에서 처리).
   const tabDisabled = (_id: TabId): boolean => false
