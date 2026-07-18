@@ -9,7 +9,7 @@ import { GROUP_LETTERS } from '../../data/hostSlots'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { qualWindowDate } from '../../engine/qualification/calendar'
 import { deriveQualStages, stageNameOfGroup } from '../../engine/qualification/rules'
-import type { CupId } from '../../data/continental/formats'
+import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
 import type { GroupLetter } from '../../types/group'
 import type { KnockoutRound } from '../../types/match'
 
@@ -38,6 +38,7 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
   const cupActiveId = useContinentalStore((s) => s.activeCupId)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const cupResult = useContinentalStore((s) => s.result)
+  const cupStage = useContinentalStore((s) => s.stage)
   const qualResult = useQualificationStore((s) => s.result)
   const qualRevealed = useQualificationStore((s) => s.revealed)
   const friendlies = useQualificationStore((s) => s.friendlies)
@@ -148,26 +149,52 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
       }
     }
 
-    // ── 대륙컵(활성 대회): 내 팀 대진 — 점수 없이 표시, 클릭 시 대회 페이지 ──
+    // ── 대륙컵(활성 대회): 내 팀 대진 — 공개된 단계(stage)까지는 결과, 이후는 예정으로 표시(클릭 시 대회 페이지) ──
     if (cupActiveId && cupResult) {
       const myGroup = cupResult.groups.find((g) => g.teams.includes(teamId))
       if (myGroup) {
         const phases = buildCupPhases(cupActiveId, cupYear ?? 0)
         const year = cupYear ?? 0
         const goCup = () => onSelectCup(cupActiveId, year)
+        // 단계별 공개(ContinentalStage와 동형): stage 1~3=조별 MD, 4~=녹아웃 라운드.
+        const revealedGroupMd = Math.min(cupStage, 3)
+        const revealedKoRounds = Math.max(0, cupStage - 3)
+        const koOrder = CUP_FORMATS[cupActiveId].knockout
+        const isKoRoundRevealed = (round: string) => {
+          if (round === 'THIRD') return revealedKoRounds >= koOrder.length // 3·4위전은 결승과 함께 마지막에 공개
+          const idx = koOrder.indexOf(round as (typeof koOrder)[number])
+          return idx >= 0 && idx < revealedKoRounds
+        }
         for (const m of myGroup.matches.filter((x) => x.homeTeamId === teamId || x.awayTeamId === teamId)) {
           const oppId = m.homeTeamId === teamId ? m.awayTeamId : m.homeTeamId
           const ph = phases.find((p) => p.key === `G${m.matchday}`)
-          out.push({ key: `cg-${m.matchday}`, comp: 'cup', date: ph?.start, roundLabel: `조별리그 ${m.matchday}차전`, opponentId: oppId, onClick: goCup })
+          const roundLabel = `조별리그 ${m.matchday}차전`
+          if (m.matchday <= revealedGroupMd) {
+            const isHome = m.homeTeamId === teamId
+            const gf = isHome ? m.homeGoals : m.awayGoals
+            const ga = isHome ? m.awayGoals : m.homeGoals
+            out.push({ key: `cg-${m.matchday}`, comp: 'cup', date: ph?.start, roundLabel, opponentId: oppId, score: `${gf}-${ga}`, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', onClick: goCup })
+          } else {
+            out.push({ key: `cg-${m.matchday}`, comp: 'cup', date: ph?.start, roundLabel, opponentId: oppId, onClick: goCup })
+          }
         }
         for (const m of cupResult.knockout.filter((x) => x.homeTeamId === teamId || x.awayTeamId === teamId)) {
           const oppId = m.homeTeamId === teamId ? m.awayTeamId : m.homeTeamId
           const ph = phases.find((p) => p.key === m.round)
-          out.push({ key: `ck-${m.slotId}`, comp: 'cup', date: ph?.start, roundLabel: ROUND_LABEL[m.round], opponentId: oppId, onClick: goCup })
+          const roundLabel = ROUND_LABEL[m.round]
+          if (isKoRoundRevealed(m.round)) {
+            const isHome = m.homeTeamId === teamId
+            const gf = isHome ? m.result.homeGoals : m.result.awayGoals
+            const ga = isHome ? m.result.awayGoals : m.result.homeGoals
+            const won = m.result.winnerTeamId === teamId
+            out.push({ key: `ck-${m.slotId}`, comp: 'cup', date: ph?.start, roundLabel, opponentId: oppId, score: `${gf}-${ga}`, result: won ? 'W' : 'L', onClick: goCup })
+          } else {
+            out.push({ key: `ck-${m.slotId}`, comp: 'cup', date: ph?.start, roundLabel, opponentId: oppId, onClick: goCup })
+          }
         }
       }
     }
 
     return out.sort((a, b) => (a.date ?? '9999').localeCompare(b.date ?? '9999'))
-  }, [group, groupMatches, knockoutSlots, schedule, drawGroups, teamId, selectMatch, cupActiveId, cupResult, cupYear, onSelectCup, qualResult, qualRevealed, friendlies, wcYear])
+  }, [group, groupMatches, knockoutSlots, schedule, drawGroups, teamId, selectMatch, cupActiveId, cupResult, cupStage, cupYear, onSelectCup, qualResult, qualRevealed, friendlies, wcYear])
 }

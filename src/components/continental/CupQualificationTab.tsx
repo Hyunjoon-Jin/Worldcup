@@ -3,7 +3,7 @@ import { GlassCard } from '../common/GlassCard'
 import { TeamLink } from '../common/TeamLink'
 import { SubTabNav } from '../layout/SubTabNav'
 import { useContinentalStore } from '../../store/useContinentalStore'
-import { useQualificationStore } from '../../store/useQualificationStore'
+import { useQualificationStore, buildProbInputs } from '../../store/useQualificationStore'
 import { useCareerStore } from '../../store/useCareerStore'
 import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
@@ -160,9 +160,20 @@ const cupQualProbCache = new Map<string, Record<string, number>>()
 
 /** 대륙컵 지역예선 진출 확률 — 탭을 열면 버튼 없이 자동으로 몬테카를로 계산한다(월드컵 확률 탭과 동형). */
 function CupQualProbView({ format, hostIds }: { format: CupFormat; hostIds: string[] }) {
+  const isCombined = format.qual.style === 'combinedWcq'
+  const confed = format.confeds[0]
+  const wcYear = useCareerStore((s) => s.year)
   const rankByTeam = cupRankByTeam(format.id) ?? {}
-  // 랭킹(월드컵 예선 반영) 변화까지 캐시 키에 넣어, 예선 진행에 따라 확률이 갱신되게 한다.
-  const cacheKey = `${format.id}|${[...hostIds].sort().join(',')}|${Object.keys(rankByTeam).length}`
+  // 통합 예선(아시안컵)은 월드컵 예선 진행에 따라 조건부로 갱신되므로 진행 시그니처를 캐시 키에 포함한다.
+  const revealed = useQualificationStore((s) => (isCombined ? (s.revealed[confed] ?? 0) : 0))
+  // 대륙컵 개최국(자동 진출) — 실제 자동 시뮬과 동일한 시드로 산출.
+  const cupHostIds = useMemo<string[]>(() => {
+    if (!isCombined) return []
+    const ev = buildSeasonTimeline(wcYear).find((e) => e.kind === 'cup' && e.id === format.id)
+    return selectCupHosts(format, `${format.id}-${ev?.year ?? wcYear}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCombined, format.id, wcYear])
+  const cacheKey = `${format.id}|${[...hostIds].sort().join(',')}|${cupHostIds.join(',')}|${Object.keys(rankByTeam).length}|${revealed}`
   const [probs, setProbs] = useState<Record<string, number> | null>(() => cupQualProbCache.get(cacheKey) ?? null)
 
   useEffect(() => {
@@ -175,9 +186,16 @@ function CupQualProbView({ format, hostIds }: { format: CupFormat; hostIds: stri
     // 무거운 계산이라 다음 틱으로 넘겨 '계산 중' 표시가 먼저 그려지게 한다.
     let cancelled = false
     const t = setTimeout(() => {
-      const pool = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
-      const iters = format.qual.style === 'combinedWcq' ? 150 : 240
-      const res = computeCupQualProbabilities(format, baseRatingsMap(pool), hostIds, iters, `${format.id}-QPROB`, { rankByTeam })
+      const iters = isCombined ? 150 : 240
+      let res: Record<string, number>
+      if (isCombined) {
+        // 진행 반영: 치른 경기를 고정(locked)하고 캠페인 갱신 전력으로 조건부 계산 → 확정 팀 100%·탈락 0%로 수렴.
+        const { ratings, lockedByConfed } = buildProbInputs()
+        res = computeCupQualProbabilities(format, ratings, hostIds, iters, `${format.id}-QPROB`, { rankByTeam, locked: lockedByConfed?.[confed], cupHostIds })
+      } else {
+        const pool = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
+        res = computeCupQualProbabilities(format, baseRatingsMap(pool), hostIds, iters, `${format.id}-QPROB`, { rankByTeam })
+      }
       cupQualProbCache.set(cacheKey, res)
       if (!cancelled) setProbs(res)
     }, 20)

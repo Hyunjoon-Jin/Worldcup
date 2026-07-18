@@ -37,4 +37,12 @@ describe('대륙컵 지역예선 진출 확률', () => {
     const p = computeCupQualProbabilities(f, ratings, [host], 30, 'EURO-HOST', {})
     expect(p[host]).toBe(100)
   })
+
+  it('통합 예선(아시안컵) 개최국은 cupHostIds로 자동 진출 100%', () => {
+    const f = CUP_FORMATS.ASIAN
+    const afc = nationsByConfederation('AFC').map((t) => t.id).sort((a, b) => a.localeCompare(b))
+    const host = afc[afc.length - 1] // 약체 개최국(전력과 무관하게 자동 진출해야 함)
+    const p = computeCupQualProbabilities(f, ratings, [], 40, 'ASIAN-HOST', { cupHostIds: [host] })
+    expect(p[host]).toBe(100)
+  })
 })

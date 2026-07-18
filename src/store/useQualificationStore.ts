@@ -89,7 +89,7 @@ function recordRankMonths(result: AllQualificationResult, windows: number[], cal
  * 부분 진행이면: 이미 치른 경기를 고정(locked)하고, 그 결과로 갱신된 Elo 전력으로 남은 경기를
  * 시뮬레이션한다(조건부 확률). 전체 완료/미진행이면 무조건 확률(D1 능력치)로 계산한다.
  */
-function buildProbInputs(): {
+export function buildProbInputs(): {
   ratings: Record<string, TeamRatings>
   locked?: Record<string, LockedMatchData[]>
   lockedByConfed?: Record<string, LockedLookup>
