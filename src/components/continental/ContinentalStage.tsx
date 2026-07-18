@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
@@ -200,6 +200,11 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
     () => (format ? format.knockout.filter((r) => r !== 'THIRD' && r !== 'FINAL') : []),
     [format],
   )
+
+  // 확률 탭을 열면 버튼 없이 자동으로 진출 체인 확률을 계산한다(아직 계산 전이면).
+  useEffect(() => {
+    if (view === 'probability' && result && !probabilities) computeProbabilities()
+  }, [view, result, probabilities, computeProbabilities])
 
   // 조추첨 포트(시드 등급) 복원 — 본선 조 시딩은 기본 능력치순 포트(teamsPerGroup개)로 이뤄진다.
   // 각 포트 = 능력치 상위부터 groups명씩. 팀별 소속 포트·배정 조를 함께 계산해 조추첨을 시각화한다.
@@ -432,7 +437,7 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
                 </div>
               </GlassCard>
             ) : (
-              <GlassCard className="p-8 text-center text-[11px] text-gray-500">위 <strong className="text-gray-300">📊 우승 확률 계산</strong>을 눌러 확률을 계산하세요.</GlassCard>
+              <GlassCard className="p-8 text-center text-[11px] text-gray-500">📊 진출·우승 확률을 계산하고 있어요…</GlassCard>
             )
           )}
         </>

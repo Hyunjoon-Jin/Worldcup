@@ -96,6 +96,25 @@ export function autoSimulateSeasonEvent(e: SeasonEvent): void {
 }
 
 /**
+ * 월드컵 본선을 마치고 캘린더로 돌아갈 때: 사이클을 바로 롤(다음 월드컵 예선)하지 않고, 월드컵 다음 일정
+ * (대륙컵 등)으로 커서를 옮겨 '남은 사이클'을 캘린더에서 이어가게 한다. 월드컵이 사이클의 마지막 일정일
+ * 때만 다음 사이클로 롤한다. (월드컵은 보통 사이클 앞부분이고 아시안컵·유로 등이 뒤에 이어진다.)
+ */
+export function advanceCalendarAfterWorldCup(): void {
+  const wcYear = useCareerStore.getState().year
+  const events = buildSeasonTimeline(wcYear)
+  const wcIdx = events.findIndex((e) => e.kind === 'wc')
+  if (wcIdx < 0 || wcIdx >= events.length - 1) {
+    // 월드컵이 마지막이면 사이클 종료 → 다음 월드컵 사이클로 롤(폼·랭킹 이월) + 커서 리셋.
+    advanceToNextEdition()
+    useSeasonStore.getState().reset()
+  } else {
+    // 월드컵 다음 일정으로 커서 이동(이미 더 진행했으면 유지).
+    useSeasonStore.getState().setCursor(Math.max(useSeasonStore.getState().cursorIndex, wcIdx + 1))
+  }
+}
+
+/**
  * 한 사이클(현재 커서 ~ 마지막 일정)을 전부 자동 진행한다(커리어 자동 진행). 남은 모든 이벤트를 순서대로
  * 자동 시뮬레이션한 뒤, 사이클 종료 처리(advanceToNextEdition)로 다음 월드컵 사이클로 넘어가며 폼·FIFA
  * 점수를 이월한다. 커서는 새 사이클의 처음으로 리셋한다.
