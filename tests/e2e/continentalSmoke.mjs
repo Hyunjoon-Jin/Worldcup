@@ -70,8 +70,9 @@ try {
   // 확률 계산(헤더 버튼) → 확률 하위탭에서 표시
   await page.getByRole('button', { name: '📊 우승 확률 계산' }).click()
   await page.getByRole('tab', { name: '확률', exact: true }).click()
-  await page.getByText('진출 체인 확률', { exact: false }).waitFor({ timeout: 15000 })
-  assert(true, '진출 체인 확률이 계산·표시된다')
+  // 월드컵 확률 대시보드와 동형: 조별통과~우승 막대 + 몬테카를로 회수 + 새로고침.
+  await page.getByText('몬테카를로 시뮬레이션', { exact: false }).waitFor({ timeout: 15000 })
+  assert(await page.getByRole('button', { name: '🔄 새로고침' }).isVisible(), '진출 체인 확률 대시보드가 계산·표시된다')
 
   // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (진행·일정 탭의 우승팀 클릭)
   await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
