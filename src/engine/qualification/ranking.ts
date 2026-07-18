@@ -435,6 +435,37 @@ export function overallDeltasFromResults(
   return out
 }
 
+/** Elo 누적 대상 경기(대회 무관 공통 형태). */
+export interface EloPlayMatch {
+  homeTeamId: string
+  awayTeamId: string
+  homeGoals: number
+  awayGoals: number
+  wentToPenalties?: boolean
+  winnerTeamId?: string
+}
+
+/**
+ * 여러 대회의 '치른 경기'를 대회별 중요도로 Elo 누적 적용한 뒤, 점수 변동을 능력치 보정으로 환산한다.
+ * 예선뿐 아니라 친선·대륙컵·월드컵 본선 등 '치른 모든 경기'를 반영하므로, 월드컵이 아니어도 매 경기마다
+ * 능력치가 조금씩 오르내린다. 변동이 0인 팀은 결과에서 생략한다.
+ */
+export function overallDeltasFromPlay(
+  groups: Array<{ matches: EloPlayMatch[]; importance: number }>,
+  maxDelta = 6,
+): Record<string, number> {
+  const ids = Object.keys(ALL_NATIONS_BY_ID)
+  const base = initRankingPoints(ids)
+  const points: Record<string, number> = { ...base }
+  for (const g of groups) for (const m of g.matches) applyMatchElo(points, m, g.importance)
+  const out: Record<string, number> = {}
+  for (const id of ids) {
+    const d = Math.max(-maxDelta, Math.min(maxDelta, Math.round((points[id] - base[id]) * OVERALL_PER_ELO_POINT)))
+    if (d !== 0) out[id] = d
+  }
+  return out
+}
+
 export interface TrendPoint {
   date: string
   label: string
