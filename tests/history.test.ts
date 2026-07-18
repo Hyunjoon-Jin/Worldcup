@@ -84,4 +84,12 @@ describe('역대 기록 엔진 (history)', () => {
     expect(arg.worstRank?.rank).toBe(3)
     expect(arg.avgRank).toBe(2) // (1 + 3) / 2
   })
+
+  it('완료한 대회가 없는 팀은 최고 성적이 null(기록 없음) — 예선 탈락으로 오표기하지 않는다', () => {
+    const empty = aggregateTeamHistory([], 'KOR')
+    expect(empty.editions).toBe(0)
+    expect(empty.bestFinish).toBeNull()
+    expect(empty.titles).toBe(0)
+    expect(empty.qualifiedCount).toBe(0)
+  })
 })

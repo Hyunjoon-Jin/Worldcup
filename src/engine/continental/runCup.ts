@@ -106,14 +106,35 @@ function roundRobin(teams: string[]): Array<{ home: string; away: string; matchd
   return out
 }
 
-/** 조추첨: 능력치 포트(teamsPerGroup개) → 각 포트를 시드 셔플해 조에 한 명씩 배정. */
-export function drawCupGroups(format: CupFormat, teamIds: string[], ratings: Record<string, TeamRatings>, rand: RandomFn): string[][] {
-  const sorted = [...teamIds].sort((a, b) => ratingOf(b, ratings) - ratingOf(a, ratings) || a.localeCompare(b))
+/**
+ * 조추첨: 능력치 포트(teamsPerGroup개) → 각 포트를 시드 셔플해 조에 한 명씩 배정.
+ * 개최국(hostIds)은 실제 대륙 대회처럼 포트1로 보호해 A조부터 순서대로 시드 배정한다(능력치와 무관).
+ * 월드컵 본선 조추첨(drawEngine)의 개최국 보호와 동일한 원칙 — 개최국이 약체라도 포트4에 빠지지 않는다.
+ */
+export function drawCupGroups(
+  format: CupFormat,
+  teamIds: string[],
+  ratings: Record<string, TeamRatings>,
+  rand: RandomFn,
+  hostIds: string[] = [],
+): string[][] {
   const groups: string[][] = Array.from({ length: format.groups }, () => [])
-  for (let p = 0; p < format.teamsPerGroup; p++) {
-    const pot = sorted.slice(p * format.groups, (p + 1) * format.groups)
-    const shuffled = seededShuffle(pot, rand)
-    shuffled.forEach((t, i) => groups[i].push(t))
+  // 개최국을 포트1 시드로 보호: 참가 필드에 있는 개최국을 A조부터 한 조에 하나씩 배정(최대 조 수까지).
+  const protectedHosts = [...new Set(hostIds)].filter((id) => teamIds.includes(id)).slice(0, format.groups)
+  const protectedSet = new Set(protectedHosts)
+  protectedHosts.forEach((h, i) => groups[i].push(h))
+  // 나머지는 능력치 순으로 포트를 나눠 배정한다.
+  const nonHost = teamIds.filter((id) => !protectedSet.has(id)).sort((a, b) => ratingOf(b, ratings) - ratingOf(a, ratings) || a.localeCompare(b))
+  // 포트1 잔여: 개최국이 없는 조를 상위 비개최국으로 시드 셔플해 채운다.
+  const emptyPot1 = groups.map((_, i) => i).filter((i) => groups[i].length === 0)
+  const pot1Fill = seededShuffle(nonHost.slice(0, emptyPot1.length), rand)
+  emptyPot1.forEach((gi, k) => groups[gi].push(pot1Fill[k]))
+  let cursor = emptyPot1.length
+  // 포트2..: 각 포트를 시드 셔플해 조에 한 명씩.
+  for (let p = 1; p < format.teamsPerGroup; p++) {
+    const pot = seededShuffle(nonHost.slice(cursor, cursor + format.groups), rand)
+    cursor += format.groups
+    pot.forEach((t, i) => groups[i].push(t))
   }
   return groups
 }
@@ -267,7 +288,7 @@ export function runCup(
   }
   const hostSet = new Set(hostIds)
   const drawRand = createSeededRandom(`${seed}-${format.id}-DRAW`)
-  const groupsTeams = drawCupGroups(format, teamIds, ratings, drawRand)
+  const groupsTeams = drawCupGroups(format, teamIds, ratings, drawRand, hostIds)
 
   const groups: CupGroupResult[] = groupsTeams.map((teams, gi) =>
     simulateGroup(gi, teams, ratings, hostSet, format.groupTiebreak, createSeededRandom(`${seed}-${format.id}-G${gi}`)),

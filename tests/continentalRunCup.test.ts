@@ -75,6 +75,29 @@ describe('대륙컵 제네릭 엔진 runCup (Phase A)', () => {
     }
   })
 
+  it('개최국은 능력치가 낮아도 포트1로 보호되어 A조에 시드된다', () => {
+    for (const id of ['EURO', 'AFCON', 'ASIAN'] as const) {
+      const f = CUP_FORMATS[id]
+      const { teamIds, ratings } = fieldFor(id)
+      // 가장 약한 참가국을 개최국으로 지정 → 능력치대로면 마지막 포트에 갈 팀.
+      const weakest = teamIds[teamIds.length - 1]
+      const groups = drawCupGroups(f, teamIds, ratings, createSeededRandom(`${id}-HOST`), [weakest])
+      expect(groups[0]).toContain(weakest) // A조에 배정
+      // 전원 배정·중복 없음은 유지된다.
+      expect(groups.flat().sort()).toEqual([...teamIds].sort())
+      for (const g of groups) expect(g).toHaveLength(f.teamsPerGroup)
+    }
+  })
+
+  it('공동 개최국(2팀)은 서로 다른 조(A·B)에 시드된다', () => {
+    const f = CUP_FORMATS.AFCON
+    const { teamIds, ratings } = fieldFor('AFCON')
+    const co = [teamIds[teamIds.length - 1], teamIds[teamIds.length - 2]]
+    const groups = drawCupGroups(f, teamIds, ratings, createSeededRandom('AFCON-COHOST'), co)
+    expect(groups[0]).toContain(co[0])
+    expect(groups[1]).toContain(co[1])
+  })
+
   it('teams 길이 불일치는 에러', () => {
     const f = CUP_FORMATS.EURO
     const { ratings } = fieldFor('EURO')

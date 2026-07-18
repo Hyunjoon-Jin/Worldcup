@@ -141,7 +141,8 @@ export interface TeamAllTimeStats {
   editions: number
   qualifiedCount: number
   titles: number
-  bestFinish: string
+  /** 역대 최고 성적. 완료한 대회가 하나도 없으면 null(‘기록 없음’). */
+  bestFinish: string | null
   gp: number
   w: number
   d: number
@@ -170,7 +171,7 @@ export function aggregateTeamHistory(editions: EditionRecord[], teamId: string):
     l = 0,
     gf = 0,
     ga = 0
-  let bestFinish = '예선 탈락'
+  let bestFinish: string | null = null // 완료한 대회가 없으면 null 유지 → '기록 없음'(예선 탈락으로 오표기 방지)
   const rankTrend: Array<{ year: number; rank: number }> = []
   for (const ed of editions) {
     const rec = ed.byTeam[teamId]
@@ -183,7 +184,7 @@ export function aggregateTeamHistory(editions: EditionRecord[], teamId: string):
     l += rec.l
     gf += rec.gf
     ga += rec.ga
-    bestFinish = betterFinish(bestFinish, rec.roundReached)
+    bestFinish = bestFinish == null ? rec.roundReached : betterFinish(bestFinish, rec.roundReached)
     if (rec.rank != null) rankTrend.push({ year: ed.year, rank: rec.rank })
   }
   rankTrend.sort((a, b) => a.year - b.year)

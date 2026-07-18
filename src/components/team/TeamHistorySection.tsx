@@ -177,7 +177,7 @@ export function TeamHistorySection({ teamId }: { teamId: string }) {
       <div className="mb-4 grid grid-cols-3 gap-2">
         <Stat label="우승" value={`${stats.titles}회`} />
         <Stat label="본선 진출" value={`${stats.qualifiedCount}회`} sub={`총 ${stats.editions}개 대회`} />
-        <Stat label="최고 성적" value={stats.bestFinish} />
+        <Stat label="최고 성적" value={stats.bestFinish ?? '기록 없음'} />
       </div>
 
       {/* 연도별 성적 */}

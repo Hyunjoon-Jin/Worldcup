@@ -6,6 +6,7 @@ import { useContinentalStore } from './useContinentalStore'
 import { useContinentalHistoryStore } from './useContinentalHistoryStore'
 import {
   overallDeltasFromPlay,
+  formNudgeDeltasFromPlay,
   MATCH_IMPORTANCE,
   IMPORTANCE_QUALIFIER,
   IMPORTANCE_WC_GROUP,
@@ -33,9 +34,10 @@ function continentalDeltas(): Record<string, number> {
 
 /**
  * 성적→능력치 보정을 '치른 모든 경기'에서 종합해 계산하고 store에 반영한다(성적 반영 흐름의 단일 소유자).
- * 예선·친선·대륙컵·월드컵 본선에서 치른 각 경기를 대회별 FIFA 중요도로 Elo 누적해, '매 경기마다' 능력치가
- * 조금씩 오르내리도록 한다(월드컵이 아니어도). 여기에 커리어 폼(이월)과 역대 대륙컵 입상 prestige를 더하고
- * ±8로 클램프한다. getRatings가 이 값을 공격·수비·종합에 더한다.
+ * 예선·친선·대륙컵·월드컵 본선에서 치른 각 경기를 대회별 FIFA 중요도로 Elo 누적하고(상대 강약 반영),
+ * 여기에 결과(승/무/패) 기반 최근 폼 보정을 더해 '매 경기마다' 능력치가 조금씩 오르내리도록 한다
+ * (월드컵이 아니어도, 강팀이 약팀을 이겨 Elo 변동이 0에 수렴해도 폼으로 소폭 움직인다). 여기에 커리어
+ * 폼(이월)과 역대 대륙컵 입상 prestige를 더하고 ±8로 클램프한다. getRatings가 이 값을 공격·수비·종합에 더한다.
  */
 export function recomputePerformanceDeltas(): void {
   const qr = useQualificationStore.getState().result
@@ -77,13 +79,14 @@ export function recomputePerformanceDeltas(): void {
     groups.push({ matches: Object.values(prog.knockoutSlots).map((s) => s.result).filter((m): m is NonNullable<typeof m> => m != null), importance: IMPORTANCE_WC_KO })
   }
 
-  const playD = overallDeltasFromPlay(groups)
+  const playD = overallDeltasFromPlay(groups) // Elo 기반(상대 강약 반영) 보정
+  const formD = formNudgeDeltasFromPlay(groups) // 결과(승/무/패) 기반 최근 폼 — 매 경기 소폭 진동
   const contTrophy = continentalDeltas() // 역대 대륙컵 우승·입상 prestige(지난 대회 경기는 저장 안 되므로 별도 유지)
 
   const combined: Record<string, number> = {}
-  const ids = new Set([...Object.keys(playD), ...Object.keys(carriedForm), ...Object.keys(contTrophy)])
+  const ids = new Set([...Object.keys(playD), ...Object.keys(formD), ...Object.keys(carriedForm), ...Object.keys(contTrophy)])
   for (const id of ids) {
-    combined[id] = clamp8((playD[id] ?? 0) + (carriedForm[id] ?? 0) + (contTrophy[id] ?? 0) * 0.5)
+    combined[id] = clamp8((playD[id] ?? 0) + (formD[id] ?? 0) + (carriedForm[id] ?? 0) + (contTrophy[id] ?? 0) * 0.5)
   }
   usePerformanceStore.getState().setDeltas(combined)
 }

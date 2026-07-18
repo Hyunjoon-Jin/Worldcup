@@ -206,14 +206,22 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
     if (view === 'probability' && result && !probabilities) computeProbabilities()
   }, [view, result, probabilities, computeProbabilities])
 
-  // 조추첨 포트(시드 등급) 복원 — 본선 조 시딩은 기본 능력치순 포트(teamsPerGroup개)로 이뤄진다.
-  // 각 포트 = 능력치 상위부터 groups명씩. 팀별 소속 포트·배정 조를 함께 계산해 조추첨을 시각화한다.
+  // 조추첨 포트(시드 등급) 복원 — 실제 조추첨(drawCupGroups)과 동일하게 개최국을 포트1로 보호한다.
+  // 포트1 = 개최국 + 상위 비개최국으로 groups개, 포트2.. = 잔여 비개최국을 능력치 순으로 groups명씩.
+  // (개최국을 능력치대로 포트4에 넣던 예전 계산은 실제 배정과 어긋나 조마다 포트가 중복돼 보였다.)
   const drawInfo = useMemo(() => {
     if (!result || !format) return null
     const field = result.groups.flatMap((g) => g.teams)
-    const sorted = [...field].sort((a, b) => (ALL_NATIONS_BY_ID[b]?.baseRatings.overall ?? 0) - (ALL_NATIONS_BY_ID[a]?.baseRatings.overall ?? 0) || a.localeCompare(b))
-    const pots: string[][] = []
-    for (let p = 0; p < format.teamsPerGroup; p++) pots.push(sorted.slice(p * format.groups, (p + 1) * format.groups))
+    const hostSet = new Set((result.hosts ?? []).filter((id) => field.includes(id)))
+    const protectedHosts = [...hostSet].slice(0, format.groups)
+    const rating = (id: string) => ALL_NATIONS_BY_ID[id]?.baseRatings.overall ?? 0
+    const nonHost = field.filter((id) => !hostSet.has(id)).sort((a, b) => rating(b) - rating(a) || a.localeCompare(b))
+    const pots: string[][] = [[...protectedHosts, ...nonHost.slice(0, format.groups - protectedHosts.length)]]
+    let cursor = format.groups - protectedHosts.length
+    for (let p = 1; p < format.teamsPerGroup; p++) {
+      pots.push(nonHost.slice(cursor, cursor + format.groups))
+      cursor += format.groups
+    }
     const potOf = new Map<string, number>()
     pots.forEach((pot, pi) => pot.forEach((t) => potOf.set(t, pi)))
     const groupOf = new Map<string, number>()
