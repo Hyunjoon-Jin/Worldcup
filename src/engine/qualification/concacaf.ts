@@ -1,15 +1,9 @@
-import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
-import { playSingleGroup, snakeSeed, rankAcrossGroups, type LockedLookup } from './generic'
+import { playSingleGroup, snakeSeed, rankAcrossGroups, seedComparator, type LockedLookup } from './generic'
 import { QUAL_FORMAT, GROUP_LETTERS, type ConcacafFormat } from './formats'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
-
-const byRank = (a: string, b: string) => {
-  const rd = ALL_NATIONS_BY_ID[a].fifaRankApprox - ALL_NATIONS_BY_ID[b].fifaRankApprox
-  return rd !== 0 ? rd : a.localeCompare(b) // 랭킹 동률 시 팀ID로 결정성 확보
-}
 
 /**
  * CONCACAF 다라운드 예선 (A4 · 1·2차 예비예선 포함). 개최국은 상위(오케스트레이터)에서 이미 제외되어 들어온다.
@@ -24,10 +18,13 @@ export function simulateConcacaf(
   rand: RandomFn,
   locked?: LockedLookup,
   directSlots: number = SLOT_ALLOCATION.CONCACAF.direct - 3,
+  seedRank?: Record<string, number>,
 ): QualificationResult {
   const fmt = QUAL_FORMAT.CONCACAF as ConcacafFormat
   const pool = teams // 개최국은 이미 제외됨
   const playoffSlots = SLOT_ALLOCATION.CONCACAF.playoff // 2
+  // 시드는 이월 FIFA 순위(seedRank) 순 — 랭킹이 오르면 1차 예비예선을 건너뛴다.
+  const byRank = seedComparator(seedRank)
   const sorted = [...pool].sort(byRank)
 
   const allMatches: QualMatch[] = []

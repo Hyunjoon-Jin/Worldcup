@@ -191,8 +191,8 @@ function CupQualProbView({ format, hostIds }: { format: CupFormat; hostIds: stri
       if (isCombined) {
         // 진행 반영: 공개된 경기를 예선 완료 여부와 무관하게 고정(locked)하고 캠페인 전력으로 조건부 계산
         // → 이미 통과한 팀(예: 대만 2차 통과)은 100%, 탈락 팀은 0%로 결정론적으로 수렴한다.
-        const { ratings, locked } = buildConfedLockedProbInputs(confed)
-        res = computeCupQualProbabilities(format, ratings, hostIds, iters, `${format.id}-QPROB`, { rankByTeam, locked, cupHostIds })
+        const { ratings, locked, seedRank } = buildConfedLockedProbInputs(confed)
+        res = computeCupQualProbabilities(format, ratings, hostIds, iters, `${format.id}-QPROB`, { rankByTeam, locked, cupHostIds, seedRank })
       } else {
         const pool = [...new Set(format.confeds.flatMap((c) => nationsByConfederation(c).map((t) => t.id)))]
         res = computeCupQualProbabilities(format, baseRatingsMap(pool), hostIds, iters, `${format.id}-QPROB`, { rankByTeam })

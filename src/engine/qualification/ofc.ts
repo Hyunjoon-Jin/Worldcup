@@ -2,7 +2,7 @@ import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { SLOT_ALLOCATION } from '../../data/confederations'
 import { simulateScoreRaw, type RandomFn } from '../matchCore'
 import { computeStandings } from '../tiebreakers'
-import { playSingleGroup, snakeSeed, type LockedLookup } from './generic'
+import { playSingleGroup, snakeSeed, seedComparator, type LockedLookup } from './generic'
 import { GROUP_LETTERS } from './formats'
 import type { GroupStanding } from '../../types/group'
 import type { TeamRatings } from '../../types/team'
@@ -39,8 +39,9 @@ export function simulateOfc(
   rand: RandomFn,
   locked?: LockedLookup,
   directSlots: number = SLOT_ALLOCATION.OFC.direct,
+  seedRank?: Record<string, number>,
 ): QualificationResult {
-  const sorted = [...teams].sort(byRank)
+  const sorted = [...teams].sort(seedComparator(seedRank)) // 시드는 이월 FIFA 순위순(성적 반영)
   const groups = snakeSeed(sorted, OFC_GROUPS)
 
   const allMatches: QualMatch[] = []

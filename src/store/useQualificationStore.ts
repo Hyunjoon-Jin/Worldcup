@@ -40,6 +40,22 @@ function buildQualRatings(): Record<string, TeamRatings> {
   return Object.fromEntries(ALL_NATIONS.map((t) => [t.id, getRatings(t.id)]))
 }
 
+/**
+ * 예선 시딩용 '이월 FIFA 순위'(teamId→순위, 작을수록 상위). 커리어에서 이월된 FIFA 점수(rankingBase)로
+ * 사이클 시작 시점의 순위를 매긴다 — 랭킹이 오르면 예선 진입 라운드(AFC 1차 예비예선 등)를 건너뛴다.
+ * 사이클 내 고정값이라 원 시뮬과 확률 재현(잠금 재실행)에 동일하게 주입돼 결정성을 지킨다.
+ * 이월 점수가 없으면(첫 사이클) undefined → 엔진이 정적 근사 순위로 폴백.
+ */
+function qualSeedRank(): Record<string, number> | undefined {
+  const base = useCareerStore.getState().rankingBase
+  const ids = Object.keys(base)
+  if (ids.length === 0) return undefined
+  const sorted = [...ids].sort((a, b) => base[b] - base[a] || a.localeCompare(b))
+  const rank: Record<string, number> = {}
+  sorted.forEach((id, i) => (rank[id] = i + 1))
+  return rank
+}
+
 /** 이 스테이지가 '포트로 조추첨하는 조별 차수'인가(균등 크기 2개 이상 조, 녹아웃 아님). */
 function isPotDrawStage(r: AllQualificationResult['byConfederation'][string], stage: { groupIndices: number[] }): boolean {
   const sizes = stage.groupIndices.map((gi) => r.groups[gi]?.length ?? 0)
@@ -96,20 +112,23 @@ export function buildProbInputs(): {
   ratings: Record<string, TeamRatings>
   locked?: Record<string, LockedMatchData[]>
   lockedByConfed?: Record<string, LockedLookup>
+  seedRank?: Record<string, number>
 } {
   const result = useQualificationStore.getState().result
   const revealed = useQualificationStore.getState().revealed
-  if (!result) return { ratings: buildQualRatings() }
+  // seedRank는 실제 예선(simulate)과 동일하게 넘겨, 재현 시뮬의 예선 구조가 실제와 어긋나지 않게 한다.
+  const seedRank = qualSeedRank()
+  if (!result) return { ratings: buildQualRatings(), seedRank }
   const locked = collectPlayedByConfed(result, revealed)
   const played = flattenPlayed(locked)
-  if (played.length === 0) return { ratings: buildQualRatings() } // 아직 한 경기도 공개 전
+  if (played.length === 0) return { ratings: buildQualRatings(), seedRank } // 아직 한 경기도 공개 전
   const fieldIds = [
     ...new Set(
       Object.values(result.byConfederation).flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])),
     ),
   ]
   const points = updateRankingPoints(initRankingPoints(fieldIds), played)
-  return { ratings: updatedRatingsFromPoints(points), locked, lockedByConfed: buildLockedLookups(locked) }
+  return { ratings: updatedRatingsFromPoints(points), locked, lockedByConfed: buildLockedLookups(locked), seedRank }
 }
 
 /**
@@ -118,18 +137,19 @@ export function buildProbInputs(): {
  * 아시안컵 직행 확정 → 100%), isPartialProgress에 의존하지 않고 collectPlayedByConfed로 공개분을 전부 lock한다.
  * 완전 공개면 전 경기가 고정돼 시뮬이 실제 결과를 결정론적으로 재현한다(확정 팀 100%·탈락 0%).
  */
-export function buildConfedLockedProbInputs(confed: string): { ratings: Record<string, TeamRatings>; locked?: LockedLookup } {
+export function buildConfedLockedProbInputs(confed: string): { ratings: Record<string, TeamRatings>; locked?: LockedLookup; seedRank?: Record<string, number> } {
   const result = useQualificationStore.getState().result
   const revealed = useQualificationStore.getState().revealed
-  if (!result) return { ratings: buildQualRatings() }
+  const seedRank = qualSeedRank() // 실제 예선과 동일한 시딩으로 재현(구조 정합성)
+  if (!result) return { ratings: buildQualRatings(), seedRank }
   const lockedAll = collectPlayedByConfed(result, revealed)
   const played = flattenPlayed(lockedAll)
-  if (played.length === 0) return { ratings: buildQualRatings() }
+  if (played.length === 0) return { ratings: buildQualRatings(), seedRank }
   const fieldIds = [
     ...new Set(Object.values(result.byConfederation).flatMap((r) => r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]))),
   ]
   const points = updateRankingPoints(initRankingPoints(fieldIds), played)
-  return { ratings: updatedRatingsFromPoints(points), locked: buildLockedLookups(lockedAll)[confed] }
+  return { ratings: updatedRatingsFromPoints(points), locked: buildLockedLookups(lockedAll)[confed], seedRank }
 }
 
 /**
@@ -152,8 +172,9 @@ async function runProbOnMainThread(
   set: (partial: Partial<QualificationStore>) => void,
   lockedByConfed?: Record<string, LockedLookup>,
   hostIds?: string[],
+  seedRank?: Record<string, number>,
 ): Promise<void> {
-  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed, hostIds)
+  const acc = createQualProbAccumulator(seedBase, ratings, lockedByConfed, hostIds, seedRank)
   while (acc.done < PROB_ITERATIONS) {
     if (runId !== probRunId) return
     acc.runBatch(Math.min(PROB_BATCH, PROB_ITERATIONS - acc.done))
@@ -216,7 +237,7 @@ export const useQualificationStore = create<QualificationStore>()(
         // 커리어 폼(이전 대회 흐름)을 시작 전력에 반영한 뒤, 현재 대회 개최국으로 시뮬레이션한다.
         usePerformanceStore.getState().setDeltas(useCareerStore.getState().carriedForm)
         const qualRatings = buildQualRatings()
-        const result = simulateAllQualification(usedSeed, qualRatings, undefined, getCurrentHostIds())
+        const result = simulateAllQualification(usedSeed, qualRatings, undefined, getCurrentHostIds(), qualSeedRank())
         // 예선 기간 중 쉬는 국가들끼리 친선전(평가전)을 편성해 둔다(경기일별, 결정론적).
         const friendlies = buildFriendlies(result, qualRatings, usedSeed)
         // 첫 경기일부터 하루씩 진행. 이후 차수 사이(2차·3차 …)에서 advanceQual이 조추첨을 끼워 넣는다.
@@ -284,7 +305,7 @@ export const useQualificationStore = create<QualificationStore>()(
         const seedBase = get().seed ?? 'PROB'
         const hostIds = getCurrentHostIds()
         // 진행 상황(실황)을 반영: 부분 진행이면 치른 경기 고정 + 갱신 전력으로 조건부 계산.
-        const { ratings, locked, lockedByConfed } = buildProbInputs()
+        const { ratings, locked, lockedByConfed, seedRank } = buildProbInputs()
         // 재계산 중에도 기존 확률을 그대로 두어 화면이 깜빡이지 않게 한다(자동 갱신 시 특히 중요).
         // 새 값은 계산 완료 시 교체된다(오래된 run은 runId로 무시).
         set({ probLoading: true })
@@ -309,15 +330,15 @@ export const useQualificationStore = create<QualificationStore>()(
             worker.onerror = () => {
               worker.terminate()
               if (probWorker === worker) probWorker = null
-              void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds)
+              void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds, seedRank)
             }
-            worker.postMessage({ seedBase, ratings, iterations: PROB_ITERATIONS, locked, hostIds })
+            worker.postMessage({ seedBase, ratings, iterations: PROB_ITERATIONS, locked, hostIds, seedRank })
             return
           } catch {
             /* 워커 생성 실패 → 메인스레드 폴백 */
           }
         }
-        void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds)
+        void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds, seedRank)
       },
       reset: () => {
         probRunId++

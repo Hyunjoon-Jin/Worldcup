@@ -5,6 +5,23 @@ import { computeStandings, rankGroupTeams } from '../tiebreakers'
 import type { TeamRatings } from '../../types/team'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
 
+/**
+ * 예선 시딩 비교자 — 팀의 FIFA 순위(작을수록 상위)로 정렬한다(상위 팀이 앞 = 높은 시드).
+ * seedRank(그 대회 시작 시점의 '이월된 라이브 FIFA 순위')가 있으면 그것을, 없으면 정적 근사 순위를 쓴다.
+ * 예전엔 정적 fifaRankApprox만 썼는데, 그 결과 커리어에서 FIFA 랭킹이 올라도 예선 진입 라운드(예: AFC
+ * 1차 예선)가 그대로였다. seedRank는 사이클 시작 시점의 고정값이라, 원 시뮬과 조건부 확률 재현(잠금 재실행)에
+ * 동일하게 주입되므로 결정성을 깨지 않는다. 동률이면 정적 랭킹 → 팀ID로 결정성을 확보한다.
+ */
+export function seedComparator(seedRank?: Record<string, number>): (a: string, b: string) => number {
+  const rankOf = (id: string) => seedRank?.[id] ?? ALL_NATIONS_BY_ID[id]?.fifaRankApprox ?? 999
+  return (a, b) => {
+    const rd = rankOf(a) - rankOf(b)
+    if (rd !== 0) return rd
+    const sd = (ALL_NATIONS_BY_ID[a]?.fifaRankApprox ?? 999) - (ALL_NATIONS_BY_ID[b]?.fifaRankApprox ?? 999)
+    return sd !== 0 ? sd : a.localeCompare(b)
+  }
+}
+
 export interface QualConfig {
   confederation: string
   /** 조 수(1이면 단일리그) */
