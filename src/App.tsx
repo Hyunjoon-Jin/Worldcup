@@ -29,7 +29,8 @@ import { useSelectionStore } from './store/useSelectionStore'
 import { useSimulationStore } from './store/useSimulationStore'
 import { useMomentumStore } from './store/useMomentumStore'
 import { useA11yStore } from './store/useA11yStore'
-import { resetTournament, advanceToNextEdition } from './store/tournamentActions'
+import { resetTournament } from './store/tournamentActions'
+import { advanceCalendarAfterWorldCup } from './store/seasonActions'
 import { initPerformanceTracking } from './store/performanceActions'
 
 // 대회 중심 IA: 각 대회(친선전·대륙컵 예선·월드컵 예선·대륙컵·월드컵)를 최상위 탭으로 두고,
@@ -201,7 +202,9 @@ function App() {
             {tab === 'worldcup' && (
               <WorldCupTab
                 onNextEdition={() => {
-                  advanceToNextEdition()
+                  // 월드컵을 마쳤으면 남은 사이클(대륙컵 등)로 이어가도록 캘린더로 돌아간다(바로 다음 예선으로
+                  // 롤하지 않는다). 월드컵이 사이클 마지막일 때만 다음 사이클로 넘어간다.
+                  advanceCalendarAfterWorldCup()
                   setTab('season')
                 }}
                 openDrawSignal={wcDrawSignal}
