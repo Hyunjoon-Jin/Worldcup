@@ -7,6 +7,7 @@ import { useSeasonStore } from './useSeasonStore'
 import { startFinalsFromQualification, advanceToNextEdition } from './tournamentActions'
 import { formOffsetsFromResults } from '../engine/qualification/ranking'
 import { buildSeasonTimeline, type SeasonEvent } from '../engine/season/seasonTimeline'
+import { combinedCupDirectQualified } from '../engine/continental/combinedQual'
 import { type CupId } from '../data/continental/formats'
 
 /**
@@ -46,22 +47,26 @@ export function autoSimulateWorldCupFinals(seed?: string): void {
 
 /**
  * 월드컵 지역예선 캠페인 순위를 팀→랭킹으로 환산한다(낮을수록 상위). 대륙컵 예선이 '같은 캠페인'을
- * 반영하도록 하는 단일 출처다. 각 대륙 예선의 최종 순위(standings)를 그대로 랭킹으로 쓰므로, 월드컵
- * 예선에서 잘한 순서가 곧 대륙컵 진출 순서가 된다(통합 예선의 실제 원리). 월드컵 본선 직행국은 더
- * 끌어올려(−1000) 최우선한다. 예선 결과가 없으면 빈 맵(엔진이 FIFA 근사 랭킹으로 폴백).
+ * 반영하도록 하는 단일 출처다. 통합 예선(아시안컵)의 실제 규칙을 정확히 반영한다:
+ * - AFC 아시안컵 직행 자격을 확보한 팀(월드컵 2차 예선 각 조 1·2위 = 3차 예선 도달)은 반드시 최상위
+ *   블록에 두어 대륙컵 본선에 든다. 이렇게 해야 '월드컵 2차 예선 2위로 아시안컵 진출 확보'가 그대로 반영된다.
+ * - 그 밖의 팀은 캠페인 최종 순위(standings) 순으로 뒤를 채운다(남은 자리 = 아시안컵 3차 예선 근사).
+ * - 월드컵 본선 직행국은 가장 확정적으로 우대한다.
+ * 예선 결과가 없으면 빈 맵(엔진이 FIFA 근사 랭킹으로 폴백).
  */
 function combinedQualRanking(): Record<string, number> {
   const qr = useQualificationStore.getState().result
   if (!qr) return {}
   const map: Record<string, number> = {}
-  // 각 대륙 예선의 실제 최종 순위(1위=1)를 랭킹으로 삼는다 — 월드컵 예선 성적을 그대로 대륙컵에 반영.
   for (const r of Object.values(qr.byConfederation)) {
+    // 대륙컵 직행 자격 확보 팀(AFC: 3차 예선 도달)은 0 오프셋으로 최상위 블록에, 나머지는 10000 뒤로.
+    const direct = combinedCupDirectQualified(r)
     r.standings.forEach((id, i) => {
-      map[id] = i + 1
+      map[id] = (direct.has(id) ? 0 : 10000) + (i + 1)
     })
   }
-  // 월드컵 본선 직행국은 확정적으로 최상위(−1000)로 끌어올려 통합 예선에서 반드시 우대한다.
-  for (const id of qr.qualified48) map[id] = (map[id] ?? 999) - 1000
+  // 월드컵 본선 직행국은 확정적으로 가장 앞(−100000)으로 끌어올린다.
+  for (const id of qr.qualified48) map[id] = (map[id] ?? 999) - 100000
   return map
 }
 

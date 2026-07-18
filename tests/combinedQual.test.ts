@@ -2,16 +2,17 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import { useQualificationStore } from '../src/store/useQualificationStore'
 import { cupRankByTeam } from '../src/store/seasonActions'
 import { runCupQualification } from '../src/engine/continental/cupQualification'
+import { combinedCupDirectQualified } from '../src/engine/continental/combinedQual'
 import { CUP_FORMATS } from '../src/data/continental/formats'
 import { baseRatingsMap, nationsByConfederation } from '../src/data/nations'
 
-/** 통합 예선(combinedWcq)이 월드컵 지역예선 캠페인을 '그대로' 반영하는지 검증. */
-describe('AFC 아시안컵 통합 예선 = 월드컵 예선 캠페인', () => {
+/** 통합 예선(combinedWcq)이 아시안컵 실제 규칙(월드컵 2차 예선 통과 = 직행 확보)을 반영하는지 검증. */
+describe('AFC 아시안컵 통합 예선 = 월드컵 예선 캠페인 규칙', () => {
   beforeEach(() => {
     useQualificationStore.setState({ result: null, revealed: {} } as never)
   })
 
-  it('아시안컵 진출국이 AFC 월드컵 예선 최종 순위 상위 N개국과 정확히 일치한다', () => {
+  it('월드컵 2차 예선을 통과(3차 예선 도달)한 팀은 전원 아시안컵 본선에 진출한다', () => {
     useQualificationStore.getState().simulate('COMBINED-TEST')
     const qr = useQualificationStore.getState().result
     expect(qr).not.toBeNull()
@@ -23,11 +24,13 @@ describe('AFC 아시안컵 통합 예선 = 월드컵 예선 캠페인', () => {
     expect(rankByTeam).toBeDefined()
     const res = runCupQualification(fmt, baseRatingsMap(pool), [], 'S', rankByTeam)
 
-    // 개최국 없음 → 진출국 = AFC 캠페인 최종 순위 상위 fmt.teams개국(집합 일치).
-    const campaignTop = new Set(afc.standings.slice(0, fmt.teams))
     expect(res.qualified).toHaveLength(fmt.teams)
-    for (const id of res.qualified) expect(campaignTop.has(id)).toBe(true)
-    // 월드컵 직행국은 반드시 아시안컵 본선에도 포함된다.
+    // 핵심: 3차 예선에 도달한(2차 예선 통과) 팀은 정적 FIFA 랭킹과 무관하게 전원 아시안컵 진출.
+    const direct = combinedCupDirectQualified(afc)
+    expect(direct.size).toBeGreaterThan(0)
+    expect(direct.size).toBeLessThanOrEqual(fmt.teams)
+    for (const id of direct) expect(res.qualified).toContain(id)
+    // 월드컵 직행국(직행 자격 확보의 부분집합)도 반드시 포함된다.
     for (const id of afc.qualified) expect(res.qualified).toContain(id)
   })
 

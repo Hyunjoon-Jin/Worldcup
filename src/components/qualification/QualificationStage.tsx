@@ -1472,7 +1472,7 @@ function ConfederationStandings({
                     <th scope="col" className="w-10 py-1 text-center">승점</th>
                     <th scope="col" className="w-12 py-1 text-center">득실</th>
                     {chainKeys.map((k) => (
-                      <th key={k} scope="col" className="w-12 py-1 text-right" title={`${k === QUALIFY_KEY ? '본선' : k} 진출 확률`}>
+                      <th key={k} scope="col" className="w-12 py-1 text-right" title={k === QUALIFY_KEY ? '본선 진출 확률' : `${k} 도달 확률 (상위 차수에서 직행하지 못하고 이 차수로 내려올 확률 — 낮을수록 상위 차수에서 일찍 통과)`}>
                         {shortStageLabel(k)}
                       </th>
                     ))}

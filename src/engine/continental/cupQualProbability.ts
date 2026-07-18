@@ -1,6 +1,7 @@
 import type { CupFormat } from '../../data/continental/formats'
 import type { Confederation, TeamRatings } from '../../types/team'
 import { runCupQualification } from './cupQualification'
+import { combinedCupDirectQualified } from './combinedQual'
 import { simulateConfederation } from '../qualification/index'
 import { createSeededRandom } from '../rng'
 
@@ -29,12 +30,19 @@ export function computeCupQualProbabilities(
     const confed = format.confeds[0] as Confederation
     for (let i = 0; i < iterations; i++) {
       const r = simulateConfederation(confed, ratings, createSeededRandom(`${seedBase}-${i}`), undefined, hostIds)
-      // 아시안컵 필드 = 개최국(자동) + 그 대륙 월드컵 예선 최종 순위 상위(비개최) 순으로 format.teams까지.
+      // 실제 규칙 반영: 개최국(자동) + 대륙컵 직행 자격 확보 팀(월드컵 2차 예선 통과 = 3차 예선 도달) 우선,
+      // 남은 자리는 캠페인 순위(standings) 순으로 채워 format.teams까지.
+      const direct = combinedCupDirectQualified(r)
       const hostSet = new Set(hostIds.filter((h) => r.standings.includes(h)))
-      const field = [...hostSet]
+      const field: string[] = [...hostSet]
+      const picked = new Set(field)
       for (const id of r.standings) {
         if (field.length >= format.teams) break
-        if (!hostSet.has(id)) field.push(id)
+        if (!picked.has(id) && direct.has(id)) { field.push(id); picked.add(id) }
+      }
+      for (const id of r.standings) {
+        if (field.length >= format.teams) break
+        if (!picked.has(id)) { field.push(id); picked.add(id) }
       }
       bump(field.slice(0, format.teams))
     }

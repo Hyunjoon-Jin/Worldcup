@@ -16,6 +16,7 @@ import { selectCupHosts } from '../../engine/continental/hostSelection'
 import { buildSeasonTimeline } from '../../engine/season/seasonTimeline'
 import { DEFAULT_HOST_IDS } from '../../engine/qualification/index'
 import { computeStandings } from '../../engine/tiebreakers'
+import { combinedCupDirectQualified } from '../../engine/continental/combinedQual'
 import type { GroupStanding } from '../../types/group'
 import type { QualificationResult } from '../../types/qualification'
 import type { CupMatch } from '../../engine/continental/runCup'
@@ -73,7 +74,7 @@ function StandingsTable({ standings, ranking, qualified, hostSet }: { standings:
  * 별도 예선 경기가 아니라, 해당 대륙(AFC 등)의 월드컵 예선 최종 순위를 그대로 나열하고 상위 N개국을
  * 대륙컵 본선 진출로 표시한다. 월드컵 예선 진행이 곧 대륙컵 예선 진행이 되도록(동시 반영) 한다.
  */
-function CombinedCampaignView({ confed, slots, qualifiedSet, hostSet, cutLabel }: { confed: string; slots: number; qualifiedSet: Set<string>; hostSet: Set<string>; cutLabel: string }) {
+function CombinedCampaignView({ confed, slots, hostSet, cutLabel }: { confed: string; slots: number; hostSet: Set<string>; cutLabel: string }) {
   const qr = useQualificationStore((s) => s.result)
   const confResult = qr?.byConfederation[confed]
   if (!confResult) {
@@ -86,27 +87,37 @@ function CombinedCampaignView({ confed, slots, qualifiedSet, hostSet, cutLabel }
   }
   const wcQualified = new Set(confResult.qualified)
   const playoff = new Set(confResult.playoff)
+  // 실제 규칙대로 대륙컵 본선 필드 구성: 개최국 + 직행 자격 확보(2차 통과=3차 도달) + 나머지 순위 순으로 slots까지.
+  const direct = combinedCupDirectQualified(confResult)
+  const stdIndex = new Map(confResult.standings.map((id, i) => [id, i]))
+  const field = new Set<string>(hostSet)
+  for (const id of confResult.standings) { if (field.size >= slots) break; if (!field.has(id) && direct.has(id)) field.add(id) }
+  for (const id of confResult.standings) { if (field.size >= slots) break; if (!field.has(id)) field.add(id) }
+  // 표시 순서: 월드컵 직행 → 아시안컵 직행 확보 → (개최국·나머지) 진출 → 대륙간 PO → 탈락. 각 그룹 안에서는 캠페인 순위 순.
+  const groupOf = (id: string) => (wcQualified.has(id) ? 0 : direct.has(id) ? 1 : field.has(id) ? 2 : playoff.has(id) ? 3 : 4)
+  const ordered = [...confResult.standings].sort((a, b) => groupOf(a) - groupOf(b) || (stdIndex.get(a)! - stdIndex.get(b)!))
+  const lastFieldRow = ordered.filter((id) => field.has(id)).length - 1
   return (
     <div className="flex flex-col gap-3">
       <GlassCard className="border border-emerald-400/20 bg-emerald-500/[0.06] p-3 text-[11px] leading-relaxed text-emerald-100/90">
-        🔗 <strong className="text-emerald-200">월드컵 지역예선과 통합된 예선</strong>입니다. 아래는 {CONFED_KO[confed] ?? confed}
-        {' '}월드컵 예선(같은 캠페인) 최종 순위이며, <strong className="text-emerald-200">상위 {slots}개국</strong>이 {cutLabel} 본선에 진출합니다.
+        🔗 <strong className="text-emerald-200">월드컵 지역예선과 통합된 예선</strong>입니다. {CONFED_KO[confed] ?? confed} 월드컵 예선에서
+        {' '}<strong className="text-emerald-200">2차 예선을 통과(각 조 1·2위)</strong>하면 {cutLabel} 본선 직행이 확정되고, 남은 자리는 캠페인 성적 순으로 채워 총
+        {' '}<strong className="text-emerald-200">{slots}개국</strong>이 진출합니다.
       </GlassCard>
       <GlassCard className="p-3">
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead>
               <tr className="text-gray-500">
-                <th className="px-1 py-0.5 text-left font-medium">#</th>
+                <th className="px-1 py-0.5 text-left font-medium">순위</th>
                 <th className="px-1 py-0.5 text-left font-medium">팀</th>
                 <th className="px-1 py-0.5 text-left font-medium">비고</th>
               </tr>
             </thead>
             <tbody>
-              {confResult.standings.map((tid, i) => {
-                const isIn = qualifiedSet.has(tid) || i < slots
+              {ordered.map((tid, i) => {
                 return (
-                  <tr key={tid} className={`border-t border-white/5 ${i === slots ? 'border-t-2 border-emerald-400/40' : ''} ${isIn ? 'bg-emerald-500/[0.08]' : 'opacity-60'}`}>
+                  <tr key={tid} className={`border-t border-white/5 ${i === lastFieldRow ? 'border-b-2 border-emerald-400/40' : ''} ${field.has(tid) ? 'bg-emerald-500/[0.08]' : 'opacity-60'}`}>
                     <td className="px-1 py-0.5 tabular-nums text-gray-400">{i + 1}</td>
                     <td className="px-1 py-0.5">
                       <span className="flex items-center gap-1">
@@ -114,10 +125,11 @@ function CombinedCampaignView({ confed, slots, qualifiedSet, hostSet, cutLabel }
                         {hostSet.has(tid) && <span className="shrink-0 text-[9px] text-sky-300">🏟</span>}
                       </span>
                     </td>
-                    <td className="px-1 py-0.5 text-[9px]">
+                    <td className="px-1 py-0.5 whitespace-nowrap text-[9px]">
                       {wcQualified.has(tid) ? <span className="font-bold text-amber-300">🏆 월드컵 직행</span>
+                        : direct.has(tid) ? <span className="font-bold text-emerald-300">✅ {cutLabel} 직행 확보</span>
+                        : field.has(tid) ? <span className="font-bold text-emerald-300/90">🎫 {cutLabel} 진출</span>
                         : playoff.has(tid) ? <span className="text-violet-300">대륙간 PO</span>
-                        : isIn ? <span className="font-bold text-emerald-300">✅ {cutLabel} 진출</span>
                         : <span className="text-gray-600">탈락</span>}
                     </td>
                   </tr>
@@ -314,7 +326,7 @@ function CombinedQualView({ cupId, view }: { cupId: CupId; view: QualView }) {
         )
       ) : done ? (
         // 예선 완료: 최종 순위 + 진출 컷.
-        <CombinedCampaignView confed={confed} slots={format.teams} qualifiedSet={new Set()} hostSet={new Set()} cutLabel={format.nameKo} />
+        <CombinedCampaignView confed={confed} slots={format.teams} hostSet={new Set()} cutLabel={format.nameKo} />
       ) : (
         // 진행 중: 공개된 경기까지의 잠정 조별 순위(스포일러 방지).
         <ConfedGroupStandings confResult={confResult} revealed={revealed} />
