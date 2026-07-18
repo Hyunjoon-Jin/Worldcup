@@ -19,7 +19,7 @@ import { pickQualUpset } from '../../engine/qualification/upset'
 import { runWhatIfScenarios, type WhatIfScenario } from '../../engine/qualification/whatif'
 import { buildQualCalendar } from '../../engine/qualification/calendar'
 import { QUAL_RULES, INTER_CONFED_RULE, deriveQualStages, stageStatus, stageNameAt, isKnockoutGroup } from '../../engine/qualification/rules'
-import { computeLiveRanking, computeRankingTrend, formOffsetsFromResults, editionEndRankingPoints, type LiveRankRow, type TeamTrend } from '../../engine/qualification/ranking'
+import { computeLiveRanking, formOffsetsFromResults, editionEndRankingPoints, type LiveRankRow } from '../../engine/qualification/ranking'
 import { collectPlayedByConfed, flattenPlayed, isPartialProgress } from '../../engine/qualification/conditional'
 import { generateUpsetArticle } from '../../engine/upsetArticle'
 import { PROB_ITERATIONS } from '../../store/useQualificationStore'
@@ -286,41 +286,6 @@ function QualStatsCard({ result }: { result: AllQualificationResult }) {
   )
 }
 
-const TREND_COLORS = ['#34d399', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee']
-
-/** FIFA 점수 변동 추이 SVG 라인 차트. 진행된 경기일에 따라 팀별 점수 변화를 그린다. */
-function RankingTrendChart({ trend }: { trend: TeamTrend[] }) {
-  const W = 340
-  const H = 150
-  const padL = 6
-  const padR = 6
-  const padT = 10
-  const padB = 8
-  const n = trend[0]?.series.length ?? 0
-  const allPts = trend.flatMap((t) => t.series.map((s) => s.points))
-  if (allPts.length === 0) return null
-  const minP = Math.min(...allPts)
-  const maxP = Math.max(...allPts)
-  const range = Math.max(1, maxP - minP)
-  const x = (i: number) => padL + (n <= 1 ? 0 : (i / (n - 1)) * (W - padL - padR))
-  const y = (p: number) => padT + (1 - (p - minP) / range) * (H - padT - padB)
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="FIFA 점수 변동 추이 차트">
-      {trend.map((t, ti) => (
-        <g key={t.teamId}>
-          <polyline
-            fill="none"
-            stroke={TREND_COLORS[ti % TREND_COLORS.length]}
-            strokeWidth="2"
-            strokeLinejoin="round"
-            points={t.series.map((s, i) => `${x(i)},${y(s.points)}`).join(' ')}
-          />
-          {n > 0 && <circle cx={x(n - 1)} cy={y(t.series[n - 1].points)} r="2.5" fill={TREND_COLORS[ti % TREND_COLORS.length]} />}
-        </g>
-      ))}
-    </svg>
-  )
-}
 
 /**
  * 실시간 FIFA 랭킹 (실제 FIFA 점수 산정 방식 반영). 이미 치른 경기로 점수·순위를 갱신한 현황표와
@@ -334,28 +299,8 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
 
   // 이전 대회들에서 이월된 FIFA 점수(있으면 시작 점수로 사용).
   const carried = useMemo(() => (Object.keys(rankingBase).length > 0 ? rankingBase : undefined), [rankingBase])
-  const wcYear = useCareerStore((s) => s.year)
-  const calendar = useMemo(() => buildQualCalendar(result, wcYear), [result, wcYear])
   const played = useMemo(() => flattenPlayed(collectPlayedByConfed(result, revealed)), [result, revealed])
   const ranking = useMemo(() => computeLiveRanking(result, played, undefined, carried), [result, played, carried])
-
-  // 진행된 경기일까지의 변동 추이(상위 5팀 + 내 팀)
-  const dayCount = useMemo(
-    () =>
-      calendar.filter((d) => Object.keys(d.revealedByConfed).every((c) => d.revealedByConfed[c] <= (revealed[c] ?? 0)))
-        .length,
-    [calendar, revealed],
-  )
-  const chartIds = useMemo(() => {
-    const top = ranking.slice(0, 5).map((r) => r.teamId)
-    // 내 팀은 '랭킹에 실제로 존재하는 참가국'일 때만 추가한다(개최국 등 미참가 팀은 추이 데이터가 없어 NaN 방지).
-    if (myTeamId && !top.includes(myTeamId) && ranking.some((r) => r.teamId === myTeamId)) top.push(myTeamId)
-    return top
-  }, [ranking, myTeamId])
-  const trend = useMemo(
-    () => computeRankingTrend(result, calendar.slice(0, dayCount), chartIds, carried),
-    [result, calendar, dayCount, chartIds, carried],
-  )
 
   const sorted = useMemo(() => {
     if (sortMode === 'up') return [...ranking].sort((a, b) => b.rankDelta - a.rankDelta)
@@ -414,22 +359,6 @@ function QualLiveRanking({ result, myTeamId }: { result: AllQualificationResult;
       <p className="mb-2 text-[10px] text-gray-500">
         실제 FIFA 점수 산정 방식(P = P + I×(승점−기대승점), 예선 I=25)으로 진행 결과를 반영합니다.
       </p>
-
-      {trend[0]?.series.length > 1 && (
-        <div className="mb-3">
-          <p className="mb-1 text-[11px] font-bold text-gray-300">📈 점수 변동 추이 (상위권)</p>
-          <RankingTrendChart trend={trend} />
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-            {trend.map((t, ti) => (
-              <span key={t.teamId} className="inline-flex items-center gap-1 text-[10px] text-gray-400">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: TREND_COLORS[ti % TREND_COLORS.length] }} />
-                {ALL_NATIONS_BY_ID[t.teamId]?.nameKo ?? t.teamId}
-                <span className="tabular-nums text-gray-500">{t.series[t.series.length - 1].points}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[300px] text-left text-xs sm:text-sm">
