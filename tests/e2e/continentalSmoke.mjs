@@ -58,7 +58,7 @@ try {
   assert(true, '전체 공개 시 본선 조편성이 확정 표시된다')
 
   // 진행·일정 하위탭 → 끝까지 진행 → 우승 확정
-  await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
+  await page.getByRole('tab', { name: '일정 진행', exact: true }).click()
   await page.getByRole('button', { name: '⏭ 끝까지 진행' }).click()
   await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
   assert(true, '끝까지 진행이 우승팀을 결정한다')
@@ -67,14 +67,23 @@ try {
   await page.getByRole('tab', { name: '토너먼트', exact: true }).click()
   assert(await page.getByText('녹아웃').first().isVisible(), '토너먼트 하위탭에 녹아웃이 렌더된다')
 
+  // 조별리그 하위탭 → 월드컵 조별리그 뷰와 동일(규정 도움말·GROUP 카드·조 상세)
+  await page.getByRole('tab', { name: '조별리그', exact: true }).click()
+  assert(await page.getByText('📖 대회 규정 도움말', { exact: false }).first().isVisible(), '조별리그 뷰에 대회 규정 도움말이 표시된다(월드컵과 동일)')
+  assert(await page.getByText('GROUP', { exact: false }).first().isVisible(), '조별리그 뷰에 GROUP 조 카드가 표시된다(월드컵과 동일)')
+  await page.getByText('자세히 보기', { exact: false }).first().click()
+  await page.getByText('경기 일정 및 결과', { exact: false }).first().waitFor({ timeout: 10000 })
+  assert(true, '조 카드 클릭 시 조 상세(경기 일정 및 결과)로 이동한다(월드컵과 동일)')
+  await page.getByRole('button', { name: /전체 조 보기/ }).click()
+
   // 확률 하위탭 진입 시 자동 계산(월드컵 확률 대시보드와 동일 — 별도 헤더 버튼 없음)
-  await page.getByRole('tab', { name: '확률', exact: true }).click()
+  await page.getByRole('tab', { name: '확률 대시보드', exact: true }).click()
   // 월드컵 확률 대시보드와 동형: 조별통과~우승 막대 + 몬테카를로 회수 + 새로고침.
   await page.getByText('몬테카를로 시뮬레이션', { exact: false }).waitFor({ timeout: 15000 })
   assert(await page.getByRole('button', { name: '🔄 새로고침' }).isVisible(), '진출 체인 확률 대시보드가 계산·표시된다')
 
   // 팀 페이지에 대륙컵 현황이 월드컵과 동일 층위로 표시되는지 (진행·일정 탭의 우승팀 클릭)
-  await page.getByRole('tab', { name: '진행·일정', exact: true }).click()
+  await page.getByRole('tab', { name: '일정 진행', exact: true }).click()
   await page.getByText('🏆 우승', { exact: false }).waitFor({ timeout: 10000 })
   await page.locator('text=🏆 우승').locator('..').getByRole('button').first().click()
   // 기본(개요) 탭에 트로피 캐비닛이 표시된다.

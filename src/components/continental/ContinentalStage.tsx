@@ -3,20 +3,16 @@ import { GlassCard } from '../common/GlassCard'
 import { GlassButton } from '../common/GlassButton'
 import { TeamLink } from '../common/TeamLink'
 import { useContinentalStore, cupTotalStages } from '../../store/useContinentalStore'
-import { useMyTeamStore } from '../../store/useMyTeamStore'
-import { computeStandings, rankGroupTeams } from '../../engine/tiebreakers'
-import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
+import { CUP_FORMATS } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { BASE_FINALS_YEAR, formatKoreanDate } from '../../data/calendar'
 import { CupBracketView } from './CupBracketView'
 import { CupDrawCeremony } from './CupDrawCeremony'
 import { CupProbabilityView } from './CupProbabilityView'
-import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
-import type { CupGroupResult, CupResult } from '../../engine/continental/runCup'
+import { ContinentalGroupsView } from './ContinentalGroupsView'
 import type { KnockoutRound } from '../../types/match'
 
-const GROUP_LETTERS = 'ABCDEF'.split('')
 const ROUND_LABEL: Record<KnockoutRound, string> = { R32: '32강', R16: '16강', QF: '8강', SF: '4강', THIRD: '3·4위전', FINAL: '결승' }
 const MONTH_LABEL = { summer: '여름(6–7월)', january: '1월', winterAfcon: '겨울(12–1월)' } as const
 
@@ -68,154 +64,6 @@ function QualSummaryCard() {
   )
 }
 
-const cupGroupRef = (m: CupGroupResult['matches'][number]): MatchDetailRef => ({
-  kind: 'group',
-  external: true,
-  match: { group: 'A', matchday: 1, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals },
-})
-
-const TIER_BADGE: Record<string, { label: string; className: string }> = {
-  death: { label: '🔥 죽음의 조', className: 'bg-red-500/20 text-red-300' },
-  easy: { label: '🍯 꿀조', className: 'bg-emerald-500/20 text-emerald-300' },
-}
-
-function GroupTable({ group, format, revealedMd, tier }: { group: CupGroupResult; format: (typeof CUP_FORMATS)[CupId]; revealedMd: number; tier?: 'death' | 'easy' | 'normal' }) {
-  const myTeamId = useMyTeamStore((s) => s.myTeamId)
-  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
-  const label = format.groups <= 6 ? `${GROUP_LETTERS[group.groupIndex]}조` : `${group.groupIndex + 1}조`
-  const badge = tier ? TIER_BADGE[tier] : undefined
-  const playedMatches = group.matches.filter((m) => m.matchday <= revealedMd)
-  // 공개된 경기일까지만 반영한 잠정 순위(월드컵 조별 진행과 동일).
-  const { ranking, standings, groupDone } = useMemo(() => {
-    const played = group.matches.filter((m) => m.matchday <= revealedMd)
-    return {
-      ranking: rankGroupTeams(group.teams, played, format.groupTiebreak),
-      standings: computeStandings(group.teams, played),
-      groupDone: revealedMd >= 3,
-    }
-  }, [group, revealedMd, format.groupTiebreak])
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center gap-1.5">
-        <p className="font-display text-xs font-bold text-gray-300">{label}</p>
-        {badge && <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${badge.className}`}>{badge.label}</span>}
-      </div>
-      <div className="overflow-hidden rounded-lg border border-white/10">
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="bg-white/5 text-gray-500">
-              <th className="w-5 py-1 text-center">#</th>
-              <th className="py-1 text-left">국가</th>
-              <th className="w-8 py-1 text-center">경기</th>
-              <th className="w-12 py-1 text-center">승무패</th>
-              <th className="w-10 py-1 text-center">득실</th>
-              <th className="w-8 py-1 text-right pr-2">점</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranking.map((id, i) => {
-              const s = standings[id]
-              const gd = s.goalsFor - s.goalsAgainst
-              const advanced = groupDone && i < format.advancePerGroup
-              return (
-                <tr key={id} className={`border-t border-white/5 ${id === myTeamId ? 'bg-sky-500/15' : advanced ? 'bg-emerald-500/10' : ''}`}>
-                  <td className="py-1 text-center text-gray-500">{i + 1}</td>
-                  <td className="py-1"><span className="inline-flex items-center gap-1"><TeamLink teamId={id} />{advanced && <span className="text-[8px] text-emerald-300">진출</span>}</span></td>
-                  <td className="py-1 text-center tabular-nums text-gray-400">{s.played}</td>
-                  <td className="py-1 text-center tabular-nums text-gray-400">{s.win}-{s.draw}-{s.loss}</td>
-                  <td className="py-1 text-center tabular-nums text-gray-400">{gd > 0 ? `+${gd}` : gd}</td>
-                  <td className="py-1 text-right pr-2 font-bold tabular-nums text-white">{s.points}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      {playedMatches.length > 0 && (
-        <div className="mt-1.5 space-y-0.5">
-          {playedMatches.map((m, i) => {
-            const mine = m.homeTeamId === myTeamId || m.awayTeamId === myTeamId
-            return (
-              <button
-                key={i}
-                onClick={() => selectMatch(cupGroupRef(m))}
-                className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/15 ${mine ? 'bg-sky-500/10' : 'bg-white/5'}`}
-              >
-                <span className="flex min-w-0 flex-1 items-center justify-end gap-1 text-right"><TeamLink teamId={m.homeTeamId} reverse wrap className="min-w-0" /></span>
-                <span className="shrink-0 rounded bg-white/10 px-1 py-0.5 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
-                <span className="flex min-w-0 flex-1 items-center gap-1"><TeamLink teamId={m.awayTeamId} wrap className="min-w-0" /></span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * 최고 3위 경쟁표(24팀 대회 등 best-thirds가 있는 포맷) — 각 조 3위를 승점·득실로 줄세워 상위
- * format.bestThirds 팀이 16강에 진출함을 보여준다(월드컵 조별리그의 3위 경쟁표와 동형).
- */
-function BestThirdsTable({ result, format, revealedMd }: { result: CupResult; format: (typeof CUP_FORMATS)[CupId]; revealedMd: number }) {
-  const myTeamId = useMyTeamStore((s) => s.myTeamId)
-  const groupLabel = (gi: number) => (format.groups <= 6 ? `${GROUP_LETTERS[gi]}조` : `${gi + 1}조`)
-  const ranked = useMemo(() => {
-    const thirds = result.groups
-      .map((g) => {
-        const played = g.matches.filter((m) => m.matchday <= revealedMd)
-        const ranking = rankGroupTeams(g.teams, played, format.groupTiebreak)
-        const id = ranking[2]
-        if (!id) return null
-        return { teamId: id, groupIndex: g.groupIndex, s: computeStandings(g.teams, played)[id] }
-      })
-      .filter((x): x is { teamId: string; groupIndex: number; s: ReturnType<typeof computeStandings>[string] } => x != null)
-    return thirds.sort(
-      (a, b) =>
-        b.s.points - a.s.points ||
-        b.s.goalsFor - b.s.goalsAgainst - (a.s.goalsFor - a.s.goalsAgainst) ||
-        b.s.goalsFor - a.s.goalsFor ||
-        a.teamId.localeCompare(b.teamId),
-    )
-  }, [result, format, revealedMd])
-  const done = revealedMd >= 3
-  return (
-    <GlassCard className="p-4">
-      <h3 className="mb-1 text-sm font-bold text-gray-200">🥉 최고 3위 경쟁 <span className="text-[11px] font-normal text-gray-500">(상위 {format.bestThirds}팀 16강 진출)</span></h3>
-      <p className="mb-3 text-[11px] text-gray-500">각 조 3위 팀을 승점·골득실로 줄세워 상위 {format.bestThirds}팀이 녹아웃에 오릅니다.</p>
-      <div className="overflow-hidden rounded-lg border border-white/10">
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="bg-white/5 text-gray-500">
-              <th className="w-5 py-1 text-center">#</th>
-              <th className="w-10 py-1 text-center">조</th>
-              <th className="py-1 text-left">국가</th>
-              <th className="w-12 py-1 text-center">승무패</th>
-              <th className="w-10 py-1 text-center">득실</th>
-              <th className="w-8 py-1 text-right pr-2">점</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranked.map((t, i) => {
-              const gd = t.s.goalsFor - t.s.goalsAgainst
-              const advanced = done && i < format.bestThirds
-              return (
-                <tr key={t.teamId} className={`border-t border-white/5 ${t.teamId === myTeamId ? 'bg-sky-500/15' : advanced ? 'bg-emerald-500/10' : ''}`}>
-                  <td className="py-1 text-center text-gray-500">{i + 1}</td>
-                  <td className="py-1 text-center text-gray-400">{groupLabel(t.groupIndex)}</td>
-                  <td className="py-1"><span className="inline-flex items-center gap-1"><TeamLink teamId={t.teamId} />{advanced && <span className="text-[8px] text-emerald-300">진출</span>}</span></td>
-                  <td className="py-1 text-center tabular-nums text-gray-400">{t.s.win}-{t.s.draw}-{t.s.loss}</td>
-                  <td className="py-1 text-center tabular-nums text-gray-400">{gd > 0 ? `+${gd}` : gd}</td>
-                  <td className="py-1 text-right pr-2 font-bold tabular-nums text-white">{t.s.points}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </GlassCard>
-  )
-}
 
 /** 대륙컵 본선 하위 화면(월드컵과 동일 수준): 조추첨(조편성)/진행·일정/조별리그/토너먼트/확률. */
 export type ContinentalView = 'draw' | 'progress' | 'groups' | 'knockout' | 'probability'
@@ -282,18 +130,6 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
     result.groups.forEach((g) => g.teams.forEach((t) => groupOf.set(t, g.groupIndex)))
     return { pots, potOf, groupOf }
   }, [result, format])
-
-  // 조 난이도(죽음의 조/꿀조) — 조별 전력 합으로 상·하위 그룹을 표시(월드컵 조별리그의 난이도 배지와 동형).
-  const groupTiers = useMemo<Record<number, 'death' | 'easy' | 'normal'>>(() => {
-    if (!result) return {}
-    const strength = (g: CupGroupResult) => g.teams.reduce((s, id) => s + (ALL_NATIONS_BY_ID[id]?.baseRatings.overall ?? 0), 0)
-    const sorted = [...result.groups].sort((a, b) => strength(b) - strength(a))
-    const n = sorted.length
-    const cut = Math.max(1, Math.round(n / 4))
-    const out: Record<number, 'death' | 'easy' | 'normal'> = {}
-    sorted.forEach((g, i) => (out[g.groupIndex] = i < cut ? 'death' : i >= n - cut ? 'easy' : 'normal'))
-    return out
-  }, [result])
 
   if (!activeCupId || !format) {
     // 캘린더 축: 대회를 임의로 고를 수 없다. 다가온 대회만 캘린더에서 진입한다.
@@ -431,21 +267,9 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
             </>
           )}
 
-          {/* 조별리그 */}
+          {/* 조별리그 — 월드컵 조별리그 뷰와 완전히 동일(같은 컴포넌트 재사용) */}
           {view === 'groups' && (
-            <>
-              <GlassCard className="p-4">
-                <h3 className="mb-3 text-sm font-bold text-gray-200">조별리그 <span className="text-[11px] font-normal text-gray-500">({revealedGroupMd}/3차전)</span></h3>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {result.groups.map((g) => (
-                    <GroupTable key={g.groupIndex} group={g} format={format} revealedMd={revealedGroupMd} tier={groupTiers[g.groupIndex]} />
-                  ))}
-                </div>
-              </GlassCard>
-              {format.bestThirds > 0 && (
-                <BestThirdsTable result={result} format={format} revealedMd={revealedGroupMd} />
-              )}
-            </>
+            <ContinentalGroupsView result={result} format={format} revealedMd={revealedGroupMd} />
           )}
 
           {/* 토너먼트(녹아웃) + 우승 */}

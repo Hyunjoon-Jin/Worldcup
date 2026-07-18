@@ -6,6 +6,8 @@ import type { GroupLetter } from '../../types/group'
 interface Props {
   analysis: GroupDifficulty[]
   onSelect?: (group: GroupLetter) => void
+  /** 표시할 조 목록(기본: 월드컵 12개 조). 대륙컵은 그 대회의 조 문자만 넘긴다. */
+  groups?: GroupLetter[]
 }
 
 /** 능력치 평균(0~1 정규화)을 초록→노랑→빨강 색으로 변환. 어려운 조일수록 붉게. */
@@ -16,7 +18,7 @@ function heatColor(t: number): string {
 }
 
 /** 12개 조 난이도 히트맵 (v2 #32). 평균 능력치를 색 격자로 한눈에 비교한다. */
-export function GroupHeatmap({ analysis, onSelect }: Props) {
+export function GroupHeatmap({ analysis, onSelect, groups = GROUP_LETTERS }: Props) {
   if (analysis.length === 0) return null
   const byGroup = Object.fromEntries(analysis.map((a) => [a.group, a])) as Record<GroupLetter, GroupDifficulty>
   const avgs = analysis.map((a) => a.avgOverall)
@@ -35,7 +37,7 @@ export function GroupHeatmap({ analysis, onSelect }: Props) {
         </div>
       </div>
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-        {GROUP_LETTERS.map((g) => {
+        {groups.map((g) => {
           const d = byGroup[g]
           if (!d) return <div key={g} className="rounded-lg bg-white/5 p-2" />
           const t = (d.avgOverall - min) / range

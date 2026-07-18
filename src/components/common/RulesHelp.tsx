@@ -1,6 +1,6 @@
 import { GlassCard } from './GlassCard'
 
-interface RuleItem {
+export interface RuleItem {
   q: string
   a: string
 }
@@ -28,8 +28,9 @@ const RULES: RuleItem[] = [
   },
 ]
 
-/** 대회 규정 요약 도움말 (G3). 네이티브 details로 접근성/키보드 조작을 확보한다. */
-export function RulesHelp() {
+/** 대회 규정 요약 도움말 (G3). 네이티브 details로 접근성/키보드 조작을 확보한다.
+ *  rules 미지정 시 월드컵 규정을 쓰고, 대륙컵 등은 그 대회 규정을 넘겨 동일한 UI로 표시한다. */
+export function RulesHelp({ rules = RULES }: { rules?: RuleItem[] } = {}) {
   return (
     <GlassCard className="p-4">
       <details className="group">
@@ -38,7 +39,7 @@ export function RulesHelp() {
           <span className="text-xs text-gray-500 transition-transform group-open:rotate-180">▾</span>
         </summary>
         <div className="mt-3 space-y-2.5">
-          {RULES.map((r, i) => (
+          {rules.map((r, i) => (
             <div key={i} className="rounded-lg bg-white/5 p-2.5">
               <p className="text-xs font-semibold text-emerald-300">{r.q}</p>
               <p className="mt-1 text-[11px] leading-relaxed text-gray-400">{r.a}</p>
