@@ -197,9 +197,9 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
               {onNextEdition && (
                 <GlassButton
                   onClick={onNextEdition}
-                  title="이번 성적을 반영하고 새 개최국을 선정해, 다음 월드컵 지역예선을 바로 시작합니다"
+                  title="이번 성적을 반영하고 새 개최국을 선정한 뒤, 캘린더로 돌아가 다음 시즌을 이어갑니다"
                 >
-                  🔜 다음 월드컵 지역예선으로 →
+                  📅 캘린더로 →
                 </GlassButton>
               )}
             </div>
@@ -256,7 +256,7 @@ export function ScheduleStage({ onNextEdition }: { onNextEdition?: () => void })
           </div>
           {onNextEdition && (
             <p className="mt-3 text-[11px] text-gray-400">
-              다음 대회 개최국이 새로 선정되고, 이번 대회 성적이 각 팀의 전력에 반영되어 새 예선이 시작됩니다.
+              다음 대회 개최국이 새로 선정되고, 이번 대회 성적이 각 팀의 전력에 반영됩니다. 캘린더에서 새 시즌을 이어가세요.
             </p>
           )}
         </GlassCard>

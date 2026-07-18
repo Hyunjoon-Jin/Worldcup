@@ -202,7 +202,7 @@ function App() {
               <WorldCupTab
                 onNextEdition={() => {
                   advanceToNextEdition()
-                  setTab('qualifiers')
+                  setTab('season')
                 }}
                 openDrawSignal={wcDrawSignal}
               />

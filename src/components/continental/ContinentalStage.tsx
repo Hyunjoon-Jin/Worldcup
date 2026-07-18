@@ -10,7 +10,9 @@ import { CUP_FORMATS, type CupId } from '../../data/continental/formats'
 import { ALL_NATIONS_BY_ID } from '../../data/nations'
 import { buildCupPhases } from '../../engine/season/seasonTimeline'
 import { BASE_FINALS_YEAR, formatKoreanDate } from '../../data/calendar'
-import type { CupGroupResult, CupKnockoutMatch } from '../../engine/continental/runCup'
+import { CupBracketView } from './CupBracketView'
+import { useMatchDetailStore, type MatchDetailRef } from '../../store/useMatchDetailStore'
+import type { CupGroupResult } from '../../engine/continental/runCup'
 import type { KnockoutRound } from '../../types/match'
 
 const GROUP_LETTERS = 'ABCDEF'.split('')
@@ -65,9 +67,29 @@ function QualSummaryCard() {
   )
 }
 
+/** 확률 셀 — 배경 막대 + 퍼센트(월드컵 확률 대시보드와 동형 시각). */
+function ProbCell({ value, highlight }: { value: number; highlight?: boolean }) {
+  return (
+    <td className="px-1 py-1">
+      <div className="relative h-5 w-full min-w-[52px] overflow-hidden rounded bg-white/5">
+        <div className={`absolute inset-y-0 left-0 rounded ${highlight ? 'bg-amber-400/30' : 'bg-emerald-400/25'}`} style={{ width: `${Math.min(100, value)}%` }} />
+        <span className={`absolute inset-0 flex items-center justify-center tabular-nums ${highlight ? 'font-bold text-amber-200' : 'text-gray-200'}`}>{value >= 10 ? value.toFixed(0) : value.toFixed(1)}%</span>
+      </div>
+    </td>
+  )
+}
+
+const cupGroupRef = (m: CupGroupResult['matches'][number]): MatchDetailRef => ({
+  kind: 'group',
+  external: true,
+  match: { group: 'A', matchday: 1, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals },
+})
+
 function GroupTable({ group, format, revealedMd }: { group: CupGroupResult; format: (typeof CUP_FORMATS)[CupId]; revealedMd: number }) {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
+  const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const label = format.groups <= 6 ? `${GROUP_LETTERS[group.groupIndex]}조` : `${group.groupIndex + 1}조`
+  const playedMatches = group.matches.filter((m) => m.matchday <= revealedMd)
   // 공개된 경기일까지만 반영한 잠정 순위(월드컵 조별 진행과 동일).
   const { ranking, standings, groupDone } = useMemo(() => {
     const played = group.matches.filter((m) => m.matchday <= revealedMd)
@@ -111,19 +133,24 @@ function GroupTable({ group, format, revealedMd }: { group: CupGroupResult; form
           </tbody>
         </table>
       </div>
-    </div>
-  )
-}
-
-function KnockoutMatchRow({ m }: { m: CupKnockoutMatch }) {
-  const r = m.result
-  const pk = r.wentToPenalties ? ` (PK ${r.homePenalties}-${r.awayPenalties})` : ''
-  const homeWon = r.winnerTeamId === m.homeTeamId
-  return (
-    <div className="flex items-center justify-between gap-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs">
-      <span className={`flex-1 text-right ${homeWon ? 'font-bold text-white' : 'text-gray-400'}`}><TeamLink teamId={m.homeTeamId} reverse /></span>
-      <span className="shrink-0 font-mono text-[11px] text-gray-300">{r.homeGoals}-{r.awayGoals}{pk}</span>
-      <span className={`flex-1 ${!homeWon ? 'font-bold text-white' : 'text-gray-400'}`}><TeamLink teamId={m.awayTeamId} /></span>
+      {playedMatches.length > 0 && (
+        <div className="mt-1.5 space-y-0.5">
+          {playedMatches.map((m, i) => {
+            const mine = m.homeTeamId === myTeamId || m.awayTeamId === myTeamId
+            return (
+              <button
+                key={i}
+                onClick={() => selectMatch(cupGroupRef(m))}
+                className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] transition-colors hover:bg-white/15 ${mine ? 'bg-sky-500/10' : 'bg-white/5'}`}
+              >
+                <span className="flex min-w-0 flex-1 items-center justify-end gap-1 text-right"><TeamLink teamId={m.homeTeamId} reverse wrap className="min-w-0" /></span>
+                <span className="shrink-0 rounded bg-white/10 px-1 py-0.5 font-bold tabular-nums text-white">{m.homeGoals}-{m.awayGoals}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1"><TeamLink teamId={m.awayTeamId} wrap className="min-w-0" /></span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -168,16 +195,11 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
   })()
 
 
-  const koByRound = useMemo<Array<{ round: KnockoutRound; matches: CupKnockoutMatch[] }>>(() => {
-    if (!result || !format) return []
-    // 공개된 녹아웃 라운드만(3위전은 결승과 함께 마지막에 공개).
-    const revealedRounds = format.knockout.slice(0, revealedKoRounds)
-    const rounds: KnockoutRound[] = [
-      ...revealedRounds.filter((r) => r !== 'THIRD'),
-      ...(format.thirdPlace && revealedKoRounds >= format.knockout.length ? (['THIRD'] as KnockoutRound[]) : []),
-    ]
-    return rounds.map((round) => ({ round, matches: result.knockout.filter((m) => m.round === round) }))
-  }, [result, format, revealedKoRounds])
+  // 확률 체인에 표시할 녹아웃 라운드(3·4위전 제외, 결승은 '우승'으로 대체하므로 제외).
+  const probChainRounds = useMemo<KnockoutRound[]>(
+    () => (format ? format.knockout.filter((r) => r !== 'THIRD' && r !== 'FINAL') : []),
+    [format],
+  )
 
   const champProb = useMemo(() => {
     if (!probabilities) return []
@@ -330,41 +352,44 @@ export function ContinentalStage({ onNavigateWC, view = 'progress' }: { onNaviga
                   <p className="text-[11px] text-gray-500">준우승 <TeamLink teamId={result.runnerUp} />{result.third && <> · 3위 <TeamLink teamId={result.third} /></>}</p>
                 </GlassCard>
               )}
-              {koByRound.length > 0 ? (
-                <GlassCard className="p-4">
-                  <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃</h3>
-                  <div className="space-y-3">
-                    {koByRound.map(({ round, matches }) => (
-                      <div key={round}>
-                        <p className="mb-1.5 font-display text-xs font-bold text-violet-200">{ROUND_LABEL[round]}</p>
-                        <div className="space-y-1">
-                          {matches.map((m) => (
-                            <KnockoutMatchRow key={m.slotId} m={m} />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </GlassCard>
-              ) : (
-                <GlassCard className="p-8 text-center text-[11px] text-gray-500">아직 녹아웃 라운드가 시작되지 않았습니다. ‘진행·일정’에서 조별리그를 마치면 대진이 표시됩니다.</GlassCard>
-              )}
+              <GlassCard className="p-4">
+                <h3 className="mb-3 text-sm font-bold text-gray-200">녹아웃 대진표 <span className="text-[11px] font-normal text-gray-500">(경기를 누르면 상세)</span></h3>
+                <CupBracketView knockout={result.knockout} format={format} revealedRounds={revealedKoRounds} />
+              </GlassCard>
             </>
           )}
 
-          {/* 확률 */}
+          {/* 확률 — 진출 체인(조별 통과 → 각 라운드 도달 → 우승), 월드컵 확률 대시보드와 동형 */}
           {view === 'probability' && (
             champProb.length > 0 ? (
               <GlassCard className="p-4">
-                <h3 className="mb-2 text-sm font-bold text-gray-200">📊 우승 확률 (상위 8)</h3>
-                <div className="space-y-1">
-                  {champProb.map((t) => (
-                    <div key={t.teamId} className="flex items-center gap-2 text-xs">
-                      <span className="min-w-0 flex-1"><TeamLink teamId={t.teamId} /></span>
-                      <span className="w-16 text-right tabular-nums text-gray-400">진출 {t.qualify.toFixed(0)}%</span>
-                      <span className="w-16 text-right font-bold tabular-nums text-amber-300">우승 {t.champion.toFixed(1)}%</span>
-                    </div>
-                  ))}
+                <h3 className="mb-1 text-sm font-bold text-gray-200">📊 진출 체인 확률 <span className="text-[11px] font-normal text-gray-500">(상위 8 · {probabilities?.iterations.toLocaleString()}회 시뮬)</span></h3>
+                <p className="mb-3 text-[11px] text-gray-500">조별 통과부터 우승까지 각 단계 도달 확률입니다. 막대가 길수록 확률이 높습니다.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-[11px]">
+                    <thead>
+                      <tr className="text-gray-500">
+                        <th className="px-1 py-1 text-left font-medium">팀</th>
+                        <th className="px-1 py-1 text-center font-medium">조별 통과</th>
+                        {probChainRounds.map((r) => (
+                          <th key={r} className="px-1 py-1 text-center font-medium">{ROUND_LABEL[r]} 진출</th>
+                        ))}
+                        <th className="px-1 py-1 text-center font-medium text-amber-300">우승</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {champProb.map((t) => (
+                        <tr key={t.teamId} className="border-t border-white/5">
+                          <td className="px-1 py-1"><TeamLink teamId={t.teamId} wrap className="min-w-0" /></td>
+                          <ProbCell value={t.qualify} />
+                          {probChainRounds.map((r) => (
+                            <ProbCell key={r} value={t.reach?.[r] ?? 0} />
+                          ))}
+                          <ProbCell value={t.champion} highlight />
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </GlassCard>
             ) : (
