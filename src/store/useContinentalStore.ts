@@ -4,6 +4,7 @@ import { CUP_FORMATS, type CupId } from '../data/continental/formats'
 import { runCup, type CupResult } from '../engine/continental/runCup'
 import { runCupQualification, type CupQualResult } from '../engine/continental/cupQualification'
 import { computeCupProbabilitiesLive, type CupProbabilities } from '../engine/continental/cupProbability'
+import type { CupWorkerOut } from '../workers/cupWorker'
 import { selectCupHosts } from '../engine/continental/hostSelection'
 import { cupScheduleDays } from '../engine/continental/cupSchedule'
 import { baseRatingsMap, nationsByConfederation } from '../data/nations'
@@ -17,6 +18,20 @@ import { useContinentalHistoryStore } from './useContinentalHistoryStore'
  * 능력치는 전역(getRatings/buildSnapshot) 대신 정적 base 능력치를 써서 월드컵 상태 오염을 피한다(감사 A2).
  */
 export const CUP_PROB_ITERATIONS = 200
+
+// 확률 계산 취소/경합 처리용 모듈 싱글턴(예선 워커 패턴 미러). 진행 중 다시 계산 요청이 오면
+// 이전 워커를 종료하고 runId로 지난 결과를 무시한다.
+let cupProbRunId = 0
+let cupProbWorker: Worker | null = null
+
+/** 진행 중인 확률 계산을 취소한다(runId 무효화 + 워커 종료). 대회 전환·초기화 시 호출. */
+function cancelCupProb(): void {
+  cupProbRunId++
+  if (cupProbWorker) {
+    cupProbWorker.terminate()
+    cupProbWorker = null
+  }
+}
 
 /** 대회 진행 단계 수 = 조추첨(0) 이후 조별 3라운드 + 녹아웃 라운드 수. */
 export function cupTotalStages(cupId: CupId): number {
@@ -34,6 +49,8 @@ interface ContinentalStore {
   qualResult: CupQualResult | null
   result: CupResult | null
   probabilities: CupProbabilities | null
+  /** 확률 재계산 중 여부(워커 실행 중). 기존 확률은 화면에 유지하고 갱신 배지만 띄운다. */
+  probLoading: boolean
   /** 우승 확률 추이(단계별 스냅샷) — 월드컵 ProbabilityTrendChart와 동형. stage→팀별 우승% */
   championTrend: Array<{ stage: number; byTeam: Record<string, number> }>
   /** 진행 단계 커서. 0=조추첨(조편성만), 1~3=조별 MD1~3, 4~=녹아웃 라운드. 월드컵 '일정 진행'과 동형. */
@@ -73,11 +90,13 @@ export const useContinentalStore = create<ContinentalStore>()(
       qualResult: null,
       result: null,
       probabilities: null,
+      probLoading: false,
       championTrend: [],
       stage: 0,
       slotStep: 0,
       drawRevealCount: 0,
-      selectCup: (id, year = null) =>
+      selectCup: (id, year = null) => {
+        cancelCupProb() // 진행 중이던 확률 계산을 취소(새 대회에 지난 결과가 반영되지 않도록).
         set({
           activeCupId: id,
           cupYear: year,
@@ -86,15 +105,18 @@ export const useContinentalStore = create<ContinentalStore>()(
           qualResult: null,
           result: null,
           probabilities: null,
+          probLoading: false,
           championTrend: [],
           seed: null,
           stage: 0,
           slotStep: 0,
           drawRevealCount: 0,
-        }),
+        })
+      },
       runActiveCup: (opts) => {
         const { activeCupId, hostIds } = get()
         if (!activeCupId) return
+        cancelCupProb() // 새 시뮬 시작 — 진행 중이던 확률 계산 취소.
         const format = CUP_FORMATS[activeCupId]
         const usedSeed = opts?.seed && opts.seed.trim() ? opts.seed.trim().toUpperCase() : generateSeed()
         // 1) 예선으로 참가국을 가린다. 2) 통과국으로 본선을 시뮬레이션한다.
@@ -105,7 +127,7 @@ export const useContinentalStore = create<ContinentalStore>()(
         const result = runCup(format, field, ratings, hostIds, usedSeed)
         // 결과는 즉시 계산하되 조추첨(stage 0)부터 단계별로 공개한다(월드컵 '일정 진행'과 동형).
         // drawRevealCount=0 → 조추첨은 팀을 하나씩 뽑는 연출로 시작(월드컵 조추첨과 동형).
-        set({ seed: usedSeed, qualResult, result, probabilities: null, championTrend: [], stage: 0, slotStep: 0, drawRevealCount: 0 })
+        set({ seed: usedSeed, qualResult, result, probabilities: null, probLoading: false, championTrend: [], stage: 0, slotStep: 0, drawRevealCount: 0 })
         // 완주한 대회를 역대 기록에 축적(대회·시드 dedup). 팀 페이지 통산 성적에 반영.
         useContinentalHistoryStore.getState().record({
           cupId: activeCupId,
@@ -154,7 +176,6 @@ export const useContinentalStore = create<ContinentalStore>()(
       computeProbabilities: (iterations = CUP_PROB_ITERATIONS) => {
         const { activeCupId, hostIds, result, stage, championTrend } = get()
         if (!activeCupId || !result) return
-        const format = CUP_FORMATS[activeCupId]
         const field = result.groups.flatMap((g) => g.teams)
         const ratings = baseRatingsMap(field)
         const seedBase = get().seed ?? 'CUP'
@@ -162,15 +183,78 @@ export const useContinentalStore = create<ContinentalStore>()(
         // 남은 경기만 반복 시뮬레이션한 '실황 반영' 확률. 완주 시 100%/0%로 수렴한다.
         const revealedGroupMd = Math.min(stage, 3)
         const revealedKoRounds = Math.max(0, stage - 3)
-        const probabilities = computeCupProbabilitiesLive(format, result, revealedGroupMd, revealedKoRounds, ratings, hostIds, iterations, `${seedBase}-PROB-${stage}`)
-        // 우승 확률 추이 스냅샷(단계별, dedup) — 진행에 따라 축적돼 추이 차트에 쓰인다.
-        const championByTeam: Record<string, number> = {}
-        for (const id of field) championByTeam[id] = probabilities.byTeam[id]?.champion ?? 0
-        const trend = [...(championTrend ?? []).filter((t) => t.stage !== stage), { stage, byTeam: championByTeam }].sort((a, b) => a.stage - b.stage)
-        set({ probabilities, championTrend: trend })
+
+        const runId = ++cupProbRunId
+        // 재계산 중에도 기존 확률을 화면에 유지(깜빡임 방지)하고 갱신 배지만 띄운다. 새 값은 완료 시 교체.
+        set({ probLoading: true })
+        if (cupProbWorker) {
+          cupProbWorker.terminate()
+          cupProbWorker = null
+        }
+
+        // 계산 결과(확률)를 받아 우승 확률 추이 스냅샷(단계별, dedup)을 축적하고 상태에 반영한다.
+        // stage/championTrend는 디스패치 시점 값으로 고정(비동기 완료 시 stage가 바뀌어도 정합성 유지).
+        const applyResult = (probabilities: CupProbabilities) => {
+          if (runId !== cupProbRunId) return
+          const championByTeam: Record<string, number> = {}
+          for (const id of field) championByTeam[id] = probabilities.byTeam[id]?.champion ?? 0
+          const trend = [...(championTrend ?? []).filter((t) => t.stage !== stage), { stage, byTeam: championByTeam }].sort((a, b) => a.stage - b.stage)
+          set({ probabilities, championTrend: trend, probLoading: false })
+        }
+
+        const runOnMainThread = () => {
+          const probabilities = computeCupProbabilitiesLive(CUP_FORMATS[activeCupId], result, revealedGroupMd, revealedKoRounds, ratings, hostIds, iterations, `${seedBase}-PROB-${stage}`)
+          applyResult(probabilities)
+        }
+
+        // 우선 Web Worker에서 실행해 메인스레드를 막지 않는다(F). 실패 시 메인스레드로 폴백.
+        if (typeof Worker !== 'undefined') {
+          try {
+            const worker = new Worker(new URL('../workers/cupWorker.ts', import.meta.url), { type: 'module' })
+            cupProbWorker = worker
+            worker.onmessage = (e: MessageEvent<CupWorkerOut>) => {
+              if (runId !== cupProbRunId) return
+              if (e.data.type === 'result') {
+                applyResult(e.data.probabilities)
+                worker.terminate()
+                if (cupProbWorker === worker) cupProbWorker = null
+              }
+            }
+            worker.onerror = () => {
+              worker.terminate()
+              if (cupProbWorker === worker) cupProbWorker = null
+              if (runId === cupProbRunId) runOnMainThread()
+            }
+            worker.postMessage({ cupId: activeCupId, result, revealedGroupMd, revealedKoRounds, ratings, hostIds, iterations, seedBase: `${seedBase}-PROB-${stage}` })
+            return
+          } catch {
+            /* 워커 생성 실패 → 메인스레드 폴백 */
+          }
+        }
+        runOnMainThread()
       },
-      reset: () => set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, championTrend: [], stage: 0, slotStep: 0, drawRevealCount: 0 }),
+      reset: () => {
+        cancelCupProb()
+        set({ activeCupId: null, seed: null, hostIds: [], cupYear: null, qualResult: null, result: null, probabilities: null, probLoading: false, championTrend: [], stage: 0, slotStep: 0, drawRevealCount: 0 })
+      },
     }),
-    { name: 'wc2026-continental-store', version: 2 },
+    {
+      name: 'wc2026-continental-store',
+      version: 2,
+      // probLoading은 순간적 UI 상태라 저장하지 않는다(새로고침 시 stale true 방지). 나머지는 그대로 저장.
+      partialize: (s) => ({
+        activeCupId: s.activeCupId,
+        seed: s.seed,
+        hostIds: s.hostIds,
+        cupYear: s.cupYear,
+        qualResult: s.qualResult,
+        result: s.result,
+        probabilities: s.probabilities,
+        championTrend: s.championTrend,
+        stage: s.stage,
+        slotStep: s.slotStep,
+        drawRevealCount: s.drawRevealCount,
+      }),
+    },
   ),
 )

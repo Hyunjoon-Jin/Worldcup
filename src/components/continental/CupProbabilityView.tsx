@@ -53,12 +53,14 @@ export function CupProbabilityView({
   onRefresh,
   momentumByTeam,
   trend = [],
+  loading = false,
 }: {
   probabilities: CupProbabilities
   chainRounds: KnockoutRound[]
   onRefresh: (iterations?: number) => void
   momentumByTeam?: Record<string, number>
   trend?: Array<{ stage: number; byTeam: Record<string, number> }>
+  loading?: boolean
 }) {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
   const liveRank = useLiveRankLookup()
@@ -95,6 +97,7 @@ export function CupProbabilityView({
             <strong className="text-white">{probabilities.iterations.toLocaleString()}회</strong> 몬테카를로 시뮬레이션했습니다.
           </div>
           <div className="flex items-center gap-2">
+            {loading && <span className="animate-pulse text-[11px] text-emerald-300/80" aria-live="polite">⏳ 갱신 중…</span>}
             <div className="flex rounded-lg bg-white/5 p-0.5" role="group" aria-label="시뮬레이션 정밀도">
               {(Object.keys(CUP_PRESETS) as CupPreset[]).map((preset) => {
                 const isActive = probabilities.iterations === CUP_PRESETS[preset]

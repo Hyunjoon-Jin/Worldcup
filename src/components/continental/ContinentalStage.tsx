@@ -74,6 +74,7 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
   const hostIds = useContinentalStore((s) => s.hostIds)
   const result = useContinentalStore((s) => s.result)
   const probabilities = useContinentalStore((s) => s.probabilities)
+  const probLoading = useContinentalStore((s) => s.probLoading)
   const championTrend = useContinentalStore((s) => s.championTrend)
   const stage = useContinentalStore((s) => s.stage)
   const computeProbabilities = useContinentalStore((s) => s.computeProbabilities)
@@ -190,6 +191,7 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
                 onRefresh={(n) => computeProbabilities(n)}
                 momentumByTeam={momentumByTeam}
                 trend={championTrend ?? []}
+                loading={probLoading}
               />
             ) : (
               <GlassCard className="p-8 text-center text-[11px] text-gray-500">
