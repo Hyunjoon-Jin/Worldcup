@@ -16,6 +16,7 @@ import { ProbBar } from '../probability/ProbBar'
 import { STAGES } from '../probability/probabilityStages'
 import { TeamQualificationSection } from './TeamQualificationSection'
 import { TeamContinentalSection } from './TeamContinentalSection'
+import { TeamHeadToHeadSection } from './TeamHeadToHeadSection'
 import { TeamTrophyMilestones } from './TeamTrophyMilestones'
 import { getRatings, classifyMatchUpset, isUpset } from '../../engine/matchEngine'
 import {
@@ -512,6 +513,8 @@ export function TeamDetailPage() {
       {teamId && <TeamQualificationSection teamId={teamId} />}
 
       {teamId && <TeamContinentalSection teamId={teamId} />}
+
+      {teamId && <TeamHeadToHeadSection teamId={teamId} />}
 
       {inFinals && (
       <GlassCard className="p-4">
