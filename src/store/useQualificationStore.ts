@@ -3,7 +3,8 @@ import { persist } from 'zustand/middleware'
 import { simulateAllQualification, type AllQualificationResult } from '../engine/qualification'
 import { buildQualCalendar } from '../engine/qualification/calendar'
 import { createQualProbAccumulator, type StageProbabilities } from '../engine/qualification/probability'
-import { buildFriendlies, type FriendlyMatch } from '../engine/qualification/friendlies'
+import { buildFriendlies, type FriendlyMatch, type FriendlyPlan } from '../engine/qualification/friendlies'
+import { useMyTeamStore } from './useMyTeamStore'
 import { deriveQualStages, isKnockoutGroup } from '../engine/qualification/rules'
 import {
   collectPlayedByConfed,
@@ -196,6 +197,8 @@ interface QualificationStore {
   revealed: Record<string, number>
   /** 예선 기간 중 열리는 친선전(평가전) — 그 경기일에 예선 경기가 없는 국가들끼리. */
   friendlies: FriendlyMatch[]
+  /** 감독이 직접 편성한 내 팀 평가전 계획(경기일→상대). 자동 매칭보다 우선한다. */
+  friendlyPlan: FriendlyPlan | null
   /** null이 아니면 이 경기일(윈도우)의 경기를 공개하기 전에 그 차수 '조추첨'을 먼저 보여주는 중이다. */
   drawPending: number | null
   simulate: (seed?: string) => void
@@ -208,6 +211,10 @@ interface QualificationStore {
   advanceQual: () => void
   /** 남은 예선을 끝까지 공개한다(조추첨 단계 포함 모두 건너뛰기). */
   advanceQualToEnd: () => void
+  /** 내 팀 평가전 상대를 특정 경기일에 지정(감독 편성). 이미 공개된 경기일은 바꾸지 않는다. */
+  planFriendly: (matchday: number, opponentId: string) => void
+  /** 특정 경기일의 내 팀 평가전 편성을 취소한다. */
+  clearFriendlyPlan: (matchday: number) => void
   reset: () => void
 }
 
@@ -231,6 +238,7 @@ export const useQualificationStore = create<QualificationStore>()(
       probLoading: false,
       revealed: {},
       friendlies: [],
+      friendlyPlan: null,
       drawPending: null,
       simulate: (seed) => {
         const usedSeed = seed && seed.trim() ? seed.trim().toUpperCase() : generateSeed()
@@ -239,6 +247,7 @@ export const useQualificationStore = create<QualificationStore>()(
         const qualRatings = buildQualRatings()
         const result = simulateAllQualification(usedSeed, qualRatings, undefined, getCurrentHostIds(), qualSeedRank())
         // 예선 기간 중 쉬는 국가들끼리 친선전(평가전)을 편성해 둔다(경기일별, 결정론적).
+        // 새 예선을 시작하면 이전 대회의 감독 편성 계획은 무효이므로 초기화한다.
         const friendlies = buildFriendlies(result, qualRatings, usedSeed)
         // 첫 경기일부터 하루씩 진행. 이후 차수 사이(2차·3차 …)에서 advanceQual이 조추첨을 끼워 넣는다.
         const calendar = buildQualCalendar(result, useCareerStore.getState().year)
@@ -246,7 +255,7 @@ export const useQualificationStore = create<QualificationStore>()(
           calendar.length > 0
             ? calendar[0].revealedByConfed
             : Object.fromEntries(Object.entries(result.byConfederation).map(([c, r]) => [c, r.matchdays]))
-        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies, drawPending: null })
+        set({ seed: usedSeed, result, probabilities: null, stageProbabilities: null, revealed, friendlies, friendlyPlan: null, drawPending: null })
         // 새 예선을 시작하면 이전 대회의 본선 조추첨·진행은 이 예선 결과와 무관하므로 초기화한다.
         // (초기화하지 않으면 '조추첨 하지도 않았는데 다시하기'로 표시되는 문제가 생긴다. 팀 선택은 유지.)
         useDrawStore.getState().reset()
@@ -340,6 +349,30 @@ export const useQualificationStore = create<QualificationStore>()(
         }
         void runProbOnMainThread(runId, seedBase, ratings, set, lockedByConfed, hostIds, seedRank)
       },
+      planFriendly: (matchday, opponentId) => {
+        const { result, seed } = get()
+        const myTeamId = useMyTeamStore.getState().myTeamId
+        if (!result || !seed || !myTeamId) return
+        // 이미 공개된 경기일은 이미 치른 경기이므로 편성을 바꾸지 않는다.
+        const globalRevealed = Math.max(0, ...Object.values(get().revealed))
+        if (matchday <= globalRevealed) return
+        const prev = get().friendlyPlan
+        // 내 팀이 바뀌었으면 이전 팀 계획은 버리고 새로 시작한다.
+        const byMatchday = prev && prev.teamId === myTeamId ? { ...prev.byMatchday } : {}
+        byMatchday[matchday] = opponentId
+        const friendlyPlan: FriendlyPlan = { teamId: myTeamId, byMatchday }
+        const friendlies = buildFriendlies(result, buildQualRatings(), seed, friendlyPlan)
+        set({ friendlyPlan, friendlies })
+      },
+      clearFriendlyPlan: (matchday) => {
+        const { result, seed, friendlyPlan } = get()
+        if (!friendlyPlan || !result || !seed) return
+        const byMatchday = { ...friendlyPlan.byMatchday }
+        delete byMatchday[matchday]
+        const next: FriendlyPlan | null = Object.keys(byMatchday).length > 0 ? { teamId: friendlyPlan.teamId, byMatchday } : null
+        const friendlies = buildFriendlies(result, buildQualRatings(), seed, next)
+        set({ friendlyPlan: next, friendlies })
+      },
       reset: () => {
         probRunId++
         if (probWorker) {
@@ -348,13 +381,13 @@ export const useQualificationStore = create<QualificationStore>()(
         }
         usePerformanceStore.getState().reset()
         // 월별 랭킹 이력(useRankHistoryStore)은 대회 간 누적이므로 여기서 지우지 않는다(전체 삭제는 clearAllHistory).
-        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {}, friendlies: [], drawPending: null })
+        set({ seed: null, result: null, probabilities: null, stageProbabilities: null, probLoading: false, revealed: {}, friendlies: [], friendlyPlan: null, drawPending: null })
       },
     }),
     {
       name: 'wc2026-qualification-store',
       version: 3,
-      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed, friendlies: s.friendlies, drawPending: s.drawPending }),
+      partialize: (s) => ({ seed: s.seed, result: s.result, probabilities: s.probabilities, stageProbabilities: s.stageProbabilities, revealed: s.revealed, friendlies: s.friendlies, friendlyPlan: s.friendlyPlan, drawPending: s.drawPending }),
       onRehydrateStorage: () => (state) => {
         // 새로고침 후 저장된 진행 상황으로 성적 반영 능력치 보정을 복원한다.
         if (state?.result) {
@@ -363,7 +396,7 @@ export const useQualificationStore = create<QualificationStore>()(
           // 항상 다시 계산해 덮어쓴다. 이렇게 하면 오래된 저장 상태의 잘못된 친선전 매칭이 새로고침 시 교정된다.
           if (state.seed) {
             try {
-              state.friendlies = buildFriendlies(state.result, buildQualRatings(), state.seed)
+              state.friendlies = buildFriendlies(state.result, buildQualRatings(), state.seed, state.friendlyPlan)
             } catch {
               /* 능력치 계산 실패 시 저장본 유지 */
             }

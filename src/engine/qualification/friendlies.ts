@@ -11,6 +11,15 @@ export interface FriendlyMatch {
   awayTeamId: string
   homeGoals: number
   awayGoals: number
+  /** 사용자(감독)가 직접 편성한 평가전이면 true — 자동 매칭보다 우선한다. */
+  planned?: boolean
+}
+
+/** 감독이 직접 편성한 내 팀 평가전 계획: 특정 팀이 특정 경기일에 지정 상대와 붙는다. */
+export interface FriendlyPlan {
+  teamId: string
+  /** 경기일(matchday) → 상대 팀 ID */
+  byMatchday: Record<number, string>
 }
 
 // 친선전은 전력 차가 큰 국가끼리는 잡지 않는다 — FIFA 랭킹 근사값 기준 최대 50위 차이까지만 성사.
@@ -31,6 +40,7 @@ export function buildFriendlies(
   result: AllQualificationResult,
   ratings: Record<string, TeamRatings>,
   seed: string,
+  plan?: FriendlyPlan | null,
 ): FriendlyMatch[] {
   // 예선에 등장하는 모든 국가 + 개최국을 친선전 대상 풀로 삼는다.
   const pool = new Set<string>()
@@ -58,6 +68,23 @@ export function buildFriendlies(
     }
     // 이 경기일에 쉬는 팀들을 랭킹순으로 정렬(인접할수록 전력 차가 작다).
     const remaining = [...pool].filter((t) => !busy.has(t)).sort((a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b))
+    // 감독이 직접 편성한 내 팀 평가전이 있으면 자동 매칭보다 먼저 처리한다(두 팀 모두 이 경기일에 쉬어야 성사).
+    const plannedOpp = plan?.byMatchday[md]
+    if (plan && plannedOpp) {
+      const myIdx = remaining.indexOf(plan.teamId)
+      const oppIdx = remaining.indexOf(plannedOpp)
+      const ra = ratings[plan.teamId]
+      const rb = ratings[plannedOpp]
+      if (myIdx !== -1 && oppIdx !== -1 && ra && rb) {
+        // 두 팀을 remaining에서 제거(뒤 인덱스부터 지워 앞 인덱스가 밀리지 않게).
+        remaining.splice(Math.max(myIdx, oppIdx), 1)
+        remaining.splice(Math.min(myIdx, oppIdx), 1)
+        const rand = createSeededRandom(`${seed}-FRIENDLY-PLANNED-${md}-${plan.teamId}-${plannedOpp}`)
+        const s = simulateScoreRaw(ra, rb, 0, 0, rand) // 중립 평가전(홈 이점 없음). 내 팀을 홈으로 표시.
+        out.push({ matchday: md, homeTeamId: plan.teamId, awayTeamId: plannedOpp, homeGoals: s.homeGoals, awayGoals: s.awayGoals, planned: true })
+      }
+    }
+
     // 페어링·홈원정 선택을 경기일마다 다르게 하는 시드 RNG(윈도우별 상대 다양화).
     const pairRng = createSeededRandom(`${seed}-FRIENDLY-PAIR-${md}`)
 
