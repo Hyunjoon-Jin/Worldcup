@@ -11,14 +11,14 @@ function pick<T>(items: T[], seed: number, salt: number): T {
 }
 
 /** 마지막 글자가 받침(종성)으로 끝나는지 판정한다(한글 음절이 아니면 받침 없는 것으로 취급). */
-function hasBatchim(word: string): boolean {
+export function hasBatchim(word: string): boolean {
   const code = word.codePointAt(word.length - 1)
   if (code === undefined || code < 0xac00 || code > 0xd7a3) return false
   return (code - 0xac00) % 28 !== 0
 }
 
 /** 받침 유무에 따라 조사를 골라 단어 뒤에 붙인다(예: josa('한국', '을', '를') -> '한국을'). */
-function josa(word: string, withBatchim: string, withoutBatchim: string): string {
+export function josa(word: string, withBatchim: string, withoutBatchim: string): string {
   return word + (hasBatchim(word) ? withBatchim : withoutBatchim)
 }
 

@@ -17,6 +17,7 @@ import { buildSeasonTimeline, buildCupPhases, buildWcPhases, type SeasonEvent } 
 import { cupStageReveal, cupStageLabel } from '../../engine/season/matchdaySteps'
 import { CalendarView } from './CalendarView'
 import { MyTeamSchedule } from './MyTeamSchedule'
+import { SeasonNewsCard } from './SeasonNewsCard'
 import { useMyTeamFixtures } from './useMyTeamFixtures'
 import { TeamLink } from '../common/TeamLink'
 import { FlagIcon } from '../common/FlagIcon'
@@ -663,6 +664,9 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
           )}
         </GlassCard>
       )}
+
+      {/* 시즌 소식(뉴스) — 진행 이벤트를 자동 헤드라인화(우승·이변·예선 드라마·순위 급변·연승연패·위기) */}
+      <SeasonNewsCard />
 
       {/* 실제 달력(월별 그리드) — 사이클 전체 일정을 라운드별 날짜로 시각화. 진행은 상단 고정 바로 하고,
           여기서는 표시 전용(내 팀 경기가 있는 날은 상대·결과 표시 + 클릭 시 상세). */}
