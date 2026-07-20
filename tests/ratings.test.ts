@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TEAMS, TEAMS_BY_ID } from '../src/data/teams'
+import { TEAMS, TEAMS_BY_ID, ratingsFromRank } from '../src/data/teams'
 import { RATINGS_FROM_RANK as R } from '../src/engine/config'
 
 describe('능력치 곡선 (C1)', () => {
@@ -26,5 +26,15 @@ describe('능력치 곡선 (C1)', () => {
     const best = TEAMS_BY_ID.ARG.baseRatings.overall
     const worst = Math.min(...TEAMS.map((t) => t.baseRatings.overall))
     expect(best - worst).toBeGreaterThan(topSpread * 2)
+  })
+
+  it('하위권도 전 순위에 걸쳐 차별화된다(G1 — floor로 뭉개지지 않음)', () => {
+    // 예전엔 totalRanks=48이라 rank>55가 전부 floor(48)로 동일했다. 이제 곡선이 전체 순위(206)에
+    // 걸쳐 펼쳐져, 하위권 사이에도 실력 차가 뚜렷해야 한다.
+    expect(ratingsFromRank(60).overall).toBeGreaterThan(ratingsFromRank(100).overall)
+    expect(ratingsFromRank(100).overall).toBeGreaterThan(ratingsFromRank(150).overall)
+    expect(ratingsFromRank(150).overall).toBeGreaterThan(ratingsFromRank(200).overall)
+    // rank 100과 rank 200의 격차가 의미 있게 크다(동일 48이 아님).
+    expect(ratingsFromRank(100).overall - ratingsFromRank(200).overall).toBeGreaterThan(10)
   })
 })

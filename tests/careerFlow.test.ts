@@ -8,8 +8,7 @@ import { useHistoryStore } from '../src/store/useHistoryStore'
 import { useContinentalHistoryStore } from '../src/store/useContinentalHistoryStore'
 import { useContinentalStore } from '../src/store/useContinentalStore'
 import { getCurrentHostIds } from '../src/engine/hostContext'
-import { basePointsFromRank } from '../src/engine/qualification/ranking'
-import { ALL_NATIONS_BY_ID } from '../src/data/nations'
+import { editionEndRankingPoints } from '../src/engine/qualification/ranking'
 import type { KnockoutMatch } from '../src/types/match'
 
 function completedFinals(champion: string, runnerUp: string) {
@@ -74,17 +73,23 @@ describe('advanceToNextEdition — 다음 대회로 흐름 이어가기', () => 
     expect(useProgressStore.getState().champion).toBeNull()
   })
 
-  it('본선까지 반영된 FIFA 점수가 다음 대회로 이월된다(회귀하지 않는다)', () => {
+  it('본선까지 반영된 FIFA 점수가 다음 대회로 이월된다(본선 성적 반영)', () => {
     // 실제 흐름처럼 예선 결과가 있어야 이번 대회 점수를 계산해 이월할 수 있다.
     useQualificationStore.getState().simulate('CARRY-TEST')
     useProgressStore.setState(completedFinals('BRA', 'ARG'))
     advanceToNextEdition()
     const carried = useCareerStore.getState().rankingBase
-    // 이월 점수가 저장되었고, 우승국(BRA)의 이월 점수는 정적 기본값보다 높다(본선 성적 반영).
+    // 이월 점수가 실제로 저장된다.
     expect(Object.keys(carried).length).toBeGreaterThan(0)
-    const braCarried = carried['BRA']
-    const braStatic = basePointsFromRank(ALL_NATIONS_BY_ID['BRA'].fifaRankApprox)
-    expect(braCarried).toBeGreaterThan(braStatic)
+    // 본선 성적이 이월 점수에 '반영'된다 = 결승에서 이겼을 때 이월 점수가 졌을 때보다 높다.
+    // (예선 성적은 시드 운에 좌우되므로 '정적 기본값 초과'가 아니라 결승 결과의 반영 여부로 검증한다.)
+    const all = useQualificationStore.getState().result!
+    const finalOf = (winner: string, loser: string): KnockoutMatch => ({
+      round: 'FINAL', slotId: 'FINAL', homeTeamId: winner, awayTeamId: loser, homeGoals: 2, awayGoals: 1, wentToPenalties: false, winnerTeamId: winner,
+    })
+    const braWins = editionEndRankingPoints(all, { groupMatches: [], knockoutMatches: [finalOf('BRA', 'ARG')] })
+    const braLoses = editionEndRankingPoints(all, { groupMatches: [], knockoutMatches: [finalOf('ARG', 'BRA')] })
+    expect(braWins['BRA']).toBeGreaterThan(braLoses['BRA'])
   })
 
   it('본선이 끝나지 않았으면 아무 것도 하지 않는다', () => {

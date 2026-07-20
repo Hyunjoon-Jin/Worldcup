@@ -68,25 +68,28 @@ export const MOMENTUM = {
 export const CONDITION_RANGE = 8
 
 /**
- * 랭킹 → 능력치 변환 파라미터 (C1).
+ * 랭킹 → 능력치 변환 파라미터 (C1·G1).
  *
- * 기존 선형식 대신 거듭제곱 곡선을 사용한다:
+ * 거듭제곱 곡선을 사용한다:
  *   overall = top - span * ((rank-1) / (totalRanks-1)) ^ exponent
- * exponent > 1이라 상위권(1~10위)은 좁게 밀집하고, 순위가 내려갈수록 격차가 벌어진다.
- * 실제 축구 전력 분포(최상위 팀들은 비슷하고 하위로 갈수록 차이가 큼)에 더 가깝다.
+ *
+ * G1: 예전엔 totalRanks=48이라 rank>55 팀이 전부 floor(48)로 뭉개져, 실제 등록국 206개국 중
+ * 하위 ~150개국이 동일 전력이 됐다(마카오·몰디브·괌이 모두 48). 그 결과 강팀이 약팀에 비기거나
+ * 지는 비현실적 이변이 잦았고, 현실화한 FIFA 점수 곡선(C)과도 모순됐다. 이제 곡선을 전체 순위
+ * (206)에 걸쳐 펼치고 floor를 낮춰 약체를 실제로 약하게 만든다 — rank 100≈59, 150≈47, 206≈35.
+ * exponent<1(오목)이라 상위권(1~10위)은 좁게 밀집(편차 ~6)하고, 순위가 내려갈수록 완만히 벌어진다.
  */
 export const RATINGS_FROM_RANK = {
   overallTop: 95,
-  overallSpan: 37, // rank 48 ≈ 58
-  overallExponent: 1.35,
-  totalRanks: 48,
-  // 본선 48국(rank≤48)의 overall은 항상 ≥58이라 이 floor에 닿지 않는다. floor를 낮추면
-  // 예선 참가 비본선국(rank>48)만 더 넓게 아래로 퍼져 실력 차가 드러난다(지역예선).
-  overallFloor: 48,
+  overallSpan: 60, // rank 206 ≈ 35 (95 − 60)
+  overallExponent: 0.72,
+  totalRanks: 206,
+  // 전체 순위에 곡선을 펼쳤으므로 최하위(rank 206)의 35까지 내려간다. floor는 그 아래로 둬 클리핑을 피한다.
+  overallFloor: 33,
   overallCap: 97,
   /** styleBias가 공격/수비 배분에 곱해지는 계수. */
   styleFactor: 1.4,
-  attackFloor: 35,
+  attackFloor: 30,
   attackCap: 99,
   formFloor: 40,
   formCap: 99,
