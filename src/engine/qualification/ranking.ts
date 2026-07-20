@@ -62,32 +62,48 @@ export function wcKnockoutImportance(round: KnockoutRound): number {
 }
 
 /**
- * 점수 산정 상수(A5 단일 출처). FIFA_DIVISOR는 실제 규정값(600). 시작 점수 곡선(TOP/PER_RANK/FLOOR)은
- * 실제 FIFA 포인트 분포에 대한 보정 근사이며, 팀별 실측 포인트가 있으면 A2 오버라이드가 우선한다.
+ * 점수 산정 상수(A5 단일 출처). FIFA_DIVISOR는 실제 규정값(600). 시작 점수 곡선(C: FIFA 점수 곡선
+ * 리얼리즘)은 실제 FIFA/코카콜라 랭킹 포인트 분포에 맞춘 볼록(거듭제곱) 곡선이다. 팀별 실측 포인트가
+ * 있으면 A2 오버라이드가 우선한다.
+ *
+ * 곡선:  P(rank) = floor + (top − floor) · (1 − t)^exp,   t = (rank − 1) / (totalRanks − 1) ∈ [0, 1]
+ * exp > 1이라 상위권은 점수 간격이 크고(1위 ~1885, 10위 ~1800로 급락) 하위로 갈수록 완만히 수렴한다.
+ * 이는 실제 FIFA 포인트가 최상위권에서 랭킹당 ~15점씩 벌어지다가 하위권에서 촘촘해지는 분포와 일치한다
+ * (예전 선형 −5점/랭크는 최상위권 격차를 과소평가했다). ratingsFromRank의 전력 곡선과도 방향이 같다.
  */
 export const RANKING_CONSTANTS = {
   /** 기대 승점 산정 분모(FIFA 규정값). */
   fifaDivisor: 600,
-  /** 랭킹 1위 근사 점수. */
-  topPoints: 1850,
-  /** 랭킹당 하락폭(선형 근사). */
-  pointsPerRank: 5,
-  /** 하위권 시작 점수 하한. */
-  floorPoints: 820,
+  /** 랭킹 1위 근사 점수(실제 #1 앵커). */
+  topPoints: 1885,
+  /** 최하위권 시작 점수 하한(실제 최하위 앵커). */
+  floorPoints: 800,
+  /** 볼록 곡선 지수(>1: 상위권 급락·하위권 완만). 실제 포인트 분포 근사. */
+  curveExponent: 1.7,
+  /** 정규화 기준 랭킹 수(현재 등록국 ~206 + 여유). t = (rank−1)/(totalRanks−1). */
+  totalRanks: 211,
 } as const
 const FIFA_DIVISOR = RANKING_CONSTANTS.fifaDivisor
 const TOP_POINTS = RANKING_CONSTANTS.topPoints
-const POINTS_PER_RANK = RANKING_CONSTANTS.pointsPerRank
 const FLOOR_POINTS = RANKING_CONSTANTS.floorPoints
+const CURVE_EXP = RANKING_CONSTANTS.curveExponent
+const TOTAL_RANKS = RANKING_CONSTANTS.totalRanks
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 
-/** FIFA 랭킹(숫자 작을수록 강함) → 시작 랭킹 점수(높을수록 강함). 실제 상위권 분포에 근사. */
+/**
+ * FIFA 랭킹(숫자 작을수록 강함) → 시작 랭킹 점수(높을수록 강함). 실제 포인트 분포에 맞춘 볼록 곡선.
+ * rank ≤ 1이면 topPoints, rank ≥ totalRanks이면 floorPoints로 클램프된다.
+ */
 export function basePointsFromRank(rank: number): number {
-  return Math.max(FLOOR_POINTS, TOP_POINTS - rank * POINTS_PER_RANK)
+  const t = clamp01((rank - 1) / (TOTAL_RANKS - 1))
+  return FLOOR_POINTS + (TOP_POINTS - FLOOR_POINTS) * Math.pow(1 - t, CURVE_EXP)
 }
 
-/** 랭킹 점수 → 유효 랭킹(전력 곡선 입력용). 점수가 높을수록 낮은(=강한) 랭킹 숫자. */
+/** 랭킹 점수 → 유효 랭킹(전력 곡선 입력용). basePointsFromRank의 정확한 역함수. */
 export function effectiveRankFromPoints(points: number): number {
-  return Math.max(1, (TOP_POINTS - points) / POINTS_PER_RANK)
+  const norm = clamp01((points - FLOOR_POINTS) / (TOP_POINTS - FLOOR_POINTS))
+  const t = 1 - Math.pow(norm, 1 / CURVE_EXP)
+  return Math.max(1, 1 + t * (TOTAL_RANKS - 1))
 }
 
 /** FIFA 기대 승점 Wₑ = 1 / (10^(−dr/600) + 1). */
@@ -391,15 +407,21 @@ export function computeLiveRanking(
   const baseRanks = rankMap(ids, base)
   const nowRanks = rankMap(ids, now)
   return ids
-    .map((id) => ({
-      teamId: id,
-      rank: nowRanks[id],
-      baseRank: baseRanks[id],
-      rankDelta: baseRanks[id] - nowRanks[id],
-      points: Math.round(now[id]),
-      basePoints: Math.round(base[id]),
-      pointsDelta: Math.round(now[id] - base[id]),
-    }))
+    .map((id) => {
+      const points = Math.round(now[id])
+      const basePoints = Math.round(base[id])
+      return {
+        teamId: id,
+        rank: nowRanks[id],
+        baseRank: baseRanks[id],
+        rankDelta: baseRanks[id] - nowRanks[id],
+        points,
+        basePoints,
+        // 화면 열이 정확히 합산되도록 등락은 '표시 점수 − 표시 시작 점수'로 계산한다(시작 점수가
+        // 볼록 곡선이라 소수라도, round(now)−round(base)로 두 열 차이와 항상 일치시킨다).
+        pointsDelta: points - basePoints,
+      }
+    })
     .sort((a, b) => a.rank - b.rank)
 }
 
