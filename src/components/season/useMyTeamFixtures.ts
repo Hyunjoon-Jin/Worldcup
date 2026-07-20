@@ -70,7 +70,11 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
           const date = qualWindowDate(m.matchday - 1, wcYear)
           const played = revealedMd >= m.matchday
           const stageName = stageNameOfGroup(r, m.group)
-          const matchInStage = m.matchday - (stageStart.get(stageName) ?? m.matchday) + 1
+          const stageStartMd = stageStart.get(stageName) ?? m.matchday
+          // 아직 시작(조추첨)되지 않은 다음 차수의 대진은 감추다 — 조추첨 전에 3차 예선 상대·일정이 보이면
+          // 조추첨 결과 스포일러가 된다(팀 상세 예선 섹션과 동일하게 '현재 차수'까지만 노출).
+          if (!played && revealedMd < stageStartMd) continue
+          const matchInStage = m.matchday - stageStartMd + 1
           const roundLabel = `${stageName} ${matchInStage}경기`
           if (played) {
             const gf = isHome ? m.homeGoals : m.awayGoals
