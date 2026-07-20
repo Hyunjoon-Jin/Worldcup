@@ -7,6 +7,7 @@ import { useSeasonNews } from './useSeasonNews'
 /** 카테고리별 헤드라인 강조색(왼쪽 보더). */
 const ACCENT: Record<string, string> = {
   champion: 'border-amber-400/60',
+  myTeam: 'border-sky-400/70',
   qualOut: 'border-red-400/50',
   qualIn: 'border-emerald-400/50',
   upset: 'border-sky-400/50',

@@ -139,7 +139,7 @@ export function TeamDetailPage() {
   const liveRow = teamId ? liveRowByTeam[teamId] : undefined
   const selectMatch = useMatchDetailStore((s) => s.selectMatch)
   const drawGroups = useDrawStore((s) => s.state.groups)
-  const { schedule, groupMatches, knockoutSlots } = useProgressStore()
+  const { schedule, groupMatches, knockoutSlots, champion } = useProgressStore()
   const simResult = useSimulationStore((s) => s.result)
   const crisisByTeam = useCrisisTeams()
   const conditionOffset = useConditionStore((s) => (teamId ? s.offsets[teamId] : undefined)) ?? 0
@@ -181,6 +181,19 @@ export function TeamDetailPage() {
       ) as Record<GroupLetter, string[]>,
     [drawGroups],
   )
+  // 본선 토너먼트 최종 성적(G6): 녹아웃 결과가 나오면 조별 '진출확정' 대신 실제 결말을 보여준다
+  // (예: 32강에서 탈락했는데 '32강 진출확정'이 남아 있던 문제). 우승/준우승/각 라운드 탈락으로 확정 표기.
+  const finalsOutcome = useMemo(() => {
+    if (!teamId) return null
+    if (champion === teamId) return { label: '🏆 우승', cls: 'bg-amber-500/25 text-amber-200' }
+    const lost = Object.values(knockoutSlots).find(
+      (s) => s.result && s.result.winnerTeamId && s.result.winnerTeamId !== teamId && (s.result.homeTeamId === teamId || s.result.awayTeamId === teamId),
+    )
+    if (!lost) return null
+    if (lost.round === 'FINAL') return { label: '🥈 준우승', cls: 'bg-slate-400/20 text-slate-200' }
+    return { label: `🏁 ${ROUND_LABEL_KO[lost.round] ?? lost.round} 탈락`, cls: 'bg-gray-500/20 text-gray-400' }
+  }, [knockoutSlots, teamId, champion])
+
   const statusByTeam = useMemo(
     () => computeQualificationStatuses(groupTeams, groupMatches),
     [groupTeams, groupMatches],
@@ -397,6 +410,10 @@ export function TeamDetailPage() {
               </p>
             )}
           </div>
+          {finalsOutcome ? (
+            <span className={`rounded-full px-3 py-1 text-xs font-bold ${finalsOutcome.cls}`}>{finalsOutcome.label}</span>
+          ) : (
+            <>
           {status === 'advancing' && (
             <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
               ✅ 32강 진출확정
@@ -405,7 +422,9 @@ export function TeamDetailPage() {
           {status === 'eliminated' && (
             <span className="rounded-full bg-gray-500/20 px-3 py-1 text-xs font-bold text-gray-400">❌ 탈락확정</span>
           )}
-          {status === 'undecided' && crisisByTeam[teamId] && (
+            </>
+          )}
+          {!finalsOutcome && status === 'undecided' && crisisByTeam[teamId] && (
             <span
               className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
               title={`32강 진출 확률 ${crisisByTeam[teamId].pct.toFixed(1)}% (50% 미만)`}

@@ -72,6 +72,24 @@ describe('시즌 뉴스 생성(D)', () => {
     expect(a.map((n) => n.id)).toEqual(b.map((n) => n.id))
   })
 
+  it('내 팀 관련 헤드라인이 상단으로 부스트된다(G5)', () => {
+    // KOR(+11)이 BRA(+12)보다 계단은 낮지만, 내 팀 부스트로 더 위에 온다.
+    const news = generateSeasonNews({ liveRanking: [liveRow(BRA, 12), liveRow(KOR, 11)], myTeamId: KOR }, 10)
+    const ki = news.findIndex((n) => n.teamIds[0] === KOR)
+    const bi = news.findIndex((n) => n.teamIds[0] === BRA)
+    expect(ki).toBeGreaterThanOrEqual(0)
+    expect(ki).toBeLessThan(bi)
+  })
+
+  it('내 팀 본선 진출 마일스톤을 낸다(G5)', () => {
+    const qr = { hosts: [], qualified48: [KOR], interConfed: { winners: [] }, byConfederation: { AFC: { standings: [KOR] } } }
+    const news = generateSeasonNews({ qualResult: qr as never, qualComplete: true, myTeamId: KOR }, 10)
+    const m = news.find((n) => n.category === 'myTeam')
+    expect(m).toBeTruthy()
+    expect(m!.headline).toContain('본선 진출 확정')
+    expect(news[0].category).toBe('myTeam') // 최상단
+  })
+
   it('limit을 초과하지 않고 중요도 내림차순으로 정렬된다', () => {
     const rows = ALL_NATIONS.slice(0, 30).map((n, i) => liveRow(n.id, 11 + i))
     const news = generateSeasonNews({ wcChampion: BRA, liveRanking: rows }, 5)

@@ -148,6 +148,17 @@ export function TeamQualificationSection({
       ? [...stageOrder, QUALIFY_KEY, ...(hasInterPlayoff ? [INTER_PLAYOFF_KEY] : [])]
       : []
 
+    // 이 팀이 실제로 참가하는 예선 차수(전체 픽스처 기준). 시드로 상위 차수에 직행하면 그 전 차수는
+    // '탈락(0%)'이 아니라 '해당 없음(직행)'이다 — 참가하지도 않은 차수를 0%로 표기하면 오해를 준다(G4).
+    const teamStageNames = new Set<string>()
+    for (const m of teamMatches) {
+      const st = stages.find((s) => m.matchday >= s.startMd && m.matchday <= s.endMd)
+      if (st) teamStageNames.add(st.name)
+    }
+    const entryIdx = stageOrder.findIndex((name) => teamStageNames.has(name))
+    const exemptStages = new Set<string>()
+    if (entryIdx > 0) for (let i = 0; i < entryIdx; i++) exemptStages.add(stageOrder[i])
+
     const currentStageName = groupIdx != null ? stageNameOfGroup(r, groupIdx) : null
 
     // 예선이 끝나 결과가 확정된 뒤에는 차수 확률을 '실제 참여/최종 결과'로 확정 표기한다.
@@ -184,6 +195,7 @@ export function TeamQualificationSection({
       finalStatus,
       teamProbs,
       chainKeys,
+      exemptStages,
       chainOverride,
       currentStageName,
       single: r.groups.length <= 1,
@@ -269,9 +281,16 @@ export function TeamQualificationSection({
         <div className="mb-3">
           <p className="mb-1.5 text-[11px] font-bold text-gray-400">예선 차수별 진출 확률</p>
           <div className="space-y-1.5">
-            {view.chainKeys.map((key) => (
-              <ProbBar key={key} pct={pct(key)} color={chainColor(key)} label={shortLabel(key)} />
-            ))}
+            {view.chainKeys.map((key) =>
+              view.exemptStages.has(key) ? (
+                <div key={key} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-20 shrink-0 text-gray-400">{shortLabel(key)}</span>
+                  <span className="flex-1 text-gray-500">해당 없음 <span className="text-gray-600">· 시드 직행</span></span>
+                </div>
+              ) : (
+                <ProbBar key={key} pct={pct(key)} color={chainColor(key)} label={shortLabel(key)} />
+              ),
+            )}
           </div>
         </div>
       )}

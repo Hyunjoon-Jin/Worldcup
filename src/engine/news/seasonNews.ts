@@ -12,7 +12,7 @@ import type { LiveRankRow } from '../qualification/ranking'
  * 주입된 데이터만으로 테스트할 수 있다.
  */
 
-export type NewsCategory = 'champion' | 'upset' | 'qualIn' | 'qualOut' | 'rankUp' | 'rankDown' | 'streakWin' | 'streakLoss' | 'crisis'
+export type NewsCategory = 'champion' | 'myTeam' | 'upset' | 'qualIn' | 'qualOut' | 'rankUp' | 'rankDown' | 'streakWin' | 'streakLoss' | 'crisis'
 
 export interface NewsItem {
   /** 안정적 식별자(React key·중복 제거용). */
@@ -47,6 +47,8 @@ export interface SeasonNewsInput {
   liveRanking?: LiveRankRow[]
   /** 조별리그 탈락 위기 팀(진출 확률%). */
   crisisTeams?: { teamId: string; pct: number }[]
+  /** 내 팀 ID — 내 팀 관련 헤드라인을 상단으로 끌어올리고 본선 진출/탈락 마일스톤을 추가한다(G5). */
+  myTeamId?: string | null
 }
 
 export interface NewsMatch {
@@ -262,6 +264,25 @@ export function generateSeasonNews(input: SeasonNewsInput, limit = 8): NewsItem[
       })
     }
   }
+
+  // 7) 내 팀 마일스톤 — 예선이 끝났을 때 내 팀의 본선 진출/탈락을 명시적으로 알린다(감독 관점).
+  const my = input.myTeamId
+  if (my && input.qualResult && input.qualComplete && !input.qualResult.hosts.includes(my)) {
+    const qualified = input.qualResult.qualified48.includes(my)
+    const wonPO = input.qualResult.interConfed.winners.includes(my)
+    const participated = Object.values(input.qualResult.byConfederation).some((r) => r.standings.includes(my))
+    if (qualified || wonPO) {
+      items.push({ id: `myqual-${my}`, category: 'myTeam', icon: '🎫', headline: `${nameOf(my)}, 월드컵 본선 진출 확정!`, teamIds: [my], importance: 800 })
+    } else if (participated) {
+      items.push({ id: `myout-${my}`, category: 'myTeam', icon: '💔', headline: `${nameOf(my)}, 월드컵 본선 진출 실패`, teamIds: [my], importance: 780 })
+    }
+    // 내 팀이 이미 예선 드라마(깜짝/충격)로도 잡혔다면 마일스톤과 중복되므로 그쪽을 제거한다.
+    const drop = new Set([`qin-${my}`, `qout-${my}`])
+    for (let i = items.length - 1; i >= 0; i--) if (drop.has(items[i].id) && items[i].id !== `myqual-${my}` && items[i].id !== `myout-${my}`) items.splice(i, 1)
+  }
+
+  // 내 팀 관련 헤드라인은 상단으로 끌어올린다(우승 다음으로 중요 — 감독 몰입감).
+  if (my) for (const it of items) if (it.category !== 'myTeam' && it.category !== 'champion' && it.teamIds.includes(my)) it.importance += 300
 
   // 중복 id 제거(같은 신호가 여러 경로로 잡히는 경우 방어) 후 중요도순 정렬.
   const seen = new Set<string>()

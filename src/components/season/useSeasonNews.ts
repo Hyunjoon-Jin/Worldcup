@@ -3,6 +3,7 @@ import { useQualificationStore } from '../../store/useQualificationStore'
 import { useProgressStore } from '../../store/useProgressStore'
 import { useContinentalStore } from '../../store/useContinentalStore'
 import { useCareerStore } from '../../store/useCareerStore'
+import { useMyTeamStore } from '../../store/useMyTeamStore'
 import { useCrisisTeams } from '../../store/useCrisisTeams'
 import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
 import { flattenPlayed, collectPlayedByConfed } from '../../engine/qualification/conditional'
@@ -27,6 +28,7 @@ export function useSeasonNews(limit = 8): NewsItem[] {
   const cupYear = useContinentalStore((s) => s.cupYear)
   const { rows: liveRanking } = useLiveFifaRanking()
   const crisisMap = useCrisisTeams()
+  const myTeamId = useMyTeamStore((s) => s.myTeamId)
 
   return useMemo(() => {
     // 이미 치른(공개된) 경기를 시간순으로 모은다: 예선 → 친선 → 본선 조별 → 본선 녹아웃 → 대륙컵.
@@ -70,8 +72,9 @@ export function useSeasonNews(limit = 8): NewsItem[] {
         playedMatches: played,
         liveRanking,
         crisisTeams,
+        myTeamId,
       },
       limit,
     )
-  }, [result, revealed, friendlies, groupMatches, knockoutSlots, wcChampion, wcYear, cupResult, cupYear, liveRanking, crisisMap, limit])
+  }, [result, revealed, friendlies, groupMatches, knockoutSlots, wcChampion, wcYear, cupResult, cupYear, liveRanking, crisisMap, myTeamId, limit])
 }
