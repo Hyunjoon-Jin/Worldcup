@@ -66,6 +66,7 @@ function friendlyRef(f: FriendlyMatch): MatchDetailRef {
   return {
     kind: 'group',
     external: true,
+    competition: 'friendly',
     match: { group: 'A', matchday: 1, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId, homeGoals: f.homeGoals, awayGoals: f.awayGoals },
   }
 }

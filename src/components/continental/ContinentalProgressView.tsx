@@ -44,9 +44,10 @@ function toKnockoutMatch(m: CupKnockoutMatch): KnockoutMatch {
 const groupRef = (m: CupMatch): MatchDetailRef => ({
   kind: 'group',
   external: true,
+  competition: 'cup',
   match: { group: letterOf(m.group), matchday: m.matchday as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals },
 })
-const koRef = (m: CupKnockoutMatch): MatchDetailRef => ({ kind: 'knockout', external: true, match: toKnockoutMatch(m) })
+const koRef = (m: CupKnockoutMatch): MatchDetailRef => ({ kind: 'knockout', external: true, competition: 'cup', match: toKnockoutMatch(m) })
 
 /**
  * 대륙컵 '일정 진행' 뷰 — 월드컵 ScheduleStage와 동형 구성: 진행 상태·타임라인 → 진행 버튼 → 다음 경기

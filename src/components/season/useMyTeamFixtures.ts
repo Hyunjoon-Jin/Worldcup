@@ -76,7 +76,7 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
             const gf = isHome ? m.homeGoals : m.awayGoals
             const ga = isHome ? m.awayGoals : m.homeGoals
             const mdGroup = (Math.min(Math.max(m.matchday, 1), 3) || 1) as 1 | 2 | 3
-            const ref: MatchDetailRef = { kind: 'group', external: true, match: { group: 'A', matchday: mdGroup, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals } }
+            const ref: MatchDetailRef = { kind: 'group', external: true, competition: 'wcQual', match: { group: 'A', matchday: mdGroup, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals } }
             out.push({ key: `q-${confed}-${m.matchday}-${m.group}-${oppId}`, comp: 'wc', date, roundLabel, opponentId: oppId, score: `${gf}-${ga}`, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', onClick: () => selectMatch(ref) })
           } else {
             out.push({ key: `q-up-${confed}-${m.matchday}-${m.group}-${oppId}`, comp: 'wc', date, roundLabel, opponentId: oppId, onClick: () => selectMatch({ kind: 'upcoming', homeTeamId: teamId, awayTeamId: oppId, label: roundLabel, date }) })
@@ -99,7 +99,7 @@ export function useMyTeamFixtures(teamId: string, onSelectCup: (id: CupId, year:
         if (played) {
           const gf = isHome ? f.homeGoals : f.awayGoals
           const ga = isHome ? f.awayGoals : f.homeGoals
-          const ref: MatchDetailRef = { kind: 'group', external: true, match: { group: 'A', matchday: 1, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId, homeGoals: f.homeGoals, awayGoals: f.awayGoals } }
+          const ref: MatchDetailRef = { kind: 'group', external: true, competition: 'friendly', match: { group: 'A', matchday: 1, homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId, homeGoals: f.homeGoals, awayGoals: f.awayGoals } }
           out.push({ key: `fr-${f.matchday}-${oppId}`, comp: 'wc', date, roundLabel: '친선경기', opponentId: oppId, score: `${gf}-${ga}`, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', onClick: () => selectMatch(ref) })
         } else {
           out.push({ key: `fr-up-${f.matchday}-${oppId}`, comp: 'wc', date, roundLabel: '친선경기', opponentId: oppId, onClick: () => selectMatch({ kind: 'upcoming', homeTeamId: teamId, awayTeamId: oppId, label: '친선경기', date }) })

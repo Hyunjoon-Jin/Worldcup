@@ -12,6 +12,7 @@ import {
   applyMatchElo,
   wcKnockoutImportance,
   IMPORTANCE_WC_GROUP,
+  MATCH_IMPORTANCE,
   staticStartPoints,
 } from '../../engine/qualification/ranking'
 import { useLiveFifaRanking } from '../ranking/useLiveFifaRanking'
@@ -261,13 +262,16 @@ export function MatchDetailModal() {
   const homeGoals = selected.kind !== 'upcoming' ? selected.match.homeGoals : undefined
   const awayGoals = selected.kind !== 'upcoming' ? selected.match.awayGoals : undefined
 
+  // 경기장은 2026 월드컵 개최지(북중미) 정보뿐이라, 월드컵 본선 경기에만 표시한다(G2).
+  // 대륙컵·예선·친선은 개최지 데이터가 없으므로 엉뚱한 북중미 경기장을 붙이지 않는다.
+  const isWcFinals = selected.kind !== 'upcoming' && !selected.external
   const venueKey =
     selected.kind === 'knockout'
       ? selected.match.slotId
       : selected.kind === 'group'
         ? `${selected.match.group}-${selected.match.matchday}-${homeTeamId}-${awayTeamId}`
         : `${homeTeamId}-${awayTeamId}`
-  const venue = venueForMatchId(venueKey)
+  const venue = isWcFinals ? venueForMatchId(venueKey) : null
 
   const goalTimeline =
     played && (homeGoals! > 0 || awayGoals! > 0)
@@ -281,9 +285,23 @@ export function MatchDetailModal() {
       ? `승부차기 ${selected.match.homePenalties}-${selected.match.awayPenalties}`
       : '승부차기'
 
-  // FIFA 랭킹 ±점 기여(D21). 본선 경기만 — 조별 I=50, 8강 이후 60. 현재 라이브 점수 기준 근사.
+  // FIFA 랭킹 ±점 기여(D21·G3). 대회별 실제 중요도로 계산한다(랭킹 엔진과 일치):
+  // 월드컵 본선 조별 50·녹아웃 50/60, 대륙컵 조별 35·녹아웃 40, 예선(월드컵·대륙) 25, 친선 10.
+  const competition = selected.kind === 'upcoming' ? 'wc' : (selected.competition ?? 'wc')
   const fifaImportance =
-    selected.kind === 'knockout' ? wcKnockoutImportance(selected.match.round) : selected.kind === 'group' ? IMPORTANCE_WC_GROUP : null
+    selected.kind === 'upcoming'
+      ? null
+      : competition === 'friendly'
+        ? MATCH_IMPORTANCE.friendlyInWindow
+        : competition === 'wcQual' || competition === 'cupQual'
+          ? MATCH_IMPORTANCE.qualifier
+          : competition === 'cup'
+            ? selected.kind === 'knockout'
+              ? MATCH_IMPORTANCE.continentalKnockout
+              : MATCH_IMPORTANCE.continentalGroup
+            : selected.kind === 'knockout'
+              ? wcKnockoutImportance(selected.match.round)
+              : IMPORTANCE_WC_GROUP
   let fifaDelta: { home: number; away: number; importance: number } | null = null
   if (played && fifaImportance != null && homeGoals != null && awayGoals != null) {
     const hp = pointsByTeam[homeTeamId] ?? staticStartPoints(homeTeamId)
@@ -357,9 +375,11 @@ export function MatchDetailModal() {
             {selected.timeSlot ? ` ${selected.timeSlot}` : ''} 현지시간
           </p>
         )}
-        <p className="mb-3 text-center text-[11px] text-gray-500">
-          📍 {venue.cityKo} · {venue.stadium}
-        </p>
+        {venue && (
+          <p className="mb-3 text-center text-[11px] text-gray-500">
+            📍 {venue.cityKo} · {venue.stadium}
+          </p>
+        )}
 
         <div className="mb-4 flex items-center justify-center gap-4">
           <button

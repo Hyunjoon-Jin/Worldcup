@@ -366,6 +366,7 @@ function CupQualBody({ format, year, qualResult, hostIds, projected, view }: { f
   const matchRef = (m: CupMatch): MatchDetailRef => ({
     kind: 'group',
     external: true,
+    competition: 'cupQual',
     match: { group: 'A', matchday: 1, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals },
   })
   return (

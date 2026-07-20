@@ -184,6 +184,7 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
       selectMatch({
         kind: 'knockout',
         external: true,
+        competition: 'cup',
         match: {
           round: 'FINAL',
           slotId: fin.slotId,
@@ -250,8 +251,8 @@ export function SeasonHome({ onSelectCup, onNavigateWC, onNavigateWCDraw, onNavi
       awayTeamId: m.awayTeamId,
       score: `${m.homeGoals}-${m.awayGoals}${m.wentToPenalties ? ` (PK ${m.homePenalties}-${m.awayPenalties})` : ''}`,
       ref: m.round
-        ? { kind: 'knockout', external: true, match: { round: m.round, slotId: `${cupId}-${m.round}-${i}`, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals, wentToPenalties: !!m.wentToPenalties, winnerTeamId: m.winnerTeamId ?? m.homeTeamId, homePenalties: m.homePenalties, awayPenalties: m.awayPenalties } }
-        : { kind: 'group', external: true, match: { group: 'A', matchday: (Math.min(st.stage, 3) || 1) as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals } },
+        ? { kind: 'knockout', external: true, competition: 'cup', match: { round: m.round, slotId: `${cupId}-${m.round}-${i}`, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals, wentToPenalties: !!m.wentToPenalties, winnerTeamId: m.winnerTeamId ?? m.homeTeamId, homePenalties: m.homePenalties, awayPenalties: m.awayPenalties } }
+        : { kind: 'group', external: true, competition: 'cup', match: { group: 'A', matchday: (Math.min(st.stage, 3) || 1) as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals } },
     }))
     return { label: r.label, rows }
   }

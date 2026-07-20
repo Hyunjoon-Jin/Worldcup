@@ -65,6 +65,7 @@ function cupRules(format: CupFormat): RuleItem[] {
 const cupGroupRef = (m: CupMatch, date?: string): MatchDetailRef => ({
   kind: 'group',
   external: true,
+  competition: 'cup',
   date,
   match: { group: letterOf(m.group), matchday: m.matchday as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals },
 })

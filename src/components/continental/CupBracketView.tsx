@@ -56,7 +56,7 @@ function CupMatchNode({ m }: { m: CupKnockoutMatch }) {
   const upset = isUpset(r.winnerTeamId, loserId)
   return (
     <div
-      onClick={() => selectMatch({ kind: 'knockout', match: toKnockoutMatch(m), external: true })}
+      onClick={() => selectMatch({ kind: 'knockout', match: toKnockoutMatch(m), external: true, competition: 'cup' })}
       className={`glass w-44 shrink-0 cursor-pointer rounded-xl py-1 text-xs transition-colors hover:bg-white/10 sm:w-52 ${upset ? 'ring-1 ring-red-400/40' : ''}`}
     >
       <div className={`flex items-center justify-between gap-2 px-2 py-1 ${homeWon ? 'font-bold text-white' : 'text-gray-300'}`}>
