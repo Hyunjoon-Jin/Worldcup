@@ -1,8 +1,9 @@
 import { GlassButton } from '../common/GlassButton'
 import { SettingsMenu } from './SettingsMenu'
+import { MyTeamChip } from './MyTeamChip'
 import { useSandboxStore } from '../../store/useSandboxStore'
 
-export function Header() {
+export function Header({ onPickMyTeam }: { onPickMyTeam: () => void }) {
   const sandboxMode = useSandboxStore((s) => s.sandboxMode)
   const toggleSandbox = useSandboxStore((s) => s.toggleSandbox)
 
@@ -16,7 +17,8 @@ export function Header() {
           월드컵·대륙컵을 일정 축으로 — 실제 규정 기반 가상 시뮬레이션 (실제 대회 결과와 무관)
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-center gap-2">
+        <MyTeamChip onPick={onPickMyTeam} />
         <GlassButton
           variant={sandboxMode ? 'danger' : 'ghost'}
           onClick={toggleSandbox}

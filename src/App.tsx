@@ -172,7 +172,7 @@ function App() {
       <div aria-live="polite" className="sr-only">
         {isComputing ? '확률을 계산하고 있습니다.' : ''}
       </div>
-      <Header />
+      <Header onPickMyTeam={() => { clearTeam(); setTab('myteam') }} />
       {sandboxMode && (
         <Suspense fallback={null}>
           <SandboxPanel />

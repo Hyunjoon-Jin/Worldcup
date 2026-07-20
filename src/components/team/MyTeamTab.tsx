@@ -93,6 +93,15 @@ function TeamPicker({ onPick }: { onPick: (id: string) => void }) {
 
 const CHAIN = [QUALIFY_STAGE, ...STAGES]
 
+/** 라이브 FIFA 순위 등급으로 이번 사이클 현실적 목표를 제시한다(감독 방향성). */
+function teamObjective(rank: number): string {
+  if (rank <= 8) return '월드컵 우승 도전 🏆'
+  if (rank <= 20) return '월드컵 8강 이상'
+  if (rank <= 40) return '월드컵 16강 진출'
+  if (rank <= 70) return '월드컵 본선 진출'
+  return '대륙컵 경쟁력 확보 + 본선 도전'
+}
+
 /** '내 팀' 중심 탭 — 내 팀 정보 · 경기 결과 · 실시간 진출/우승 확률을 한 화면에 모은다. */
 export function MyTeamTab() {
   const myTeamId = useMyTeamStore((s) => s.myTeamId)
@@ -188,6 +197,10 @@ export function MyTeamTab() {
             {perfDelta > 0 ? '📈' : '📉'} 성적 반영(예선·본선·대륙컵): 공격·수비·종합 {perfDelta > 0 ? '+' : ''}{perfDelta} (기본 능력치에서 {perfDelta > 0 ? '상승' : '하락'})
           </p>
         )}
+        {/* 감독 목표 — 라이브 FIFA 순위 등급으로 이번 사이클 목표치를 제시(방향성). */}
+        <p className="mt-2 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-center text-[11px] font-medium text-emerald-200">
+          🎯 이번 사이클 목표: <strong className="text-emerald-100">{teamObjective(liveRank ?? team.fifaRankApprox)}</strong>
+        </p>
 
         {/* 내 팀 버프 — 응원 팀에 능력치 가점을 줘 유리하게 진행 */}
         <div className="mt-4 rounded-lg bg-amber-400/[0.07] p-3">
