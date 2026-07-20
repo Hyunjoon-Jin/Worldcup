@@ -3,7 +3,7 @@ import { useConditionStore } from '../store/useConditionStore'
 import { useMomentumStore } from '../store/useMomentumStore'
 import { useSandboxStore } from '../store/useSandboxStore'
 import { usePerformanceStore } from '../store/usePerformanceStore'
-import { useMyTeamStore } from '../store/useMyTeamStore'
+import { useMyTeamStore, STANCE_TILT } from '../store/useMyTeamStore'
 import type { TeamRatings } from '../types/team'
 import { FORECAST_GOAL_CAP, UPSET_RATING_GAP, clamp } from './config'
 import { expectedGoals, hostAdvFor, poissonPmf, simulateKnockout, simulateScore } from './matchCore'
@@ -42,12 +42,15 @@ export function getRatings(teamId: string): TeamRatings {
   const momentumOffset = useMomentumStore.getState().offsets[teamId] ?? 0
   const perfDelta = usePerformanceStore.getState().deltas[teamId] ?? 0
   // 내 팀 버프: 사용자가 응원 팀에 능력치 가점을 준 경우 공격·수비·종합에 더한다("내 팀으로 유리하게").
+  // 전술 스탠스: 종합은 그대로 두고 공격/수비를 상쇄 이동(감독 결정권 — 공격적/균형/수비적).
   const myTeam = useMyTeamStore.getState()
-  const buff = myTeam.myTeamId === teamId ? myTeam.buff : 0
+  const isMine = myTeam.myTeamId === teamId
+  const buff = isMine ? myTeam.buff : 0
+  const tilt = isMine ? STANCE_TILT[myTeam.stance] : { attack: 0, defense: 0 }
   const boost = perfDelta + buff
   const conditioned: TeamRatings = {
-    attack: clamp(base.attack + boost, 1, 99),
-    defense: clamp(base.defense + boost, 1, 99),
+    attack: clamp(base.attack + boost + tilt.attack, 1, 99),
+    defense: clamp(base.defense + boost + tilt.defense, 1, 99),
     overall: clamp(base.overall + boost, 1, 99),
     form: clamp(base.form + conditionOffset + momentumOffset, 30, 99),
   }
