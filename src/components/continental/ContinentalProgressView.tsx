@@ -57,6 +57,7 @@ export function ContinentalProgressView({ result, format, onNavigate }: { result
   const activeCupId = useContinentalStore((s) => s.activeCupId)!
   const stage = useContinentalStore((s) => s.stage)
   const slotStep = useContinentalStore((s) => s.slotStep)
+  const lastRevealFrom = useContinentalStore((s) => s.lastRevealFrom)
   const cupYear = useContinentalStore((s) => s.cupYear)
   const hostIds = useContinentalStore((s) => s.hostIds)
   const advanceTimeSlot = useContinentalStore((s) => s.advanceTimeSlot)
@@ -107,19 +108,29 @@ export function ContinentalProgressView({ result, format, onNavigate }: { result
     return { date: currentDay.date, timeSlot: nextSlot.timeSlot, fixtures }
   }, [fullyRevealed, currentDay, nextSlot])
 
-  // 결과 피드 — 방금 공개된 하루(진행 중이면 그 하루의 공개된 시간대까지).
+  // 결과 피드 — '방금 진행한 배치'만 보여준다(누적 금지, 월드컵 lastDayGroupResults와 동형).
+  // lastRevealFrom(배치 시작 커서)부터 현재 커서(stage, slotStep)까지의 시간대만 모은다.
   const feed = useMemo(() => {
-    const frontierIdx = currentDay && slotStep > 0 ? stage : stage - 1
-    const frontierDay = frontierIdx >= 0 && frontierIdx < days.length ? days[frontierIdx] : null
-    if (!frontierDay) return null
-    const revealedSlotCount = frontierIdx === stage ? slotStep : frontierDay.slots.length
-    const shown = frontierDay.slots.slice(0, revealedSlotCount)
+    if (!lastRevealFrom) return null
+    const shown: typeof days[number]['slots'] = []
+    let feedDate: string | null = null
+    for (let d = lastRevealFrom.day; d <= stage && d < days.length; d++) {
+      const day = days[d]
+      const start = d === lastRevealFrom.day ? lastRevealFrom.slot : 0
+      const end = d < stage ? day.slots.length : slotStep // 현재 진행 중인 하루는 공개된 시간대까지
+      const part = day.slots.slice(start, end)
+      if (part.length > 0) {
+        shown.push(...part)
+        feedDate = day.date
+      }
+    }
+    if (shown.length === 0) return null
     const groupMatches = shown.flatMap((s) => s.group)
     const koMatches = shown.flatMap((s) => s.ko)
     const lastSlot = shown[shown.length - 1]
     const touched = result.groups.filter((g) => groupMatches.some((m) => m.group === g.groupIndex))
-    return { label: `${formatKoreanDate(frontierDay.date)}${lastSlot ? ` ${lastSlot.timeSlot}` : ''} 결과`, groupMatches, koMatches, touched }
-  }, [currentDay, slotStep, stage, days, result])
+    return { label: `${feedDate ? formatKoreanDate(feedDate) : ''}${lastSlot ? ` ${lastSlot.timeSlot}` : ''} 결과`, groupMatches, koMatches, touched }
+  }, [lastRevealFrom, slotStep, stage, days, result])
 
   // 대회 통계·순위 변동용 공개 경기(완료된 하루 전부 + 진행 중 하루의 공개 시간대까지).
   const revealedGroupMatches: GroupMatch[] = useMemo(() => {
