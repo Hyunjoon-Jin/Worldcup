@@ -179,7 +179,7 @@ export function ContinentalStage({ onNavigateWC, onGoToProgress, view = 'progres
 
           {/* 토너먼트(녹아웃) — 월드컵 BracketView처럼 카드/제목 래퍼 없이 대진표만 렌더 */}
           {view === 'knockout' && (
-            <CupBracketView knockout={result.knockout} format={format} revealedRounds={revealedKoRounds} />
+            <CupBracketView knockout={result.knockout} format={format} revealedRounds={revealedKoRounds} result={result} revealedGroupMd={revealedGroupMd} />
           )}
 
           {/* 확률 — 진출 체인(조별 통과 → 각 라운드 도달 → 우승), 월드컵 확률 대시보드와 동형(전 팀·정렬·내 팀 강조) */}

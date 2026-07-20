@@ -166,7 +166,7 @@ function rankThirds(thirds: Array<{ teamId: string; s: GroupStanding }>): string
  * - 최고3위 없음(16·8팀): 조 1위 vs 다른 조 2위 크로스 페어링.
  * - 최고3위 있음(24팀): 6조 R16 표준 레이아웃(유로형)에 최고 3위 4팀을 자기 조 회피 배정.
  */
-function firstRoundPairings(format: CupFormat, groups: CupGroupResult[]): Array<{ home: string; away: string }> {
+export function firstRoundPairings(format: CupFormat, groups: CupGroupResult[]): Array<{ home: string; away: string }> {
   const W = groups.map((g) => g.ranking[0])
   const R = groups.map((g) => g.ranking[1])
   if (format.bestThirds === 0) {
