@@ -893,11 +893,25 @@ function MyTeamQualBanner({
 
 // 진출 확정/완전 탈락 판정. 화면에 표시되는 '본선 X%'(정수 반올림)와 일치시켜, 100%로 표시되면 '진출',
 // 0%로 표시되면(대륙간 PO도 0%) '탈락'으로 본다.
+// 진출확정 = 모든 시뮬에서 진출(몬테카를로 100.0%) = 수학적으로 확정. 반올림하지 않는다(99.7%는 확정 아님).
 function isQualClinched(qualifyPct: number): boolean {
-  return Math.round(qualifyPct) >= 100
+  return qualifyPct >= 100
 }
+// 탈락확정 = 본선 진출·대륙간 PO 확률이 '정확히 0'(어떤 시뮬에서도 진출 못함)일 때만.
+// 반올림하지 않는다 — 0.3%처럼 확률이 조금이라도 남아 있으면 아직 탈락이 아니다(사용자 지적).
 function isQualEliminated(qualifyPct: number, poPct?: number | null): boolean {
-  return Math.round(qualifyPct) <= 0 && Math.round(poPct ?? 0) <= 0
+  return qualifyPct <= 0 && (poPct ?? 0) <= 0
+}
+/**
+ * 진출 확률 표시(반올림이 확정/탈락과 어긋나지 않게). 정확히 100/0이 아니면 100%/0%로 반올림하지 않는다:
+ * 99.5%↑는 '99%+', 0.5%↓는 '<1%'로 표기해 "0%인데 안 떨어졌다/100%인데 확정 아니다"의 혼란을 없앤다.
+ */
+function fmtQualPct(pct: number): string {
+  if (pct >= 100) return '100%'
+  if (pct <= 0) return '0%'
+  if (pct > 99.5) return '99%+'
+  if (pct < 0.5) return '<1%'
+  return `${Math.round(pct)}%`
 }
 
 /** 대륙간 플레이오프 브래킷 (F4). 준결승 2경기 → 시드와의 결승 2경기 → 본선 2장. */
@@ -1188,13 +1202,17 @@ function ConfederationStandings({
     const groupTeams: Record<string, string[]> = {}
     const gms: GroupMatch[] = []
     const statusMap: Record<string, QualificationStatus> = {}
+    // 조 문자별 잠정 순위(같은 조 경기만 기준) — 조 횡단 컷 탐지에 재사용한다.
+    const rankedByLetter: Record<string, string[]> = {}
     for (let gi = 0; gi < r.groups.length; gi++) {
       if (!visibleGroupIdx.has(gi) || isKnockoutGroup(r, gi)) continue
       const letter = (GROUP_LETTERS[gi] ?? String.fromCharCode(65 + gi)) as GroupLetter
       groupTeams[letter] = r.groups[gi]
       const gmatches = shownMatches.filter((m) => m.group === gi)
       for (const m of gmatches) gms.push({ group: letter, matchday: 1 as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals })
-      for (const teamId of rankGroupTeams(r.groups[gi], gmatches)) {
+      const ranked = rankGroupTeams(r.groups[gi], gmatches)
+      rankedByLetter[letter] = ranked
+      for (const teamId of ranked) {
         if (full) {
           if (qSet.has(teamId)) statusMap[teamId] = 'advancing'
           else if (!pSet.has(teamId)) statusMap[teamId] = 'eliminated'
@@ -1206,15 +1224,37 @@ function ConfederationStandings({
       }
     }
     const letters = Object.keys(groupTeams)
-    // 진출선(직행 자리 수) 바로 다음 순위를 '차상위 진출 경쟁'으로 본다(단일리그 상위 6 → 7위, 조별 상위 2 → 3위).
-    const borderPos = single ? 6 : 2
+    // 조 횡단 컷 탐지: 각 순위 p에서 '같은 순위의 팀들'이 최종적으로 서로 다른 운명(진출/PO/탈락)을
+    // 맞는 첫 순위가 진짜 '차상위 진출 경쟁' 자리다. 모든 p위 팀이 같은 운명(예: AFC 3차의 3위가
+    // 전부 4차행)이면 조 횡단 비교가 무의미하므로 순위표를 만들지 않는다(borderPos = null).
+    const uniform = letters.length >= 2 && letters.every((L) => (groupTeams[L]?.length ?? 0) === (groupTeams[letters[0]]?.length ?? 0))
+    const fateOf = (teamId: string): 'in' | 'po' | 'out' | 'undecided' => {
+      if (full) return qSet.has(teamId) ? 'in' : pSet.has(teamId) ? 'po' : 'out'
+      if (!stageProbs) return 'undecided'
+      const q = stagePctFor(teamId, QUALIFY_KEY)
+      if (isQualClinched(q)) return 'in'
+      if (isQualEliminated(q, stagePctFor(teamId, INTER_PLAYOFF_KEY))) return 'out'
+      return 'undecided'
+    }
+    let borderPos: number | null = null
+    if (uniform) {
+      const size = groupTeams[letters[0]]?.length ?? 0
+      // p=0(조 1위)은 보통 전원 직행이라 건너뛰고, p=1부터 첫 '혼합 컷'을 찾는다.
+      for (let p = 1; p < size; p++) {
+        const fates = new Set(letters.map((L) => fateOf(rankedByLetter[L]?.[p] ?? '')).filter((f) => f !== 'undecided'))
+        if (fates.size >= 2) {
+          borderPos = p
+          break
+        }
+      }
+    }
     return { groupTeams: groupTeams as Record<GroupLetter, string[]>, gms, statusMap, letters: letters as GroupLetter[], borderPos }
   })()
   // 난이도 요약은 균등 크기 2개 이상 리그 조가 있을 때만(본선과 동일 조건).
   const showStageExtras = !!stageBoard && stageBoard.letters.length >= 2 && !single
   const stageDifficulty = showStageExtras ? analyzeGroupDifficulty(stageBoard!.groupTeams) : []
-  // 차상위 순위표는 각 조가 진출선+1 순위 이상을 가질 때만 의미가 있다.
-  const showBorderTable = showStageExtras && stageBoard!.letters.every((L) => (stageBoard!.groupTeams[L]?.length ?? 0) > stageBoard!.borderPos)
+  // 차상위 순위표는 진짜 조 횡단 컷(같은 순위 팀들의 운명이 갈리는 자리)이 존재할 때만 표시한다.
+  const showBorderTable = showStageExtras && stageBoard!.borderPos != null
 
   return (
     <GlassCard className="p-4">
@@ -1362,8 +1402,8 @@ function ConfederationStandings({
             matches={stageBoard!.gms}
             statusByTeam={stageBoard!.statusMap}
             groups={stageBoard!.letters}
-            position={stageBoard!.borderPos}
-            heading={`${stageBoard!.borderPos + 1}위팀 순위표 — 조 횡단 진출 경쟁`}
+            position={stageBoard!.borderPos ?? 0}
+            heading={`${(stageBoard!.borderPos ?? 0) + 1}위팀 순위표 — 조 횡단 진출 경쟁`}
             highlightByStatus
           />
         </div>
@@ -1450,7 +1490,7 @@ function ConfederationStandings({
                     ) : (
                       chainKeys.map((k) => (
                         <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
-                          {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
+                          {shortStageLabel(k)} {fmtQualPct(stagePctFor(teamId, k))}
                         </span>
                       ))
                     )}
