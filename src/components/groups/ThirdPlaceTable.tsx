@@ -18,6 +18,12 @@ interface ThirdPlaceTableProps {
   topN?: number
   /** 진출 라운드 라벨(기본: '32강'). */
   roundLabel?: string
+  /** 조 안에서 비교할 순위(0-based, 기본 2=3위). 예선의 '차상위 진출 경쟁'은 진출선 바로 다음 순위를 넘긴다. */
+  position?: number
+  /** 표 제목(기본: '3위팀 순위표 — 상위 N팀 {roundLabel} 진출'). */
+  heading?: string
+  /** true면 topN 대신 statusByTeam(진출확정/탈락확정)으로 행 강조를 결정한다(예선용). */
+  highlightByStatus?: boolean
 }
 
 function StatusCell({ status }: { status?: QualificationStatus }) {
@@ -26,26 +32,27 @@ function StatusCell({ status }: { status?: QualificationStatus }) {
   return <span className="text-xs text-amber-300/80">⏳ 진행중</span>
 }
 
-export function ThirdPlaceTable({ groupTeams, matches, statusByTeam, groups = GROUP_LETTERS, topN = 8, roundLabel = '32강' }: ThirdPlaceTableProps) {
+export function ThirdPlaceTable({ groupTeams, matches, statusByTeam, groups = GROUP_LETTERS, topN = 8, roundLabel = '32강', position = 2, heading, highlightByStatus = false }: ThirdPlaceTableProps) {
   const liveRank = useLiveRankLookup()
   const thirdByGroup: Partial<Record<GroupLetter, string>> = {}
+  const minTeams = position + 1
   for (const group of groups) {
     const teamIds = groupTeams[group]
-    if (!teamIds || teamIds.length < 4) continue
+    if (!teamIds || teamIds.length < minTeams) continue
     const groupMatches = matches.filter((m) => m.group === group)
     const order = rankGroupTeams(teamIds, groupMatches)
-    thirdByGroup[group] = order[2]
+    if (order[position]) thirdByGroup[group] = order[position]
   }
 
   const entries = rankThirdPlaceTeams(thirdByGroup, matches, topN)
 
   if (entries.length === 0) {
-    return <GlassCard className="p-4 text-center text-sm text-gray-400">조추첨이 완료되면 3위팀 순위표가 표시됩니다.</GlassCard>
+    return <GlassCard className="p-4 text-center text-sm text-gray-400">조추첨이 완료되면 {position + 1}위팀 순위표가 표시됩니다.</GlassCard>
   }
 
   return (
     <GlassCard className="p-4">
-      <h3 className="font-display mb-3 text-base font-semibold tracking-wide text-amber-300">3위팀 순위표 — 상위 {topN}팀 {roundLabel} 진출</h3>
+      <h3 className="font-display mb-3 text-base font-semibold tracking-wide text-amber-300">{heading ?? `3위팀 순위표 — 상위 ${topN}팀 ${roundLabel} 진출`}</h3>
       <p className="mb-3 text-[11px] text-gray-500">
         "순위"는 현재까지 결과 기준 잠정 순위이며, "진출 여부"는 남은 모든 조가 끝난 이후에도 결과가 절대
         바뀌지 않는 경우에만 확정으로 표시합니다.
@@ -69,11 +76,17 @@ export function ThirdPlaceTable({ groupTeams, matches, statusByTeam, groups = GR
               const s = entry.standing
               const gd = s.goalsFor - s.goalsAgainst
               const status = statusByTeam[entry.teamId]
+              const rowClass = highlightByStatus
+                ? status === 'advancing'
+                  ? 'bg-emerald-400/[0.06]'
+                  : status === 'eliminated'
+                    ? 'opacity-60'
+                    : ''
+                : entry.qualified
+                  ? 'bg-emerald-400/[0.06]'
+                  : 'opacity-70'
               return (
-                <tr
-                  key={entry.teamId}
-                  className={`border-t border-white/5 ${entry.qualified ? 'bg-emerald-400/[0.06]' : 'opacity-70'}`}
-                >
+                <tr key={entry.teamId} className={`border-t border-white/5 ${rowClass}`}>
                   <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
                   <td className="py-1.5">
                     <TeamLink teamId={entry.teamId} wrap className="min-w-0 font-medium text-gray-100" />

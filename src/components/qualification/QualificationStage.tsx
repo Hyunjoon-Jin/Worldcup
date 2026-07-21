@@ -32,6 +32,9 @@ import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
 import { QualDrawReveal } from './QualDrawReveal'
 import { GroupTable } from '../groups/GroupTable'
+import { GroupDifficultySummary } from '../groups/GroupDifficultySummary'
+import { ThirdPlaceTable } from '../groups/ThirdPlaceTable'
+import { analyzeGroupDifficulty } from '../../engine/groupAnalysis'
 import type { QualificationStatus } from '../../engine/qualificationStatus'
 import type { CrisisInfo } from '../../store/useCrisisTeams'
 import type { GroupLetter } from '../../types/group'
@@ -1178,6 +1181,41 @@ function ConfederationStandings({
   // 예정 차수인데 직전 차수가 끝나 참가국이 확정된 조별 차수 → 경기 전에 '조추첨'을 먼저 보여준다(순서: 이전 차수 → 이 차수 조추첨 → 이 차수 경기).
   const showUpcomingDraw = selectedStageUpcoming && prevStageDone && stageIsPotDraw
 
+  // 본선과 동일한 '난이도 요약(꿀조)'·'차상위 진출 경쟁 순위표'용 스테이지 집계.
+  // 선택 차수의 리그형(녹아웃 제외) 조들을 조 문자로 모아 GroupDifficultySummary/ThirdPlaceTable에 넘긴다.
+  const stageBoard = (() => {
+    if (selectedStageUpcoming) return null
+    const groupTeams: Record<string, string[]> = {}
+    const gms: GroupMatch[] = []
+    const statusMap: Record<string, QualificationStatus> = {}
+    for (let gi = 0; gi < r.groups.length; gi++) {
+      if (!visibleGroupIdx.has(gi) || isKnockoutGroup(r, gi)) continue
+      const letter = (GROUP_LETTERS[gi] ?? String.fromCharCode(65 + gi)) as GroupLetter
+      groupTeams[letter] = r.groups[gi]
+      const gmatches = shownMatches.filter((m) => m.group === gi)
+      for (const m of gmatches) gms.push({ group: letter, matchday: 1 as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals })
+      for (const teamId of rankGroupTeams(r.groups[gi], gmatches)) {
+        if (full) {
+          if (qSet.has(teamId)) statusMap[teamId] = 'advancing'
+          else if (!pSet.has(teamId)) statusMap[teamId] = 'eliminated'
+        } else if (stageProbs) {
+          const q = stagePctFor(teamId, QUALIFY_KEY)
+          if (isQualClinched(q)) statusMap[teamId] = 'advancing'
+          else if (isQualEliminated(q, stagePctFor(teamId, INTER_PLAYOFF_KEY))) statusMap[teamId] = 'eliminated'
+        }
+      }
+    }
+    const letters = Object.keys(groupTeams)
+    // 진출선(직행 자리 수) 바로 다음 순위를 '차상위 진출 경쟁'으로 본다(단일리그 상위 6 → 7위, 조별 상위 2 → 3위).
+    const borderPos = single ? 6 : 2
+    return { groupTeams: groupTeams as Record<GroupLetter, string[]>, gms, statusMap, letters: letters as GroupLetter[], borderPos }
+  })()
+  // 난이도 요약은 균등 크기 2개 이상 리그 조가 있을 때만(본선과 동일 조건).
+  const showStageExtras = !!stageBoard && stageBoard.letters.length >= 2 && !single
+  const stageDifficulty = showStageExtras ? analyzeGroupDifficulty(stageBoard!.groupTeams) : []
+  // 차상위 순위표는 각 조가 진출선+1 순위 이상을 가질 때만 의미가 있다.
+  const showBorderTable = showStageExtras && stageBoard!.letters.every((L) => (stageBoard!.groupTeams[L]?.length ?? 0) > stageBoard!.borderPos)
+
   return (
     <GlassCard className="p-4">
       <QualRulesPanel confed={confed} />
@@ -1309,6 +1347,27 @@ function ConfederationStandings({
           </div>
         )
       ) : (
+      <>
+      {/* 본선과 동일한 난이도 요약(꿀조/죽음의 조) */}
+      {showStageExtras && stageDifficulty.length > 0 && (
+        <div className="mb-4">
+          <GroupDifficultySummary analysis={stageDifficulty} groupTeams={stageBoard!.groupTeams} />
+        </div>
+      )}
+      {/* 본선과 동일한 '차상위 진출 경쟁' 순위표(진출선 바로 다음 순위를 조 횡단 비교) */}
+      {showBorderTable && (
+        <div className="mb-4">
+          <ThirdPlaceTable
+            groupTeams={stageBoard!.groupTeams}
+            matches={stageBoard!.gms}
+            statusByTeam={stageBoard!.statusMap}
+            groups={stageBoard!.letters}
+            position={stageBoard!.borderPos}
+            heading={`${stageBoard!.borderPos + 1}위팀 순위표 — 조 횡단 진출 경쟁`}
+            highlightByStatus
+          />
+        </div>
+      )}
       <div className={single ? '' : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}>
         {r.groups.map((finalOrder, gi) => {
           if (!visibleGroupIdx.has(gi)) return null // 선택된 차수의 조만 노출
@@ -1404,6 +1463,7 @@ function ConfederationStandings({
           )
         })}
       </div>
+      </>
       )}
       <p className="mt-3 text-[11px] text-gray-500">
         {full
