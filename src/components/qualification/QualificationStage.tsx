@@ -31,8 +31,12 @@ import { computePots } from '../../engine/drawEngine'
 import { getCurrentHostIds } from '../../engine/hostContext'
 import { QualMatchModal } from './QualMatchModal'
 import { QualDrawReveal } from './QualDrawReveal'
+import { GroupTable } from '../groups/GroupTable'
+import type { QualificationStatus } from '../../engine/qualificationStatus'
+import type { CrisisInfo } from '../../store/useCrisisTeams'
+import type { GroupLetter } from '../../types/group'
 import type { Confederation } from '../../types/team'
-import type { MatchResult } from '../../types/match'
+import type { MatchResult, GroupMatch } from '../../types/match'
 import type { QualificationResult, QualMatch } from '../../types/qualification'
 import type { InterConfedResult } from '../../engine/qualification/interConfed'
 
@@ -893,45 +897,6 @@ function isQualEliminated(qualifyPct: number, poPct?: number | null): boolean {
   return Math.round(qualifyPct) <= 0 && Math.round(poPct ?? 0) <= 0
 }
 
-/** 직행/PO/탈락 상태 배지 (색+아이콘+텍스트 병행, I4). 진행 중이면 '—'. */
-function ResultBadge({
-  full,
-  direct,
-  po,
-  provDirect,
-  provPo,
-  qualifyPct,
-  poPct,
-}: {
-  full: boolean
-  direct: boolean
-  po: boolean
-  /** 진행 중 잠정 진출 상황(현재 순위 기준) */
-  provDirect?: boolean
-  provPo?: boolean
-  /** 진행 중 '본선 진출' 확률(%). 확률이 계산돼 있을 때만 값이 들어온다. */
-  qualifyPct?: number | null
-  /** 진행 중 '대륙간 PO' 확률(%). 탈락(완전 탈락) 판정에 쓴다. */
-  poPct?: number | null
-}) {
-  if (!full) {
-    // 진출/탈락은 본선 진출 확정/완전 탈락 기준, 위기는 '본선 진출 확률 50% 미만' 기준으로 판정한다.
-    // 판정 기준을 화면에 표시되는 반올림 값(본선 X%)과 일치시켜, '본선 100%'인데 배지가 안 뜨는 불일치를 없앤다.
-    if (qualifyPct != null) {
-      if (isQualClinched(qualifyPct)) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>✅ 진출</span>
-      if (isQualEliminated(qualifyPct, poPct)) return <span className="rounded bg-gray-500/25 px-1.5 py-0.5 text-[10px] font-bold text-gray-400" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>❌ 탈락</span>
-      if (qualifyPct < 50) return <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title={`본선 진출 확률 ${qualifyPct.toFixed(1)}%`}>⚠️ 위기</span>
-    }
-    // 확률이 없거나 안정권(≥50%)이면 현재 순위 기준 잠정 진출 상황(점선 테두리로 '확정 아님' 표시)
-    if (provDirect) return <span className="rounded border border-dashed border-emerald-400/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300/90">잠정 직행</span>
-    if (provPo) return <span className="rounded border border-dashed border-amber-400/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-300/90">잠정 PO</span>
-    return <span className="text-[10px] text-gray-600">—</span>
-  }
-  if (direct) return <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">✅ 직행</span>
-  if (po) return <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">🎯 PO</span>
-  return <span className="text-[10px] text-gray-600">탈락</span>
-}
-
 /** 대륙간 플레이오프 브래킷 (F4). 준결승 2경기 → 시드와의 결승 2경기 → 본선 2장. */
 function InterConfedBracket({ result }: { result: InterConfedResult }) {
   const bySlot = new Map(result.matches.map((m) => [m.slotId, m] as const))
@@ -1384,110 +1349,56 @@ function ConfederationStandings({
             }
           })
           const groupLabel = r.groupLabels?.[gi] ?? (single ? '단일리그' : `${GROUP_LETTERS[gi]}조`)
+          // 본선 GroupTable과 동일한 표를 쓰기 위한 준비: 진출확정/탈락확정 상태맵 + 위기맵을 예선 판정으로 만든다.
+          // (GroupTable은 순위/경기/승무패/득실/승점 + FIFA순위 + 진출확정·위기 배지를 본선과 똑같이 그린다.)
+          const gmForTable = groupMatches.map((m) => ({ group: (GROUP_LETTERS[gi] ?? 'A') as GroupLetter, matchday: 1 as 1 | 2 | 3, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeGoals: m.homeGoals, awayGoals: m.awayGoals })) as GroupMatch[]
+          const statusByTeam: Record<string, QualificationStatus> = {}
+          const crisisByTeam: Record<string, CrisisInfo> = {}
+          for (const { teamId, direct, po, qualifyPct, poPct } of rows) {
+            if (full) {
+              if (direct) statusByTeam[teamId] = 'advancing'
+              else if (!po) statusByTeam[teamId] = 'eliminated'
+            } else if (qualifyPct != null) {
+              if (isQualClinched(qualifyPct)) statusByTeam[teamId] = 'advancing'
+              else if (isQualEliminated(qualifyPct, poPct ?? 0)) statusByTeam[teamId] = 'eliminated'
+              else if (qualifyPct < 50) crisisByTeam[teamId] = { pct: qualifyPct }
+            }
+          }
+          // 진출 하이라이트 라인: 잠정 직행 수(있으면) → 단일리그 6, 조별 2 기본.
+          const provDirectCount = rows.filter((rr) => rr.direct || provisional.direct.has(rr.teamId)).length
+          const qualifyLine = provDirectCount > 0 ? provDirectCount : single ? 6 : 2
           return (
           <div key={gi}>
             {!single && <p className="mb-1.5 font-display text-xs font-bold text-gray-300">{groupLabel}</p>}
-            {/* 데스크톱: 표 */}
-            <div className="hidden overflow-x-auto sm:block">
-              <table className="w-full min-w-[360px] text-left text-xs sm:text-sm">
-                <caption className="sr-only">
-                  {CONFEDERATION_LABEL_KO[confed]} {groupLabel} 순위표
-                </caption>
-                <thead>
-                  <tr className="text-gray-400">
-                    <th scope="col" className="w-6 py-1 text-center">#</th>
-                    <th scope="col" className="py-1">국가</th>
-                    <th scope="col" className="w-10 py-1 text-center">경기</th>
-                    <th scope="col" className="w-10 py-1 text-center">승점</th>
-                    <th scope="col" className="w-12 py-1 text-center">득실</th>
-                    {chainKeys.map((k) => (
-                      <th key={k} scope="col" className="w-12 py-1 text-right" title={k === QUALIFY_KEY ? '본선 진출 확률' : `${k} 도달 확률 (상위 차수에서 직행하지 못하고 이 차수로 내려올 확률 — 낮을수록 상위 차수에서 일찍 통과)`}>
-                        {shortStageLabel(k)}
-                      </th>
-                    ))}
-                    <th scope="col" className="py-1 text-right">결과</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ teamId, idx, s, gd, direct, po, qualifyPct, poPct }) => (
-                    <tr
-                      key={teamId}
-                      className={`border-t border-white/5 ${teamId === myTeamId ? 'bg-sky-500/10' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : ''}`}
-                    >
-                      <td className="py-1.5 text-center text-gray-500">{idx + 1}</td>
-                      <th scope="row" className="whitespace-nowrap py-1.5 font-normal">
-                        <span className="inline-flex items-center gap-1.5">
-                          <NationLabel teamId={teamId} />
-                          {teamId === myTeamId && <span className="shrink-0 rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
-                          {isSeedAdvanced(teamId) && <span className="shrink-0 rounded bg-sky-500/15 px-1 text-[9px] font-bold text-sky-300/80" title="FIFA 랭킹 시드로 하위 라운드 없이 2차 예선부터 자동진출">🔹시드</span>}
-                        </span>
-                      </th>
-                      <td className="py-1.5 text-center text-gray-400 tabular-nums">{s.played}</td>
-                      <td className="py-1.5 text-center font-bold text-white tabular-nums">{s.points}</td>
-                      <td className="py-1.5 text-center text-gray-400 tabular-nums">{gd > 0 ? `+${gd}` : gd}</td>
-                      {chainKeys.length > 1 && isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) ? (
-                        // 이미 본선 진출을 확정지은 팀은 이후 녹아웃/추가 예선 확률 대신 '이전 차수에서 진출 확정'을 표시.
-                        <>
-                          <td colSpan={chainKeys.length - 1} className="py-1.5 text-center text-[10px] font-medium text-emerald-300/80">
-                            이전 차수에서 진출 확정
-                          </td>
-                          <td className="py-1.5 text-right font-bold text-sky-300 tabular-nums">100%</td>
-                        </>
-                      ) : (
-                        chainKeys.map((k) => (
-                          <td key={k} className={`py-1.5 text-right tabular-nums ${k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}`}>
-                            {stagePctFor(teamId, k).toFixed(0)}%
-                          </td>
-                        ))
-                      )}
-                      <td className="whitespace-nowrap py-1.5 text-right"><ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} qualifyPct={qualifyPct} poPct={poPct} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* 모바일: 카드형 순위표 (I2) */}
-            <ul className="space-y-1.5 sm:hidden" aria-label={`${CONFEDERATION_LABEL_KO[confed]} ${groupLabel} 순위표`}>
-              {rows.map(({ teamId, idx, s, gd, direct, po, qualifyPct, poPct }) => (
-                <li
-                  key={teamId}
-                  className={`flex items-center gap-2 rounded-lg px-2.5 py-2 ${
-                    teamId === myTeamId ? 'bg-sky-500/15 ring-1 ring-sky-400/40' : direct || provisional.direct.has(teamId) ? 'bg-emerald-500/10' : po || provisional.po.has(teamId) ? 'bg-amber-500/10' : 'bg-white/5'
-                  }`}
-                >
-                  <span className="w-4 shrink-0 text-center text-[11px] text-gray-500 tabular-nums">{idx + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="inline-flex items-center gap-1.5">
+            {/* 본선과 동일한 GroupTable(순위·경기·승무패·득실·승점·FIFA순위·진출확정/위기) */}
+            <GroupTable teamIds={groupTeams} matches={gmForTable} qualifyLine={qualifyLine} statusByTeam={statusByTeam} crisisByTeam={crisisByTeam} />
+            {/* 예선 고유 보조 정보: 차수별 진출 확률 + 🔹시드 + 내 팀 (본선엔 없는 예선 전용 데이터라 표 아래 스트립으로 유지) */}
+            {chainKeys.length > 0 && (
+              <div className="mt-2 space-y-1 rounded-lg bg-white/[0.03] p-2">
+                <p className="text-[10px] font-bold text-gray-500">차수별 진출 확률{isSeedAdvanced(rows[0]?.teamId ?? '') ? ' · 🔹시드=하위 라운드 없이 자동진출' : ''}</p>
+                {rows.map(({ teamId }) => (
+                  <div key={teamId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
+                    <span className="inline-flex min-w-[92px] items-center gap-1">
                       <NationLabel teamId={teamId} />
                       {teamId === myTeamId && <span className="shrink-0 rounded bg-sky-500/25 px-1 text-[9px] font-bold text-sky-200">내 팀</span>}
-                      {isSeedAdvanced(teamId) && <span className="shrink-0 rounded bg-sky-500/15 px-1 text-[9px] font-bold text-sky-300/80" title="FIFA 랭킹 시드로 2차 예선부터 자동진출">🔹시드</span>}
+                      {isSeedAdvanced(teamId) && <span className="shrink-0 rounded bg-sky-500/15 px-1 text-[9px] font-bold text-sky-300/80" title="FIFA 랭킹 시드로 하위 라운드 없이 자동진출">🔹</span>}
                     </span>
-                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400 tabular-nums">
-                      <span>{s.played}경기</span>
-                      <span className="font-bold text-white">{s.points}점</span>
-                      <span>{gd > 0 ? `+${gd}` : gd}</span>
-                    </div>
-                    {chainKeys.length > 0 && (
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] tabular-nums">
-                        {isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) && chainKeys.length > 1 ? (
-                          <>
-                            <span className="font-medium text-emerald-300/80">이전 차수에서 진출 확정</span>
-                            <span className="font-bold text-sky-300">본선 100%</span>
-                          </>
-                        ) : (
-                          chainKeys.map((k) => (
-                            <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
-                              {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
-                            </span>
-                          ))
-                        )}
-                      </div>
+                    {isQualClinched(stagePctFor(teamId, QUALIFY_KEY)) && chainKeys.length > 1 ? (
+                      <>
+                        <span className="font-medium text-emerald-300/80">이전 차수에서 진출 확정</span>
+                        <span className="font-bold text-sky-300">본선 100%</span>
+                      </>
+                    ) : (
+                      chainKeys.map((k) => (
+                        <span key={k} className={k === QUALIFY_KEY ? 'font-bold text-sky-300' : 'text-amber-300'}>
+                          {shortStageLabel(k)} {stagePctFor(teamId, k).toFixed(0)}%
+                        </span>
+                      ))
                     )}
                   </div>
-                  <ResultBadge full={full} direct={direct} po={po} provDirect={provisional.direct.has(teamId)} provPo={provisional.po.has(teamId)} qualifyPct={qualifyPct} poPct={poPct} />
-                </li>
-              ))}
-            </ul>
+                ))}
+              </div>
+            )}
             <MatchList teams={groupTeams} matches={groupMatches} onSelectMatch={onSelectMatch} />
           </div>
           )
